@@ -1,0 +1,38 @@
+# Fim de linha — a regra vale para qualquer maquina que clone este repositorio.
+#
+# Windows termina linha com CR+LF; Linux, com LF. Sem uma regra explicita, cada
+# desenvolvedor normaliza do seu jeito e o Git passa a enxergar ARQUIVO INTEIRO
+# alterado a cada commit — os diffs, que sao a principal utilidade do Git,
+# viram lixo ilegivel.
+#
+# A escolha: LF dentro do repositorio e na copia de trabalho, para todo texto.
+# E' o que o VS Code, o Python e o navegador esperam, e mantem a copia do
+# Windows identica a do Linux.
+
+* text=auto eol=lf
+
+# Excecoes: estes servem a interpretadores que preferem o fim de linha da sua
+# propria plataforma. Um .cmd em LF pode quebrar o `goto` do cmd.exe.
+*.cmd  text eol=crlf
+*.bat  text eol=crlf
+*.ps1  text eol=crlf
+*.sh   text eol=lf
+
+# Binarios: o Git nunca deve tentar converter nada aqui dentro.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.zip  binary
+*.xlsx binary
+
+# Oscilografia: o .dat binario nao e' texto, e o .cfg e' texto mas vem em
+# cp1252 de fabricantes que usam acento. Nenhum dos dois pode ser reescrito
+# pelo Git — um byte trocado e' uma amostra errada.
+*.dat  binary
+*.cfg  -text
+*.cff  -text
+*.cev  -text
+*.eve  -text

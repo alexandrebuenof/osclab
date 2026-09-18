@@ -1,0 +1,14 @@
+# Dependencias de execucao do OscLab.
+#
+# A lista e' curta de proposito: cada pacote aqui vira um wheel dentro do pacote
+# offline, e o pacote offline e' o que uma maquina de subestacao sem internet
+# instala. Antes de acrescentar um item, vale perguntar se a biblioteca padrao
+# nao resolve.
+
+# Toda a matematica do programa. Nunca percorrer amostra a amostra em Python —
+# numpy faz a conta em C, e um registro tem centenas de milhares de amostras.
+numpy>=1.26
+
+# Servidor web. Uma dependencia so, puro Python, e ja' traz roteamento, upload
+# de arquivo e resposta JSON prontos.
+flask>=3.0

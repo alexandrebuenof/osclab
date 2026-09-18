@@ -1,0 +1,38 @@
+# Virtualenv — cada maquina monta o seu.
+.venv/
+venv/
+
+# Bytecode
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Tempo de execucao: cache e acervo do usuario. Podem ter gigabytes.
+#
+# A BARRA NA FRENTE e' obrigatoria: `library/` sem ela vale em QUALQUER nivel e
+# barraria tambem `src/osclab/library/`, deixando o acervo.py de fora do
+# repositorio — um clone que nao roda. Custou um commit para descobrir.
+/cache/
+/library/
+
+# Configuracao real: tem IP e senha de equipamento. O modelo versionado e' o
+# config/config.ini.example. Uma senha de subestacao commitada fica no
+# historico para sempre.
+config/config.ini
+
+# Pacote offline e distribuicao — ancorados na raiz pelo mesmo motivo:
+# `build` e `dist` sao nomes plausiveis para um subpacote.
+/vendor/
+/dist/
+/build/
+
+# Ferramentas e editores
+.pytest_cache/
+.ruff_cache/
+.vscode/
+.idea/
+
+# Windows / macOS
+Thumbs.db
+desktop.ini
+.DS_Store

@@ -1,0 +1,5 @@
+# Dependencias de desenvolvimento. NAO entram no pacote offline.
+-r requirements.txt
+
+pytest>=8.0
+ruff>=0.6

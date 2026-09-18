@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Não achei — OscLab</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/osclab.css') }}">
+  <script src="{{ url_for('static', filename='js/tema.js') }}"></script>
+</head>
+<body>
+  <header class="topo">
+    <div class="marca">
+      <h1>OscLab</h1>
+      <p class="sub">Leitor e analisador de oscilografia</p>
+    </div>
+    <span class="versao">v{{ versao }}</span>
+  </header>
+  <main>
+    <section>
+      <h2>Este registro não está no acervo</h2>
+      <p class="ajuda">
+        Ou ele foi removido, ou o endereço veio de um acervo diferente — os
+        registros são identificados pelo conteúdo, então o mesmo arquivo em
+        outra máquina tem o mesmo endereço, mas só se tiver sido enviado lá
+        também.
+      </p>
+      <p><a href="/">Voltar aos arquivos</a></p>
+    </section>
+  </main>
+</body>
+</html>

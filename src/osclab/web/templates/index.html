@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OscLab — Arquivos</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/osclab.css') }}">
+  <script src="{{ url_for('static', filename='js/tema.js') }}"></script>
+</head>
+<body>
+  <header class="topo">
+    <div class="marca">
+      <h1>OscLab</h1>
+      <p class="sub">Leitor e analisador de oscilografia</p>
+    </div>
+    <div class="acoes">
+      <button type="button" class="tema" id="tema" title="Alternar tema">tema</button>
+      <span class="versao">v{{ versao }}</span>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>Arquivos do projeto</h2>
+      <p class="ajuda">
+        Arraste as oscilografias para a área abaixo. Um COMTRADE são dois
+        arquivos — o <code>.cfg</code> e o <code>.dat</code> — e os dois
+        precisam vir juntos. Pode mandar vários registros de uma vez: o
+        pareamento é automático.
+      </p>
+
+      <form id="envio" class="solta" aria-label="Enviar oscilografias">
+        <input type="file" id="escolher" multiple hidden
+               accept=".cfg,.CFG,.dat,.DAT,.cff,.CFF,.hdr,.HDR,.inf,.INF">
+        <p class="solta-titulo">Arraste os arquivos aqui</p>
+        <p class="solta-sub">
+          ou <button type="button" class="link" id="botao-escolher">escolha da
+          sua pasta</button>
+        </p>
+      </form>
+
+      <div id="recado" class="recado" hidden></div>
+    </section>
+
+    <section id="espera" class="espera" hidden></section>
+
+    <section>
+      <div class="titulo-linha">
+        <h2>No acervo</h2>
+        <span class="contagem" id="contagem"></span>
+      </div>
+      <div id="lista" class="lista">
+        <p class="vazio">Carregando…</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    OscLab v{{ versao }} · formatos:
+    {% if formatos %}{{ formatos | join(', ') }}{% else %}nenhum{% endif %} ·
+    <a href="/saude">/saude</a>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/acervo.js') }}"></script>
+</body>
+</html>

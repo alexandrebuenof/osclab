@@ -1,0 +1,579 @@
+/* Estilo do OscLab.
+ *
+ * Tokens no :root e um bloco para o tema escuro — a mesma folha serve os dois.
+ *
+ * As cores de fase (--fase-a/b/c/n) não foram escolhidas por gosto: passaram
+ * pelo validador de paleta nos dois temas (faixa de luminosidade, saturação
+ * mínima, separação sob daltonismo e contraste contra o fundo). No tema escuro
+ * o par A/B fica na faixa que só é aceitável com identificação secundária — por
+ * isso a legenda e a leitura do cursor sempre nomeiam o canal, nunca deixam a
+ * cor sozinha carregando a identidade.
+ */
+
+:root {
+  /* O ESCURO é o padrão do projeto. O claro está abaixo, sob
+     [data-tema="claro"], e é escolhido no botão do cabeçalho — não pelo
+     sistema operacional. */
+  --fundo: #0e1415;
+  --superficie: #171f21;
+  --tinta: #e6ecec;
+  --suave: #98a8aa;
+  --linha: #2e3c3e;
+  --destaque: #58c6d6;
+  --destaque-fraco: #123036;
+
+  --bom: #2c9b75;
+  --atencao: #b8860b;
+  --ruim: #d45560;
+
+  /* Azul-A / branco-B / vermelho-C é a convenção de campo da distribuidora.
+     O branco da fase B some no fundo claro e cansa no escuro, então B fica no
+     âmbar. As cores são as mesmas de antes, só trocadas de fase: a validação
+     de daltonismo e contraste vale igual. */
+  --fase-a: #4b83d6;
+  --fase-b: #b8860b;
+  --fase-c: #d45560;
+  --fase-n: #2c9b75;
+
+  /* Os dois cursores de medição. Escolhidos com o validador de paleta, não a
+     olho: o roxo que parecia óbvio ficava a ΔE 3,6 do azul da fase A sob
+     protanopia — um daltônico confundiria o cursor com a própria corrente. */
+  --cursor-1: #ffffff;
+  --cursor-2: #ffd166;
+
+  --sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+
+  color-scheme: dark;
+}
+
+:root[data-tema="claro"] {
+  --fundo: #f5f7f7;
+  --superficie: #ffffff;
+  --tinta: #141c1d;
+  --suave: #57696b;
+  --linha: #c6d2d3;
+  --destaque: #0e6e7a;
+  --destaque-fraco: #dfeff1;
+
+  --bom: #157f5c;
+  --atencao: #b8860b;
+  --ruim: #96172b;
+
+  --fase-a: #3574de;
+  --fase-b: #b8860b;
+  --fase-c: #96172b;
+  --fase-n: #157f5c;
+
+  --cursor-1: #111a1b;
+  --cursor-2: #b34700;
+
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--tinta);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* --- cabeçalho ----------------------------------------------------------- */
+
+.topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 22px 20px 16px;
+  border-bottom: 1px solid var(--linha);
+}
+
+.topo h1 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
+.sub { margin: 2px 0 0; color: var(--suave); font-size: 13px; }
+.versao { font-family: var(--mono); font-size: 12px; color: var(--destaque); }
+
+main {
+  max-width: 980px;
+  margin: 0 auto;
+  padding-inline: 20px;
+  padding-block: 26px 12px;
+  display: grid;
+  gap: 30px;
+}
+
+h2 { margin: 0 0 8px; font-size: 17px; }
+
+.titulo-linha {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.contagem { font-family: var(--mono); font-size: 12px; color: var(--suave); }
+
+.ajuda { margin: 0 0 16px; color: var(--suave); font-size: 14px; max-width: 68ch; }
+
+code { font-family: var(--mono); font-size: 0.92em; }
+
+.comando {
+  font-family: var(--mono);
+  font-size: 13px;
+  background: var(--fundo);
+  border: 1px solid var(--linha);
+  border-radius: 4px;
+  padding: 10px 12px;
+  margin: 0 0 10px;
+  overflow-x: auto;
+}
+
+/* --- área de arrastar ---------------------------------------------------- */
+
+.solta {
+  border: 2px dashed var(--linha);
+  border-radius: 8px;
+  background: var(--superficie);
+  padding: 34px 20px;
+  text-align: center;
+  transition: border-color .12s, background .12s;
+}
+
+.solta.sobre {
+  border-color: var(--destaque);
+  background: var(--destaque-fraco);
+}
+
+.solta.ocupada { opacity: .6; }
+
+.solta-titulo { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+.solta-sub { margin: 0; color: var(--suave); font-size: 13.5px; }
+
+.link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--destaque);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* --- recados ------------------------------------------------------------- */
+
+.recado {
+  margin-top: 14px;
+  border: 1px solid var(--linha);
+  border-left-width: 4px;
+  border-radius: 4px;
+  padding: 12px 14px;
+  font-size: 14px;
+  background: var(--superficie);
+}
+
+.recado p { margin: 0 0 4px; }
+.recado p:last-child { margin-bottom: 0; }
+.recado.bom { border-left-color: var(--bom); }
+.recado.atencao { border-left-color: var(--atencao); }
+.recado.ruim { border-left-color: var(--ruim); }
+.recado.neutro { border-left-color: var(--suave); }
+
+/* --- lista do acervo ----------------------------------------------------- */
+
+.lista {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+
+.vazio { color: var(--suave); font-size: 14px; margin: 0; }
+
+.registro {
+  background: var(--superficie);
+  border: 1px solid var(--linha);
+  border-radius: 6px;
+  padding: 16px 18px;
+}
+
+.registro-topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.registro h3 {
+  margin: 0 0 2px;
+  font-size: 15.5px;
+  overflow-wrap: anywhere;
+}
+
+.remover {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--suave);
+  cursor: pointer;
+  text-decoration: underline;
+  flex: none;
+}
+
+.remover:hover { color: var(--ruim); }
+
+.registro-onde {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--suave);
+  overflow-wrap: anywhere;
+}
+
+.fatos {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.fatos dt { color: var(--suave); font-family: var(--mono); font-size: 11.5px; }
+.fatos dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+.arquivos {
+  margin: 10px 0 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--suave);
+  overflow-wrap: anywhere;
+}
+
+.aviso {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--atencao);
+}
+
+/* --- rodapé -------------------------------------------------------------- */
+
+footer {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 24px 20px 40px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--suave);
+}
+
+footer a { color: var(--destaque); }
+
+/* --- cabeçalho: ações ---------------------------------------------------- */
+
+.acoes { display: flex; align-items: baseline; gap: 16px; }
+
+.tema, .voltar {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  color: var(--destaque);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.tema { text-decoration: underline; }
+.voltar:hover { text-decoration: underline; }
+
+/* --- tira de fatos do registro ------------------------------------------- */
+
+.tira {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 12px 20px 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--suave);
+}
+
+.tira b { color: var(--tinta); font-weight: 600; }
+
+/* --- gráficos ------------------------------------------------------------ */
+
+#graficos {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding-inline: 20px;
+  padding-block: 18px 8px;
+  display: grid;
+  gap: 22px;
+}
+
+.grafico {
+  background: var(--superficie);
+  border: 1px solid var(--linha);
+  border-radius: 6px;
+  padding: 12px 14px 10px;
+}
+
+.grafico-titulo {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .01em;
+}
+
+.legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+.legenda li { display: flex; align-items: center; gap: 6px; min-width: 0; }
+
+.legenda .marca {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.legenda .nome {
+  color: var(--tinta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.legenda .fase,
+.legenda .lado {
+  color: var(--suave);
+  font-size: 10.5px;
+}
+
+/* Canal que o arquivo não deixou converter: avisa, não bloqueia. */
+.legenda .sem-relacao {
+  color: var(--atencao);
+  border: 1px solid var(--atencao);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+.tela { width: 100%; }
+.tela canvas { display: block; width: 100%; }
+
+/* O cursor é a única pista de que o gráfico responde ao mouse. */
+#graficos { cursor: grab; }
+#graficos.arrastando { cursor: grabbing; }
+#graficos.selecionando { cursor: col-resize; }
+
+/* Enquanto se arrasta, o navegador tentaria selecionar o texto da legenda. */
+#graficos.arrastando, #graficos.selecionando { user-select: none; }
+
+/* Linha de ajuda dos gestos, no rodapé. */
+.gestos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 18px;
+  margin: 0 0 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.gestos b { color: var(--tinta); font-weight: 600; }
+
+.registro h3 a { color: inherit; text-decoration: none; }
+.registro h3 a:hover { color: var(--destaque); text-decoration: underline; }
+
+/* --- antessala: arquivos esperando o par --------------------------------- */
+
+.espera-lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.espera-lista li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  background: var(--superficie);
+  border: 1px solid var(--linha);
+  border-left: 4px solid var(--atencao);
+  border-radius: 4px;
+  padding: 9px 12px;
+  font-size: 13.5px;
+}
+
+.espera-lista .nome { font-weight: 600; overflow-wrap: anywhere; }
+.espera-lista .tem,
+.espera-lista .falta {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--suave);
+}
+.espera-lista .falta { color: var(--atencao); }
+
+/* --- leitura dos cursores ------------------------------------------------
+ *
+ * Uma tabelinha por gráfico, ao lado dele, com os canais daquele gráfico e mais
+ * nada. Fica alinhada com a onda a que se refere e não tem moldura própria: é
+ * texto dentro do mesmo cartão, discreto até alguém pôr um cursor.
+ *
+ * Por cima da onda ela esconderia justamente o trecho em análise; num painel
+ * único e alto ela vira uma coluna de números longe do gráfico de que falam.
+ */
+
+/* Sem cursor a tabelinha não diz nada, então nem existe: a onda ocupa a
+   largura toda. Ela abre junto com o primeiro cursor. */
+.grafico-corpo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+#graficos.com-cursores .grafico-corpo {
+  grid-template-columns: minmax(0, 1fr) 248px;
+  gap: 14px;
+}
+
+.mini { display: none; }
+#graficos.com-cursores .mini { display: table; }
+
+.mini {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 11px;
+  table-layout: fixed;
+  margin-top: 2px;
+}
+
+.mini th, .mini td {
+  text-align: right;
+  padding: 1px 0 1px 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mini th:first-child, .mini td:first-child {
+  text-align: left;
+  padding-left: 0;
+  /* Cabe "Voltage A-G" e "Current IN"; o que passar disso corta com reticências
+     e o nome inteiro aparece no title. Nome de canal não se abrevia sozinho. */
+  width: 35%;
+}
+
+.mini thead th {
+  color: var(--suave);
+  font-weight: 600;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--linha);
+}
+
+.mini td { font-variant-numeric: tabular-nums; }
+.mini .valor-1 { color: var(--cursor-1); }
+.mini .valor-2 { color: var(--cursor-2); }
+.mini .vazio-valor { color: var(--linha); }
+
+.mini .canal { color: var(--suave); font-weight: 400; }
+.mini .fase-A { color: var(--fase-a); }
+.mini .fase-B { color: var(--fase-b); }
+.mini .fase-C { color: var(--fase-c); }
+.mini .fase-N { color: var(--fase-n); }
+
+/* A última linha da tabelinha: o tempo. O rótulo dela é o botão que troca a
+   unidade — pôr a unidade no rótulo, e não nas células, é o que impede a tabela
+   de mentir quando a linha está em ciclos. */
+.mini .tempo th, .mini .tempo td {
+  padding-top: 5px;
+  border-top: 1px solid var(--linha);
+}
+
+.mini .troca {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--suave);
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.mini .troca:hover:not(:disabled) { color: var(--destaque); }
+.mini .troca:disabled { cursor: default; text-decoration: none; }
+
+.mini .troca:focus-visible {
+  outline: 2px solid var(--destaque);
+  outline-offset: 2px;
+}
+
+.em-1, .em-2 {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  vertical-align: -1px;
+  margin-right: 4px;
+}
+
+.em-1 { background: var(--cursor-1); }
+.em-2 { background: var(--cursor-2); }
+
+/* Tela estreita: a tabelinha desce para baixo da onda em vez de espremê-la. */
+@media (max-width: 1100px) {
+  .grafico-corpo { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* O cursor do mouse muda em cima de uma linha de cursor: ela se arrasta. */
+#graficos.no-cursor { cursor: ew-resize; }
+
+/* --- lado dos valores: arquivo, secundário, primário --------------------- */
+
+.lado {
+  display: inline-flex;
+  border: 1px solid var(--linha);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.lado button {
+  background: none;
+  border: none;
+  border-left: 1px solid var(--linha);
+  padding: 3px 9px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--suave);
+  cursor: pointer;
+}
+
+.lado button:first-child { border-left: none; }
+.lado button:hover:not(.escolhido) { color: var(--tinta); }
+
+.lado button.escolhido {
+  background: var(--destaque-fraco);
+  color: var(--destaque);
+  font-weight: 600;
+}
+
+/* Sem relação de TC/TP declarada não há o que converter: o botão some do
+   caminho em vez de prometer uma conversão que não vai acontecer. */
+.lado button:disabled { opacity: .4; cursor: default; }

@@ -1,0 +1,32 @@
+[project]
+name = "osclab"
+description = "Leitor e analisador de oscilografia para sistemas de potencia"
+requires-python = ">=3.11"
+license = { text = "AGPL-3.0-or-later" }
+dynamic = ["version"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.dynamic]
+version = { file = "VERSION" }
+
+[tool.pytest.ini_options]
+# `src` no pythonpath e' o que permite rodar `pytest` na raiz sem instalar o
+# pacote. O "." e' para os testes importarem `tests.fabrica`: sem ele, so'
+# funciona com `python -m pytest` (que poe o diretorio atual no path) e quebra
+# com o comando `pytest` puro. `-q` porque a saida longa esconde o que importa.
+pythonpath = ["src", "."]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 96
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]

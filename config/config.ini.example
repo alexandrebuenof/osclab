@@ -1,0 +1,37 @@
+; Modelo de configuracao do OscLab.
+;
+; Copie para config/config.ini e ajuste. O arquivo real NAO vai para o git:
+; e' onde entram enderecos e senhas de equipamento.
+; Se voce esquecer de copiar, o programa faz a copia sozinho no primeiro boot.
+
+[web]
+; Porta do servidor local.
+porta = 8770
+
+; Endereco de escuta. 127.0.0.1 = so' esta maquina.
+; Mudar para 0.0.0.0 expoe a ferramenta para a rede — decisao consciente.
+host = 127.0.0.1
+
+[sistema]
+; Frequencia nominal, em Hz. Usada quando o arquivo de oscilografia nao declara.
+frequencia = 60
+
+; Sequencia de fases: ABC ou ACB.
+; Numa instalacao ACB, as sequencias positiva e negativa trocam de lugar.
+sequencia_fases = ABC
+
+; Mostrar V0 ou 3V0 nas telas. Os reles exibem 3V0; um fator 3 escondido
+; costuma gerar confusao, entao a escolha fica explicita aqui.
+mostrar_sequencia_zero = 3V0
+
+[alinhamento]
+; Como alinhar dois registros por padrao:
+;   tempo          — carimbo de tempo (exige GPS confiavel)
+;   descontinuidade — instante da falta em cada registro
+;   correlacao     — correlacao cruzada de um sinal comum
+;   manual         — arrastar na mao
+;
+; O programa comeca pelo carimbo de tempo quando os dois arquivos declaram
+; relogio sincronizado, e cai para a descontinuidade quando nao.
+; Fixe um valor aqui para que ele nao pergunte.
+metodo_padrao = automatico
