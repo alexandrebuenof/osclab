@@ -67,7 +67,15 @@ def montar(registro: Record, *, de: float | None = None, ate: float | None = Non
         for k, (canal, _, lado_final, foi) in enumerate(convertidos):
             fase, origem = fases.da_canal(canal)
             canais_json.append({
+                # O índice do canal no REGISTRO, não na posição do grupo: a
+                # tela usa isto para casar cada linha com a leitura do cursor,
+                # que vem na ordem do arquivo. Casar por posição erraria em
+                # qualquer registro que intercale corrente e tensão.
+                "indice": canal.index,
                 "nome": canal.name,
+                # O nome do ARQUIVO acima; o nome do SOFTWARE aqui. Os dois
+                # aparecem na tela, para ficar claro o que é qual.
+                "padrao": fases.padrao(canal),
                 "unidade": mostrada,
                 "fase": fase,
                 "fase_origem": str(origem),

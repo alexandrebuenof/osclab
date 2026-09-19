@@ -143,8 +143,14 @@ def create_app() -> Flask:
              _numero(request.args.get(f"ciclos{k}")) or 0.0)
             for k in (1, 2)
         ]
-        return jsonify(leitura.em(registro, pedidos,
-                                  lado=request.args.get("lado", "arquivo")))
+        # `refere` é o canal que o usuário clicou para virar o zero dos
+        # ângulos. A subtração é feita no servidor, como todo número.
+        refere = _numero(request.args.get("refere"))
+        return jsonify(leitura.em(
+            registro, pedidos,
+            lado=request.args.get("lado", "arquivo"),
+            refere=int(refere) if refere is not None else None,
+        ))
 
     @app.delete("/api/aguardando")
     def esquecer_aguardando():

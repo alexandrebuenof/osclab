@@ -37,6 +37,7 @@ import math
 
 import numpy as np
 
+from osclab.dsp import fasor
 from osclab.formats import fases
 from osclab.formats.base import Record
 from osclab.plot import conversao, unidades
@@ -124,7 +125,36 @@ def _resolucoes(registro: Record) -> tuple[int, int]:
     )
 
 
-def _em_uma_amostra(registro: Record, i: int, lado: str, escalas: dict) -> dict:
+def canal_de_referencia(registro: Record, pedido: int | None = None) -> int | None:
+    """Qual canal é o zero dos ângulos.
+
+    Ângulo absoluto não existe: todo fasor é relativo a alguma coisa. A escolha
+    é por SIGNIFICADO, não por posição no arquivo — a tensão da fase A, e não
+    "o primeiro canal", porque um relé que liste a tensão de barra antes da de
+    linha, ou comece pela fase B, faria a referência mudar sem ninguém notar.
+
+    Quedas, em ordem: tensão da fase A → corrente da fase A → primeiro canal.
+
+    `pedido` é o índice que o usuário clicou na tabelinha; ele ganha de tudo.
+    """
+    canais = registro.analog_channels
+    if not canais:
+        return None
+    if pedido is not None and 0 <= pedido < len(canais):
+        return pedido
+
+    def primeiro(unidades_aceitas: tuple[str, ...]) -> int | None:
+        for canal in canais:
+            fase, _ = fases.da_canal(canal)
+            if fase == "A" and canal.unit.strip().upper() in unidades_aceitas:
+                return canal.index
+        return None
+
+    return primeiro(("V", "KV")) or primeiro(("A", "KA")) or canais[0].index
+
+
+def _em_uma_amostra(registro: Record, i: int, lado: str, escalas: dict,
+                    por_ciclo: int, referencia: int | None) -> dict:
     """Tudo que a tela mostra de um cursor parado na amostra `i`.
 
     `escalas` vem de `unidades.por_unidade` — a MESMA que o desenho usou. Se
@@ -136,6 +166,12 @@ def _em_uma_amostra(registro: Record, i: int, lado: str, escalas: dict) -> dict:
     disparo = _instante_do_disparo(registro)
     frequencia = float(registro.line_frequency or 0.0)
 
+    # O ângulo da referência é calculado primeiro: todos os outros saem dele.
+    angulo_zero = None
+    if referencia is not None:
+        f = fasor.no_instante(registro.analog[referencia], i, por_ciclo)
+        angulo_zero = f.angulo if f else None
+
     valores = []
     for canal in registro.analog_channels:
         bruto = np.array([registro.analog[canal.index, i]], dtype=np.float64)
@@ -143,15 +179,22 @@ def _em_uma_amostra(registro: Record, i: int, lado: str, escalas: dict) -> dict:
         fase, _ = fases.da_canal(canal)
         divisor, mostrada = escalas.get(canal.unit.strip(), (1.0, canal.unit.strip()))
         valor = _num(convertido[0] / divisor)
-        valores.append({
+
+        linha = {
             "nome": canal.name,
+            # O nome do ARQUIVO acima; o nosso aqui. A tabelinha e a legenda
+            # mostram os dois, para nunca haver dúvida de qual é qual.
+            "padrao": fases.padrao(canal),
             "unidade": mostrada,
             "fase": fase,
             "lado": lado_final,
             "convertido": foi,
             "valor": valor,
             "casas": casas(valor),
-        })
+        }
+        linha.update(_fasor_do_canal(registro, canal, i, lado, divisor,
+                                     por_ciclo, angulo_zero))
+        valores.append(linha)
 
     desde_o_disparo = t - disparo
     return {
@@ -160,6 +203,47 @@ def _em_uma_amostra(registro: Record, i: int, lado: str, escalas: dict) -> dict:
         "ms": round(desde_o_disparo * 1000.0, 6),
         "ciclos": round(desde_o_disparo * frequencia, 4) if frequencia > 0 else None,
         "valores": valores,
+    }
+
+
+def _fasor_do_canal(registro: Record, canal, i: int, lado: str, divisor: float,
+                    por_ciclo: int, angulo_zero: float | None) -> dict:
+    """O fasor de um canal, já convertido para o lado e a unidade da tela.
+
+    A conversão de TC/TP e o prefixo `k` são MULTIPLICAÇÕES POR ESCALAR, então
+    aplicá-las depois da DFT dá o mesmo que antes — e custa uma operação em vez
+    de uma janela inteira. O ângulo não se toca: escalar não gira fasor.
+    """
+    f = fasor.no_instante(registro.analog[canal.index], i, por_ciclo)
+    if f is None:
+        return {"fundamental": None, "angulo": None, "rms": None,
+                "dc": None, "distorcao": None,
+                "casas_fasor": 1, "casas_rms": 1}
+
+    razao = conversao.relacao(canal)
+    lado_do_canal = "primario" if canal.is_primary else "secundario"
+    fator = 1.0
+    if lado != lado_do_canal and razao > 0:
+        fator = razao if lado == "primario" else 1.0 / razao
+    fator /= divisor
+
+    fundamental = _num(f.fundamental * fator)
+    rms = _num(f.rms * fator)
+    return {
+        "fundamental": fundamental,
+        "angulo": round(fasor.em_relacao_a(f.angulo, angulo_zero), 2),
+        "rms": rms,
+        # O `or 0.0` mata o zero negativo: `-0.0` chega no navegador como
+        # "-0,0", e um sinal de menos onde não há grandeza faz o leitor parar
+        # para entender uma coisa que não existe.
+        "dc": round(f.dc_percentual, 1) or 0.0,
+        "distorcao": round(f.distorcao, 1) or 0.0,
+        "casas_fasor": casas(fundamental),
+        # O RMS verdadeiro pode cair noutra ordem de grandeza que a
+        # fundamental — num transitório com DC forte a diferença passa de 40 %.
+        # Reaproveitar `casas_fasor` esconderia justamente o dígito que mostra
+        # essa diferença.
+        "casas_rms": casas(rms),
     }
 
 
@@ -198,7 +282,7 @@ def entre(registro: Record, a: dict, b: dict) -> dict:
 
 
 def em(registro: Record, pedidos: list[tuple[float | None, int, float]],
-       lado: str = "arquivo") -> dict:
+       lado: str = "arquivo", refere: int | None = None) -> dict:
     """A leitura dos cursores.
 
     Cada pedido é `(instante_em_segundos, passo_em_amostras, passo_em_ciclos)`.
@@ -217,6 +301,10 @@ def em(registro: Record, pedidos: list[tuple[float | None, int, float]],
     por_ciclo = float(registro.samples_per_cycle or 0.0)
     escalas = unidades.por_unidade(registro, lado)
 
+    janela = fasor.amostras_por_ciclo(registro.base_rate_hz,
+                                      registro.line_frequency)
+    referencia = canal_de_referencia(registro, refere)
+
     cursores = []
     for instante, passo, ciclos in pedidos:
         if instante is None or n == 0:
@@ -226,11 +314,20 @@ def em(registro: Record, pedidos: list[tuple[float | None, int, float]],
         if ciclos and por_ciclo > 0:
             andar += int(round(float(ciclos) * por_ciclo))
         i = int(np.clip(indice(registro, instante) + andar, 0, n - 1))
-        cursores.append(_em_uma_amostra(registro, i, lado, escalas))
+        cursores.append(_em_uma_amostra(registro, i, lado, escalas,
+                                        janela, referencia))
 
     casas_ms, casas_ciclos = _resolucoes(registro)
     presentes = [c for c in cursores if c is not None]
+    canais = registro.analog_channels
     return {
+        "referencia": {
+            "indice": referencia,
+            "nome": canais[referencia].name if referencia is not None else None,
+            "padrao": fases.padrao(canais[referencia])
+            if referencia is not None else None,
+        },
+        "amostras_da_janela": janela,
         "cursores": cursores,
         "entre": entre(registro, presentes[0], presentes[1])
         if len(presentes) == 2 else None,

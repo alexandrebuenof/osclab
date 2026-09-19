@@ -48,6 +48,31 @@ ruff check . --fix
 
 No Windows há também o `osclab.cmd`, que abre um menu.
 
+## Git — quem faz o quê
+
+O Claude **grava os arquivos** na pasta; **o Alexandre faz o commit**. É de
+propósito: o commit é a chance de conferir o que entrou antes de virar
+história. Ao entregar uma mudança, o Claude sugere a mensagem.
+
+```bash
+git status              # o que mudou desde a última fotografia
+git add -A              # põe tudo na mesa de preparação
+git commit -m "..."     # fotografa a mesa
+git push                # envia para o GitHub
+```
+
+Regras que já custaram caro neste repositório:
+
+- **Padrão de `.gitignore` sem barra na frente vale em qualquer nível.**
+  `library/` barrou também `src/osclab/library/`, e o primeiro commit subiu sem
+  o `acervo.py` — um clone que não roda. Os padrões de pasta da raiz são
+  ancorados: `/cache/`, `/library/`, `/vendor/`, `/dist/`, `/build/`.
+- **`.gitattributes` fixa o fim de linha em LF.** Sem ele, cada gravação do
+  Claude (LF) contra uma cópia em CRLF faria o Git enxergar o arquivo inteiro
+  alterado, e os diffs virariam lixo.
+- **`--amend` só em commit que ninguém recebeu.** Ele não edita: cria outro no
+  lugar, com identificador novo.
+
 ## Estrutura
 
 ```
@@ -60,7 +85,7 @@ osclab/
 │   ├── paths.py           TODO caminho sai daqui
 │   ├── version.py         comparação de versões
 │   ├── formats/           um leitor por formato; base.py é o contrato
-│   ├── dsp/               fasores, DFT, filtros           (marco 0.4)
+│   ├── dsp/               fasor.py: DFT de um ciclo, RMS, DC, THD
 │   ├── analysis/          perturbação, descontinuidade    (marco 0.5)
 │   ├── faultloc/          localização de faltas           (marco 0.6)
 │   ├── network/           impedâncias, TC/TP, KMZ
@@ -117,11 +142,46 @@ osclab/
   do cursor sempre nomeiam o canal.
 - **A cor da fase segue a convenção de campo da distribuidora**: azul na A,
   vermelho na C. O branco da fase B virou âmbar — branco some no tema claro.
+- **A janela do fasor é o ciclo que TERMINOU no cursor**, nunca centrada. O
+  relé só conhece o passado; uma janela centrada usaria amostras que, no
+  instante da decisão, ainda não existiam, e o número deixaria de ser
+  comparável com o do relé. A consequência visível e correta: depois da falta o
+  módulo leva um ciclo inteiro para subir.
+- **`fundamental` é EFICAZ, não amplitude.** Conferido contra o SIGRA nos
+  números de um registro real — a coluna "Fundamental" dele só fecha com a
+  "Extremum" lendo-se eficaz. Implementar como amplitude daria √2 de diferença,
+  erro que se procura por horas porque o gráfico continua parecendo certo.
+- **O ângulo é absoluto dentro do `dsp/`; a referência é subtração na
+  `leitura`.** É o que torna a troca de referência barata e o que vai permitir,
+  no marco 0.5, comparar ângulos de dois registros na mesma base.
+- **A referência de 0° é escolhida por SIGNIFICADO**: a tensão da fase A, não
+  "o primeiro canal". Um relé que liste a tensão de barra antes da de linha
+  mudaria a referência sem ninguém notar. Quedas: tensão A → corrente A →
+  primeiro canal. Um clique no nome do canal sobrepõe tudo, como no SIGRA.
+- **O nome do arquivo e o nome do OscLab aparecem os dois, sempre.** Cada
+  fabricante nomeia como quer (`IAW`, `Current IA`, `TC BUC 69kV:I A`); o nome
+  padronizado (`IA`, `IB`, `IC`, `IN`, `VA`, `VB`, `VC`, `VN`, em
+  `fases.padrao`) é o mesmo venha de onde vier, e é por ele que o resto do
+  programa vai falar dos canais nas componentes simétricas e na localização de
+  falta. Ele fica **ao lado** do nome do arquivo, numa moldura, nunca no lugar
+  dele: o nome original é o que o engenheiro reconhece e o que consta do
+  relatório do relé. Quando a grandeza ou a fase não dá para determinar, o nome
+  padronizado é `""` — um palpite com cara de nome nosso entraria nas
+  componentes simétricas como se fosse fase de verdade.
+- **A tabelinha casa linha com leitura por ÍNDICE do canal**, nunca por
+  posição: os grupos reordenam (correntes juntas, tensões juntas) e a leitura
+  vem na ordem do arquivo. Num registro que intercale as duas, casar por
+  posição poria a tensão na linha da corrente.
 - **O valor do cursor vem do servidor, nunca do traço desenhado.** O traço é
   mínimo e máximo por coluna de pixel: nenhum dos dois é "o valor no instante".
   Ver `plot/leitura.py`.
 - **O cursor cai sempre em cima de uma amostra.** Entre duas amostras não há
   medida, há interpolação — e a 16 amostras/ciclo meia amostra são 11°.
+- **A tabelinha tem três modos em rodízio**, no botão do canto: `valor`
+  (instantâneo dos dois cursores e a diferença), `fasor` (eficaz da
+  fundamental e ângulo) e `rms` (eficaz VERDADEIRO da janela e DC %, com a
+  distorção no hover). Os três saem da MESMA leitura; trocar de modo troca as
+  colunas, não os dados.
 
 ## Decisões já tomadas — não reabrir sem conversar
 
@@ -131,7 +191,7 @@ osclab/
 | Servidor | Flask |
 | Gráficos | **canvas próprio, sem biblioteca de front-end** (decisão de 18/09/2026: nada a baixar, nada que envelhece, manutenção só nossa) |
 | Distribuição | v1 exige Python instalado; `.exe` é possibilidade futura |
-| Repositório | GitHub público |
+| Repositório | GitHub público: **github.com/alexandrebuenof/osclab** |
 | Licença | AGPL-3.0-or-later; direitos da distribuidora |
 | Formatos | COMTRADE é a base; depois SEL `.CEV`; PL4 para validar algoritmos |
 
@@ -152,6 +212,12 @@ osclab/
   em envios separados; quem chega sozinho fica na *antessala*
   (`library/_aguardando/`) até o par aparecer. Recusar o órfão foi o primeiro
   bug relatado em uso real.
+- Trocar o modo da tabelinha muda a LARGURA do gráfico (`valor` tem uma coluna
+  por cursor, os outros dois têm duas, e o CSS reage sozinho à classe
+  `mini-duplo`). O canvas não reage: ele continuaria desenhado na largura
+  antiga, passando por baixo da tabela. Por isso `trocarModo` pede a janela de
+  novo quando entra ou sai do modo de duas colunas — foi assim que o modo fasor
+  do 0.4a apareceu quebrado na primeira vez que o Alexandre clicou nele.
 - A rota da janela devolve a janela **pedida**, não o instante da primeira e da
   última amostra dentro dela. A tela manda esses números de volta no gesto
   seguinte; arredondar para a amostra mais próxima a cada ida e volta encolhia a
@@ -232,8 +298,9 @@ osclab/
 | 0.3d | Dois cursores com leitura de valor | **feito** |
 | 0.3e | Faixas dos canais digitais | próximo |
 | 0.3f | Alternar primário/secundário na tela, com prefixo k | **feito** |
-| 0.4 | Fasores, componentes simétricas, harmônicos | próximo |
-| | └ no 0.4, a tabelinha do cursor ganha fasor e RMS ao lado do instantâneo | |
+| 0.4a | Fasor e RMS no cursor | **feito** |
+| 0.4b | Componentes simétricas (3V0/3I0) | próximo |
+| 0.4c | Harmônicos | |
 | 0.5 | Bruto/filtrado, descontinuidade, alinhamento | |
 | 0.6 | Localização de faltas (um e dois terminais) | |
 | 0.7 | Mini relatório | |
@@ -250,6 +317,21 @@ desligado até alguém apontar onde eles estão:
 set OSCLAB_AMOSTRAS=C:\Users\alexa\Documents\06 - Ferramentas\Oscilografias
 python app.py --testes
 ```
+
+### O gabarito: comparar com o SIGRA
+
+O Alexandre usa o **SIGRA** (Siemens) no dia a dia e ele é a referência para
+validar os números. O jeito de conferir: abrir o mesmo registro nos dois, pôr o
+cursor no mesmo instante, clicar no mesmo canal para ser a referência e comparar
+linha a linha.
+
+Convenções do SIGRA já decifradas a partir de um registro real:
+
+- **"Fundamental"** é o valor eficaz da componente fundamental.
+- **"Extremum"** é o pico instantâneo real da janela — maior que o pico da
+  fundamental quando há componente DC.
+- **"DC %"** é relativa à fundamental eficaz.
+- Clicar num valor faz aquele canal virar **0°**; os demais giram junto.
 
 ### Esquisitices que os arquivos reais revelaram
 

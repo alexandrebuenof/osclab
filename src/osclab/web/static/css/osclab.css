@@ -363,6 +363,20 @@ footer a { color: var(--destaque); }
   font-size: 10.5px;
 }
 
+/* O nome que o OSCLAB dá ao canal (`IA`, `VN`), ao lado do que veio do
+   arquivo. A moldura existe para uma coisa só: distinguir, sem legenda e sem
+   explicação, o que o programa deduziu do que o relé gravou. A cor é a da
+   fase, porque é a mesma informação do traço. */
+.legenda .padrao {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 0 3px;
+  opacity: .85;
+}
+
 /* Canal que o arquivo não deixou converter: avisa, não bloqueia. */
 .legenda .sem-relacao {
   color: var(--atencao);
@@ -452,6 +466,14 @@ footer a { color: var(--destaque); }
   gap: 14px;
 }
 
+/* Os modos "fasor" e "rms" têm duas colunas a mais (duas por cursor), então a
+   tabelinha precisa de mais espaço — e só enquanto estiver num deles. */
+#graficos.com-cursores .grafico-corpo:has(.mini-duplo) {
+  grid-template-columns: minmax(0, 1fr) 340px;
+}
+
+.mini-duplo th:first-child, .mini-duplo td:first-child { width: 30%; }
+
 .mini { display: none; }
 #graficos.com-cursores .mini { display: table; }
 
@@ -493,6 +515,33 @@ footer a { color: var(--destaque); }
 .mini .vazio-valor { color: var(--linha); }
 
 .mini .canal { color: var(--suave); font-weight: 400; }
+
+/* O nome do canal é botão: clicar faz dele o zero dos ângulos, como no SIGRA. */
+.mini .refere {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mini .refere:hover { text-decoration: underline dotted; text-underline-offset: 3px; }
+
+/* A referência marcada: é ela que está valendo 0°. */
+.mini .refere.escolhido {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* A segunda coluna de cada par (ângulo, DC %) acompanha um número; fica
+   apagada para o olho achar primeiro o que ela acompanha. */
+.mini .acessorio { color: var(--suave); }
 .mini .fase-A { color: var(--fase-a); }
 .mini .fase-B { color: var(--fase-b); }
 .mini .fase-C { color: var(--fase-c); }

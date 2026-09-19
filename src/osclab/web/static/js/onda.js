@@ -100,14 +100,33 @@
   let pedidoDeLeitura = null;
 
 
-  //: Uma trinca [v1, v2, diferença] por canal analógico, na mesma ordem em que
-  //: o servidor manda os valores — as tabelinhas de todos os gráficos juntas.
-  let celulas = [];
+  //: As células das tabelinhas, por canal: `{indice, celas, botao}`. O índice
+  //: é o do canal NO REGISTRO — é por ele que se casa com a leitura do cursor.
+  let celulas = { canais: [] };
 
   //: De que lado os valores são mostrados: "arquivo", "secundario" ou
   //: "primario". Vai junto em todo pedido, porque a conversão pela relação de
   //: TC/TP é feita no servidor — é ela que decide a faixa vertical do gráfico.
   let lado = lerLadoGuardado();
+
+  //: O que a tabelinha mostra, em rodízio. Guardado no navegador.
+  //:
+  //:   valor — o instantâneo de cada cursor e a diferença entre eles
+  //:   fasor — módulo (eficaz da fundamental) e ângulo do ciclo que terminou
+  //:   rms   — o eficaz VERDADEIRO da janela e a componente DC
+  //:
+  //: Os três saem da mesma leitura; trocar de modo só troca as COLUNAS.
+  let modo = lerModoGuardado();
+
+  //: Os modos em ordem de rodízio, e o que cada um põe nas duas colunas de
+  //: cada cursor. O modo "valor" é o único de uma coluna só por cursor.
+  const MODOS = ["valor", "fasor", "rms"];
+  const PAR = { fasor: ["|F|", "∠"], rms: ["RMS", "DC %"] };
+
+  //: O canal que o usuário clicou para ser o zero dos ângulos, ou null para a
+  //: regra automática (a tensão da fase A). Vai no pedido; quem subtrai é o
+  //: servidor, como todo número.
+  let referencia = null;
 
   //: Em que unidade a linha do tempo está: "ms" ou "ciclos". A escolha é do
   //: usuário, fica guardada no navegador, e vale para os dois cursores e para
@@ -223,7 +242,7 @@
       return;
     }
 
-    celulas = [];
+    celulas = { canais: [] };
     linhasDoTempo = [];
     blocos = dados.grupos.map((grupo, i) =>
       bloco(grupo, i === dados.grupos.length - 1)
@@ -274,7 +293,25 @@
       const marca = criar("span", "marca");
       marca.style.background = corDaFase(canal.fase);
       item.append(marca, criar("span", "nome", canal.nome));
-      if (canal.fase) item.append(criar("span", "fase", canal.fase));
+
+      // O nome do ARQUIVO acima, o nome do OSCLAB aqui — e a moldura é o que
+      // os separa a olho. Cada fabricante nomeia como quer (`Current IA`,
+      // `TC BUC 69kV:I A`, `IAW`); o nome padronizado é sempre o mesmo, e é
+      // por ele que o resto do programa vai falar dos canais quando calcular
+      // componentes simétricas e localização de falta. Quem analisa um evento
+      // com registros de dois fabricantes precisa ver os dois lado a lado.
+      if (canal.padrao) {
+        const nosso = criar("span", "padrao", canal.padrao);
+        nosso.style.color = corDaFase(canal.fase);
+        nosso.title = `${canal.padrao} — nome dado pelo OscLab (o do arquivo é `
+                    + `"${canal.nome}")`;
+        item.append(nosso);
+      } else if (canal.fase) {
+        // Sem grandeza reconhecida não há nome padronizado: mostra só a fase,
+        // sem moldura, porque um palpite com cara de nome nosso é pior que
+        // nome nenhum.
+        item.append(criar("span", "fase", canal.fase));
+      }
 
       // A etiqueta marca a EXCEÇÃO, não a regra. Com o cabeçalho já dizendo
       // "primário", carimbar "prim." em todos os canais é ruído; o que precisa
@@ -310,33 +347,88 @@
     return el;
   }
 
-  /** A tabelinha de um grupo: os canais dele, nas duas colunas de cursor. */
+  /** O que o botão do canto promete quando for clicado. */
+  const PROXIMO = {
+    valor: "fasor — módulo e ângulo do ciclo que terminou no cursor",
+    fasor: "rms — o eficaz verdadeiro da janela e a componente DC",
+    rms: "valor — o instantâneo de cada cursor e a diferença",
+  };
+
+  /** O que o cabeçalho de cada par de colunas quer dizer. */
+  const EXPLICA = {
+    "|F|": "Valor EFICAZ da componente fundamental, no ciclo que terminou no "
+         + "cursor. É o número que o relé usa para decidir.",
+    "∠": "Ângulo do fasor, medido a partir do canal sublinhado à esquerda. "
+       + "Clique num nome de canal para torná-lo o zero.",
+    "RMS": "Eficaz VERDADEIRO da janela de um ciclo: inclui harmônicos e "
+         + "componente DC. Igual ao |F| só em onda limpa — a diferença entre "
+         + "os dois é, por si só, um diagnóstico do registro.",
+    "DC %": "Componente contínua da janela, em percentual da fundamental. "
+          + "É ela que satura TC e atrasa o relé numa falta assimétrica.",
+  };
+
+  /** A tabelinha de um grupo: os canais dele, nas colunas do modo atual.
+   *
+   * No modo "valor" as colunas são instantâneo de cada cursor e a diferença.
+   * Nos outros dois, cada cursor ocupa DUAS colunas — o mesmo arranjo do
+   * SIGRA, que é o gabarito contra o qual esta tela é conferida.
+   */
   function tabelinha(grupo) {
     const tabela = criar("table", "mini");
+    const duplo = modo !== "valor";
+    tabela.classList.toggle("mini-duplo", duplo);
 
     const cabeca = criar("tr");
-    cabeca.append(criar("th", null, ""));
+    const troca = criar("button", "troca");
+    troca.textContent = modo;
+    troca.title = `Mostrar ${PROXIMO[modo]}`;
+    troca.addEventListener("click", trocarModo);
+    const canto = criar("th", "unidade");
+    canto.append(troca);
+    cabeca.append(canto);
+
     for (const k of [1, 2]) {
       const th = criar("th");
-      th.append(criar("span", `em-${k}`), String(k));
+      th.append(criar("span", `em-${k}`), duplo ? PAR[modo][0] : String(k));
+      if (duplo) th.title = EXPLICA[PAR[modo][0]];
       cabeca.append(th);
+      if (duplo) {
+        const extra = criar("th", null, PAR[modo][1]);
+        extra.title = EXPLICA[PAR[modo][1]];
+        cabeca.append(extra);
+      }
     }
-    cabeca.append(criar("th", null, "2−1"));
+    if (!duplo) cabeca.append(criar("th", null, "2−1"));
+
     const thead = criar("thead");
     thead.append(cabeca);
 
     const tbody = criar("tbody");
     for (const canal of grupo.canais) {
       const linha = criar("tr");
-      const nome = criar("th", canal.fase ? `canal fase-${canal.fase}` : "canal",
-                         canal.nome);
-      nome.title = canal.nome;             // o nome inteiro no passar do mouse
-      const a = criar("td", "valor-1 vazio-valor", "—");
-      const b = criar("td", "valor-2 vazio-valor", "—");
-      const d = criar("td", "vazio-valor", "—");
-      linha.append(nome, a, b, d);
+
+      // O nome é botão: clicar nele faz o canal virar o zero dos ângulos, como
+      // no SIGRA. Ângulo absoluto não existe — alguém tem que ser o zero.
+      const nome = criar("th", canal.fase ? `canal fase-${canal.fase}` : "canal");
+      const alvo = criar("button", "refere", canal.nome);
+      // A coluna é estreita e o nome do arquivo é o que o engenheiro
+      // reconhece, então é ele que fica escrito. O nome do OscLab aparece na
+      // legenda logo acima, e aqui no title, para o par ficar sempre à mão.
+      alvo.title = (canal.padrao ? `${canal.padrao} — ${canal.nome}` : canal.nome)
+                 + " — clique para medir os ângulos a partir dele";
+      alvo.addEventListener("click", () => escolherReferencia(canal.indice));
+      nome.append(alvo);
+
+      const celas = [];
+      for (const k of [0, 1]) {
+        celas.push(criar("td", `valor-${k + 1} vazio-valor`, "—"));
+        if (duplo) celas.push(criar("td", "acessorio vazio-valor", "—"));
+      }
+      if (!duplo) celas.push(criar("td", "vazio-valor", "—"));
+
+      linha.append(nome, ...celas);
       tbody.append(linha);
-      celulas.push([a, b, d]);
+      celulas.canais.push({ indice: canal.indice, celas, botao: alvo });
     }
 
     // A última linha é o tempo, e o rótulo dela é o botão que troca a unidade.
@@ -349,7 +441,17 @@
     const t1 = criar("td", "valor-1 vazio-valor", "—");
     const t2 = criar("td", "valor-2 vazio-valor", "—");
     const dt = criar("td", "vazio-valor", "—");
-    tempo.append(rotulo, t1, t2, dt);
+
+    // Nos modos de duas colunas por cursor o instante dele se espalha pelas
+    // duas — e o Δt não tem coluna onde caber, porque não há "diferença de
+    // fasor" nem "diferença de RMS" a mostrar ali.
+    if (duplo) {
+      t1.colSpan = 2;
+      t2.colSpan = 2;
+      tempo.append(rotulo, t1, t2);
+    } else {
+      tempo.append(rotulo, t1, t2, dt);
+    }
     tbody.append(tempo);
     linhasDoTempo.push([botao, t1, t2, dt]);
 
@@ -401,6 +503,56 @@
     botao.addEventListener("click", () => escolherLado(botao.dataset.lado));
   }
   marcarLado();
+
+  // --- modo da tabelinha e referência dos ângulos -------------------------
+
+  function lerModoGuardado() {
+    try {
+      const guardado = localStorage.getItem("osclab:modo");
+      return MODOS.includes(guardado) ? guardado : "valor";
+    } catch {
+      return "valor";
+    }
+  }
+
+  function trocarModo() {
+    const antes = modo !== "valor";
+    modo = MODOS[(MODOS.indexOf(modo) + 1) % MODOS.length];
+    try {
+      localStorage.setItem("osclab:modo", modo);
+    } catch { /* não poder lembrar não impede de usar */ }
+    remontarTabelinhas();
+
+    // "valor" tem uma coluna por cursor; "fasor" e "rms" têm duas. Entrar ou
+    // sair do modo de duas colunas ESTREITA O GRÁFICO — o CSS reage sozinho ao
+    // trocar a classe, mas o canvas não: ele continuaria desenhado na largura
+    // antiga, passando por baixo da tabela. Por isso se pede a janela de novo,
+    // que é como a tela volta a saber quantas colunas de pixel tem.
+    if (antes !== (modo !== "valor")) carregar();
+  }
+
+  function escolherReferencia(indice) {
+    // Clicar de novo no canal que já é a referência volta à regra automática.
+    referencia = referencia === indice ? null : indice;
+    lerCursores();
+  }
+
+  /** Refaz as tabelinhas no lugar, sem pedir a janela de novo.
+   *
+   * Trocar de modo muda as COLUNAS, não os dados: a leitura que está na mão já
+   * traz instantâneo, módulo e ângulo. Recarregar o gráfico aqui seria pedir ao
+   * servidor o que já se tem.
+   */
+  function remontarTabelinhas() {
+    if (!dados) return;
+    celulas = { canais: [] };
+    linhasDoTempo = [];
+    for (const bloco of blocos) {
+      const nova = tabelinha(bloco._grupo);
+      bloco.querySelector(".mini").replaceWith(nova);
+    }
+    mostrarLeitura();
+  }
 
   // --- a unidade do tempo -------------------------------------------------
 
@@ -681,6 +833,7 @@
     lendo = true;
     const p = new URLSearchParams();
     if (lado) p.set("lado", lado);
+    if (referencia !== null) p.set("refere", String(referencia));
     cursores.forEach((t, k) => {
       if (t === null) return;
       p.set(`t${k + 1}`, String(t));
@@ -755,12 +908,44 @@
     // do registro; as tabelinhas foram montadas na mesma ordem, grupo a grupo.
     // Até a subtração vem pronta: quantas casas mostrar e a diferença entre os
     // dois instantes são decisões de `plot/leitura.py`, onde há teste.
+    //
+    // O casamento é por ÍNDICE do canal no registro, nunca por posição: os
+    // grupos reordenam os canais (correntes juntas, tensões juntas) e a leitura
+    // vem na ordem do arquivo. Num registro que intercale as duas, casar por
+    // posição poria a tensão na linha da corrente.
     const diferencas = medida && medida.entre ? medida.entre.valores : null;
-    celulas.forEach(([a, b, d], n) => {
-      escrever(a, c[0] && c[0].valores[n]);
-      escrever(b, c[1] && c[1].valores[n]);
-      escrever(d, diferencas && diferencas[n]);
-    });
+    const escolhido = medida && medida.referencia ? medida.referencia.indice : null;
+
+    for (const { indice, celas, botao } of celulas.canais) {
+      botao.classList.toggle("escolhido", indice === escolhido);
+
+      if (modo === "fasor") {
+        for (const k of [0, 1]) {
+          const v = c[k] ? c[k].valores[indice] : null;
+          escrever(celas[k * 2], v && { valor: v.fundamental, casas: v.casas_fasor });
+          escrever(celas[k * 2 + 1], v && v.angulo !== null
+            ? { valor: v.angulo, casas: 1, sufixo: "°" } : null);
+        }
+      } else if (modo === "rms") {
+        for (const k of [0, 1]) {
+          const v = c[k] ? c[k].valores[indice] : null;
+          escrever(celas[k * 2], v && { valor: v.rms, casas: v.casas_rms });
+          // A distorção não ganha coluna: seria uma sexta, e ela é a resposta
+          // de uma pergunta que só se faz depois de estranhar o RMS. Fica no
+          // hover do número que provocou a pergunta.
+          celas[k * 2].title = v && v.distorcao !== null
+            ? `Distorção de ${formatar(v.distorcao, 1)} % da fundamental `
+              + "(tudo que não é 60 Hz: harmônicos e DC)"
+            : "";
+          escrever(celas[k * 2 + 1], v && v.dc !== null
+            ? { valor: v.dc, casas: 1 } : null);
+        }
+      } else {
+        escrever(celas[0], c[0] && c[0].valores[indice]);
+        escrever(celas[1], c[1] && c[1].valores[indice]);
+        escrever(celas[2], diferencas && diferencas[indice]);
+      }
+    }
 
     mostrarTempo(c);
   }
@@ -768,7 +953,7 @@
   function escrever(celula, v) {
     const tem = v && v.valor !== null && v.valor !== undefined;
     celula.textContent = tem
-      ? formatar(v.valor, v.casas, v.agrupar !== false) : "—";
+      ? formatar(v.valor, v.casas, v.agrupar !== false) + (v.sufixo || "") : "—";
     celula.classList.toggle("vazio-valor", !tem);
   }
 

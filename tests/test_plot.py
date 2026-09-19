@@ -11,6 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from osclab.dsp import fasor
 from osclab.formats import fases, registry
 from osclab.formats.base import AnalogChannel
 from osclab.plot import escala, janela, leitura, navegacao, serie, unidades
@@ -210,6 +211,43 @@ def test_a_deducao_se_declara_como_deducao():
     fase, origem = fases.da_canal(canal)
     assert fase == "A"
     assert origem == fases.OrigemDaFase.DEDUZIDA
+
+
+# ---------------------------------------------------------------------------
+# O nome que o OscLab dá ao canal
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("nome,unidade,fase,esperado", [
+    # Três fabricantes nomeando a MESMA coisa de três jeitos — é para isso que
+    # o nome padronizado existe.
+    ("IAW", "A", "", "IA"),                     # SEL
+    ("Current IA", "A", "", "IA"),              # Schneider
+    ("TC BUC 69kV:I A", "A", "", "IA"),         # Siemens, fase deduzida do nome
+    ("Voltage VB", "V", "", "VB"),
+    ("Voltage A-G", "V", "", "VA"),
+    ("Current IN", "A", "", "IN"),
+    ("Voltage VNG", "V", "", "VN"),
+    ("TC BUC 69kV:3I0", "A", "", "IN"),         # residual também é N
+    ("qualquer coisa", "A", "C", "IC"),         # a fase declarada manda
+    ("TP BARRA", "kV", "B", "VB"),              # o prefixo não muda a grandeza
+])
+def test_o_nome_padronizado_e_o_mesmo_venha_de_onde_vier(nome, unidade, fase,
+                                                         esperado):
+    canal = AnalogChannel(index=0, name=nome, unit=unidade, phase=fase)
+    assert fases.padrao(canal) == esperado
+
+
+@pytest.mark.parametrize("nome,unidade,fase", [
+    ("FREQ", "Hz", ""),          # grandeza que não é corrente nem tensão
+    ("POT ATIVA", "MW", "A"),
+    ("VDC1", "V", ""),           # tensão, mas sem fase que se consiga determinar
+    ("TEMP", "", "B"),           # sem unidade não há grandeza
+])
+def test_sem_certeza_nao_ha_nome_padronizado(nome, unidade, fase):
+    """Um palpite com cara de nome nosso é pior que nome nenhum: ele entraria
+    nas componentes simétricas como se fosse uma fase de verdade."""
+    canal = AnalogChannel(index=0, name=nome, unit=unidade, phase=fase)
+    assert fases.padrao(canal) == ""
 
 
 # ---------------------------------------------------------------------------
@@ -725,3 +763,156 @@ def test_o_limiar_e_o_proprio_maximo_do_registro(tmp_path):
     assert unidades.do_grupo(r, canais, "A", "primario") == (1000.0, "kA")
     # Unidade de fora da lista nunca é tocada.
     assert unidades.do_grupo(r, canais, "Hz", "primario") == (1.0, "Hz")
+
+
+# ---------------------------------------------------------------------------
+# Fasores na leitura do cursor
+# ---------------------------------------------------------------------------
+
+def test_o_cursor_le_o_fasor_junto_com_o_instantaneo(tmp_path):
+    """A fábrica gera senoide de PICO conhecido; o fasor sai em eficaz."""
+    from tests.fabrica import PICO
+    r = _registro(tmp_path, na=3, n=512, taxa=1200.0)
+    (cursor,), _ = _ler(r, [(float(r.time[200]), 0)])
+
+    canal = cursor["valores"][0]
+    assert canal["fundamental"] == pytest.approx(PICO / 2**0.5, rel=0.01)
+    assert canal["rms"] == pytest.approx(canal["fundamental"], rel=0.01)
+    assert abs(canal["dc"]) < 1.0            # senoide pura: quase sem DC
+
+
+def test_o_nome_padronizado_chega_na_janela_e_na_leitura(tmp_path):
+    """A tela mostra os dois nomes lado a lado; os dois têm que chegar lá.
+
+    O do arquivo é o que o engenheiro reconhece e o que consta do relatório do
+    relé; o nosso é o que não muda de fabricante para fabricante.
+    """
+    r = _registro(tmp_path, na=3, n=512, taxa=1200.0)
+
+    canal = janela.montar(r)["grupos"][0]["canais"][0]
+    assert canal["nome"] == r.analog_channels[0].name
+    assert canal["padrao"] == fases.padrao(r.analog_channels[0])
+
+    medida = leitura.em(r, [(float(r.time[200]), 0, 0.0)])
+    assert medida["cursores"][0]["valores"][0]["padrao"] == canal["padrao"]
+    # A referência angular também se identifica pelos dois nomes: a tabelinha
+    # sublinha um canal, e quem confere contra o SIGRA precisa saber qual.
+    assert medida["referencia"]["padrao"] == \
+        fases.padrao(r.analog_channels[medida["referencia"]["indice"]])
+
+
+def test_o_rms_tem_casas_decimais_proprias(tmp_path):
+    """Reaproveitar as casas da fundamental esconderia justamente o dígito que
+    mostra a diferença entre os dois — que num transitório passa de 40 %."""
+    r = _registro(tmp_path, na=1, n=512, taxa=1200.0)
+    (cursor,), _ = _ler(r, [(float(r.time[200]), 0)])
+    canal = cursor["valores"][0]
+    assert canal["casas_rms"] == leitura.casas(canal["rms"])
+
+
+def test_sem_um_ciclo_antes_nao_ha_fasor_nem_rms(tmp_path):
+    """No começo do registro a janela não cabe. Todos os campos do fasor saem
+    nulos juntos — a tela mostra traço, e não um número inventado."""
+    r = _registro(tmp_path, na=1, n=512, taxa=1200.0)
+    (cursor,), _ = _ler(r, [(float(r.time[2]), 0)])
+    canal = cursor["valores"][0]
+    for campo in ("fundamental", "angulo", "rms", "dc", "distorcao"):
+        assert canal[campo] is None
+    assert canal["valor"] is not None        # o instantâneo continua existindo
+
+
+def test_a_referencia_angular_e_a_tensao_da_fase_a(tmp_path):
+    """Escolha por significado, não por posição: a primeira TENSÃO da fase A,
+    mesmo que o arquivo liste correntes antes."""
+    cfg = escrever_comtrade(tmp_path, na=4, n=512, taxa=1200.0)
+    texto = cfg.read_text(encoding="utf-8")
+    # canal 4 vira tensão da fase A; os três primeiros seguem correntes
+    texto = texto.replace("4,CH4,A,,A,", "4,CH4,A,,V,")
+    cfg.write_text(texto, encoding="utf-8")
+    r = registry.read(cfg)
+
+    saida = leitura.em(r, [(float(r.time[200]), 0, 0.0)])
+    assert saida["referencia"]["nome"] == "CH4"
+    # A referência tem ângulo zero por definição.
+    assert saida["cursores"][0]["valores"][3]["angulo"] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_o_usuario_pode_trocar_a_referencia(tmp_path):
+    """O clique na tabelinha ganha de qualquer regra automática."""
+    r = _registro(tmp_path, na=3, n=512, taxa=1200.0)
+    t = float(r.time[200])
+
+    padrao = leitura.em(r, [(t, 0, 0.0)])
+    trocada = leitura.em(r, [(t, 0, 0.0)], refere=1)
+
+    assert trocada["referencia"]["indice"] == 1
+    assert trocada["cursores"][0]["valores"][1]["angulo"] == pytest.approx(0.0, abs=1e-6)
+
+    # Trocar a referência GIRA todos os ângulos do mesmo tanto: as defasagens
+    # entre canais não podem mudar — é o mesmo registro.
+    def defasagem(saida, a, b):
+        vals = saida["cursores"][0]["valores"]
+        return fasor.em_relacao_a(vals[a]["angulo"], vals[b]["angulo"])
+
+    assert defasagem(padrao, 0, 2) == pytest.approx(defasagem(trocada, 0, 2), abs=1e-6)
+
+
+def test_as_fases_saem_a_120_graus(tmp_path):
+    """A fábrica gera três senoides defasadas de 120°."""
+    r = _registro(tmp_path, na=3, n=512, taxa=1200.0)
+    (cursor,), _ = _ler(r, [(float(r.time[200]), 0)])
+    angulos = [c["angulo"] for c in cursor["valores"]]
+
+    assert angulos[0] == pytest.approx(0.0, abs=1e-6)        # é a referência
+    assert abs(angulos[1]) == pytest.approx(120.0, abs=0.5)
+    assert abs(angulos[2]) == pytest.approx(120.0, abs=0.5)
+
+
+def test_sem_um_ciclo_antes_o_fasor_fica_vazio(tmp_path):
+    """No começo do registro não há janela. Melhor não responder do que
+    responder com meia janela."""
+    r = _registro(tmp_path, na=1, n=512, taxa=1200.0)
+    (cursor,), _ = _ler(r, [(float(r.time[3]), 0)])
+    assert cursor["valores"][0]["fundamental"] is None
+    assert cursor["valores"][0]["valor"] is not None      # o instantâneo fica
+
+
+def test_o_fasor_acompanha_primario_e_o_prefixo(tmp_path):
+    """Gráfico em kA e fasor em A no mesmo instante seria mentira das boas."""
+    r = _registro(tmp_path, na=1, n=512, taxa=1200.0)
+    t = float(r.time[200])
+
+    secundario = leitura.em(r, [(t, 0, 0.0)], lado="secundario")
+    primario = leitura.em(r, [(t, 0, 0.0)], lado="primario")
+
+    vs = secundario["cursores"][0]["valores"][0]
+    vp = primario["cursores"][0]["valores"][0]
+
+    assert vp["unidade"] == "kA"                     # 12 000 A passam do limiar
+    assert vp["fundamental"] * 1000 == pytest.approx(vs["fundamental"] * 120,
+                                                     rel=1e-6)
+    # Escalar não gira fasor: o ângulo é o mesmo dos dois lados.
+    assert vp["angulo"] == pytest.approx(vs["angulo"], abs=1e-9)
+
+
+def test_a_janela_leva_o_indice_do_canal_no_registro(tmp_path):
+    """A tela casa a linha da tabelinha com a leitura do cursor por ÍNDICE.
+
+    Por posição erraria em qualquer registro que intercale corrente e tensão,
+    porque os grupos reordenam os canais e a leitura vem na ordem do arquivo.
+    """
+    cfg = escrever_comtrade(tmp_path, na=4, n=256)
+    texto = cfg.read_text(encoding="utf-8")
+    # Intercala: canais 2 e 4 viram tensão, 1 e 3 seguem corrente.
+    texto = texto.replace("2,CH2,B,,A,", "2,CH2,B,,V,").replace("4,CH4,A,,A,", "4,CH4,A,,V,")
+    cfg.write_text(texto, encoding="utf-8")
+    r = registry.read(cfg)
+
+    pacote = janela.montar(r)
+    por_indice = {c["indice"]: c["nome"]
+                  for g in pacote["grupos"] for c in g["canais"]}
+
+    assert por_indice == {0: "CH1", 1: "CH2", 2: "CH3", 3: "CH4"}
+    # E os grupos de fato reordenaram: correntes 0 e 2, tensões 1 e 3.
+    assert [c["indice"] for c in pacote["grupos"][0]["canais"]] == [0, 2]
+    assert [c["indice"] for c in pacote["grupos"][1]["canais"]] == [1, 3]

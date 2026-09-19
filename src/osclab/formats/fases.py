@@ -87,6 +87,42 @@ def deduzir(nome: str) -> str:
     return ""
 
 
+#: De que unidade sai cada letra de grandeza. O que não estiver aqui não ganha
+#: nome padronizado: inventar um para um canal de frequência ou de potência
+#: seria pior que não ter.
+_GRANDEZAS = {
+    "A": "I", "KA": "I", "MA": "I",
+    "V": "V", "KV": "V", "MV": "V",
+}
+
+
+def padrao(canal: AnalogChannel | StatusChannel) -> str:
+    """O nome que o OscLab dá ao canal: `IA`, `VB`, `IN`, `VN`...
+
+    ## Por que existe um nome nosso ao lado do nome do arquivo
+
+    Cada fabricante nomeia como quer: a Schneider escreve `Current IA`, o
+    Siemens `TC BUC 69kV:I A`, a SEL `IAW`. Analisar um evento com registros de
+    dois terminais de fabricantes diferentes vira um exercício de tradução.
+
+    O nome padronizado é **sempre o mesmo**, venha de onde vier — e é por ele
+    que o resto do programa vai se referir aos canais quando calcular
+    componentes simétricas, impedância e localização de falta.
+
+    Fica **ao lado** do nome do arquivo, nunca no lugar dele: o nome original é
+    o que o engenheiro reconhece e o que consta do relatório do relé. Este é a
+    tradução, e a tela mostra os dois para deixar claro o que é qual.
+
+    Devolve `""` quando não dá para nomear — grandeza fora de corrente e tensão,
+    ou fase que não se conseguiu determinar. Melhor nada que um palpite.
+    """
+    grandeza = _GRANDEZAS.get((getattr(canal, "unit", "") or "").strip().upper())
+    if not grandeza:
+        return ""
+    fase, _ = da_canal(canal)
+    return f"{grandeza}{fase}" if fase else ""
+
+
 def da_canal(canal: AnalogChannel | StatusChannel) -> tuple[str, OrigemDaFase]:
     """A fase do canal e de onde ela veio."""
     declarada = _normalizar(getattr(canal, "phase", ""))
