@@ -94,7 +94,8 @@ osclab/
 │   ├── report/            mini relatório                  (marco 0.7)
 │   ├── cli/               modo lote
 │   └── web/               SÓ apresentação
-├── data/  samples/  docs/  tests/  tools/
+├── tools/paleta.py        valida a paleta de cores (ΔE2000, daltonismo)
+├── data/  samples/  docs/  tests/
 └── cache/  library/       tempo de execução, fora do git
 ```
 
@@ -132,6 +133,36 @@ osclab/
   certo: **trip que some da tela é pior que trip gordo demais.** Colunas
   ligadas seguidas viram um retângulo só, senão o antialiasing abre fresta e
   um trip contínuo se lê como intermitente.
+- **O gráfico é um PAINEL, e a lista de painéis é da TELA.** Um painel é
+  `{id, tipo, nome, sinais, medida}` (ver `plot/paineis.py`): a tela manda a
+  lista inteira no corpo do pedido e o servidor desenha o que veio, na ordem em
+  que veio. Ele não guarda arranjo nenhum — abrir de novo o mesmo registro
+  recomeça no padrão. O `padrao()` (um painel por unidade do arquivo mais um
+  com os digitais que mudaram) é só o ponto de partida, e é o que sai quando a
+  tela ainda não tem arranjo: na PRIMEIRA janela, que é um GET.
+- **O arranjo vai no CORPO do pedido, nunca na URL.** As duas rotas atendem
+  `GET` e `POST`. Arranjo é estrutura — lista de painéis, cada um com a lista
+  de sinais dele —, nome de gráfico tem vírgula e acento, e URL tem teto de
+  tamanho. Empacotar isso numa `query string` seria inventar um formato só para
+  ter que desfazê-lo do outro lado.
+- **Nome e ordem são rótulo e arrumação: não passam pelo servidor.** Renomear e
+  reordenar são instantâneos, sem ida e volta, porque não mudam número nenhum.
+  A exceção é o nome que o SERVIDOR deu: enquanto `do_padrao` estiver de pé, é
+  ele quem escreve o nome, e por isso `Correntes (A)` vira `Correntes (kA)`
+  quando se troca para primário. Renomear apaga a marca — a partir daí o nome é
+  do usuário e o servidor devolve o que recebeu.
+- **Painel digital é painel.** Poderia ser um bloco fixo no fim, como era; mas
+  aí "mudar a ordem dos gráficos" não poderia pôr digitais ENTRE duas trincas
+  de corrente — que é exatamente o que se quer olhando um religamento: a
+  corrente, o trip, a corrente de novo.
+- **Gráfico novo nasce com nome genérico** (`Gráfico analógico 2`), vazio, e
+  com um texto dizendo como pôr sinal nele. Obrigar a batizar um gráfico antes
+  de ver o que tem dentro é pedir decisão na hora errada.
+- **A leitura do cursor casa por ID DE SINAL, nunca por posição.** Com painéis,
+  o mesmo canal pode estar em dois gráficos com medidas diferentes: posição
+  deixou de identificar coisa nenhuma. `cursor["sinais"]` é um dicionário
+  `id → linha`, e a leitura só responde o que ALGUM painel pediu — tela vazia,
+  tabelinha vazia.
 - **As duas listas são `IED` e `OscLab`.** `IED` traz os canais do arquivo,
   crus, com o nome do fabricante — e continuam crus mesmo com o filtro de
   60 Hz ligado, porque filtrar é conta nossa. `OscLab` traz o que o relé NÃO
@@ -195,10 +226,10 @@ osclab/
 - **Clicar num traço escolhe aquele sinal; Delete tira ele da tela.** Os
   outros traços perdem opacidade em vez de sumir — tirar os vizinhos tiraria
   justamente a comparação que fez alguém clicar ali. Canal do arquivo não sai
-  do registro, sai da TELA (`ocultos`, que vai ao servidor porque a escala
-  vertical depende de quem está desenhado), e volta pelo `+ sinal`, na aba IED,
-  onde aparece desmarcado. O grupo continua existindo mesmo ficando vazio: é
-  dele que sai o botão que traz o canal de volta.
+  do registro, sai da LISTA DE SINAIS do painel (e por isso vai ao servidor: a
+  escala vertical depende de quem está desenhado), e volta pelo `+ sinal`, na
+  aba IED, onde aparece desmarcado. O painel continua existindo mesmo ficando
+  vazio: é dele que sai o botão que traz o canal de volta.
 - **A grandeza é do SINAL, não do botão.** Cada variante tem id próprio
   (`v0:rms`, `v0:filtrado`, `v0:fundamental`), e o botão de filtro do cabeçalho
   não mexe nelas: `IA RMS` não pode mudar de significado com um clique em
@@ -216,10 +247,78 @@ osclab/
   estão prontos e testados desde o marco 0.4b e só aparecem quando alguém os
   acrescenta pelo `+ sinal`. Tela que se enche do que o programa sabe fazer
   vira painel de números que ninguém pediu, e o que importa some no meio.
-- **Sinal acrescentado à mão carrega a PRÓPRIA medida.** O botão
-  instantâneo/RMS do gráfico manda nos canais que abriram por padrão; o que foi
-  acrescentado fica como foi pedido. É o que permite `IA` e `IA RMS` no mesmo
-  gráfico — a comparação que mostra o atraso de um ciclo do filtro.
+- **Tabela e traço têm a MESMA cor, por construção.** A tabelinha pintava pela
+  fase, com classe de CSS, e o desenho por `corDoSinal` — as componentes
+  simétricas saíam coloridas no gráfico e cinzas na tabela. Hoje os dois
+  chamam a mesma função. Duas implementações da mesma decisão é como elas
+  divergem, e aqui a divergência é justamente a pista que liga o número ao
+  traço.
+- **Um gráfico NUNCA repete cor.** Duas curvas da mesma cor no mesmo eixo não
+  se distinguem — e era o que acontecia com `Current IA` e `Voltage A-G` no
+  mesmo painel, porque as duas são fase A. A cor é decidida para o painel
+  inteiro de uma vez (`coresDoPainel`), nesta ordem: a escolha do usuário
+  manda e é reservada primeiro; um canal fica com a cor da fase dele se ela
+  estiver livre; todo o resto pega a primeira cor NEUTRA livre — e as neutras
+  estão ordenadas por **croma**, da mais viva para a mais apagada, com o cinza
+  em último: quem chega primeiro merece a cor que mais se separa do fundo e
+  das vizinhas. Há teste que mede o croma e confere a ordem. **Cor de fase
+  nunca entra por sobra**: ela afirma de que fase o sinal é, e um sinal que a
+  vestisse por falta de opção estaria mentindo. Passando de dez sinais as
+  cores repetem — cor que se separa de outras nove sob daltonismo é recurso
+  escasso, e a legenda sempre nomeia o sinal.
+- **A paleta é validada, e o validador está no repositório.** `tools/paleta.py`
+  confere ΔE2000 entre todos os pares, em ambos os temas, sob visão normal,
+  protanopia, deuteranopia e tritanopia, mais o contraste contra o fundo. Cor
+  nova passa por ele antes de entrar no CSS; tritanopia entra como aviso, não
+  como reprovação, porque a simulação dela por matriz linear é grosseira. Há
+  teste que impede o validador e o CSS de divergirem.
+- **Sinal no segundo eixo NÃO é tracejado.** Era, como aviso de que a altura
+  dele não se compara com a dos outros. Saiu quando as cores passaram a ser
+  únicas: a cor já separa as curvas, e o tracejado gastava a única variação de
+  traço que restava. O segundo eixo continua dito na legenda (`→ kV`), na
+  unidade de cada linha da tabelinha e no próprio eixo.
+- **Todo eixo escreve a sua unidade**, na folga de cima, menor e mais apagada
+  que os números — a unidade é a legenda da medida, não uma medida. Vale para
+  o eixo da esquerda e para o da direita.
+- **A cor de um sinal pode ser escolhida, e a escolha é da TELA.** Quadrinho
+  ao lado do sinal na janela do `+ sinal`, na parte do que já está no gráfico;
+  clicar abre as cores em BOLINHAS — nome de cor não ajuda a escolher cor.
+  Guarda-se o TOKEN (`--fase-a`), não o código, para a escolha acompanhar o
+  tema claro e o escuro. Não vai ao servidor — cor não muda número nenhum —,
+  entra no Ctrl+Z junto com o resto do arranjo, e some quando o sinal sai do
+  gráfico: se ele voltar, volta na cor automática. As cores de fase estão na
+  paleta de propósito: o padrão protege, a escolha é de quem analisa.
+- **Toda linha da tabelinha diz a sua unidade, e a unidade nunca é o que
+  corta.** Desde que um gráfico pode misturar sinais, a unidade deixou de ser
+  dedutível do título: `81,67` numa linha de `V1` se lê como 81 V secundários
+  quando são 81 kV primários — três ordens de grandeza, sem nada na tela
+  denunciando. O nome encolhe com reticências; a unidade é `flex: none`.
+- **O nome do ARQUIVO só aparece quando o sinal É o canal do arquivo.** Com o
+  gráfico em RMS o traço não é mais `Current IA`: é `IA RMS`, que é conta nossa
+  com um ciclo de janela em cima. Escrever os dois nomes lado a lado ali
+  afirmava que a curva era a que o relé gravou. Na legenda e na tabelinha vale
+  o `familia` do sinal — `canal` mostra o nome do fabricante mais a
+  fundamental; `calculado` mostra só o nome nosso, e o canal de origem fica no
+  hover. O aviso de TC/TP não segue essa regra: ele é sobre o CANAL, então
+  aparece sempre que há índice de canal por trás.
+- **Botão que acende e não faz nada é pior que botão travado.** Num painel só
+  de componentes simétricas, o instantâneo/RMS não tem em que pegar — elas são
+  fasor e já saem em eficaz —, e clicar nele trocava o rótulo da tabelinha de
+  `valor` para `RMS` deixando os valores iguais: a tela afirmando uma mudança
+  que não houve. O servidor manda `medida_aplicavel` em cada painel analógico
+  e a tela trava o botão, visível e inerte, com a explicação no `title` — igual
+  ao botão do filtro num registro que o relé já filtrou. **Painel vazio é a
+  exceção**: ali não há contradição ainda, e travar um controle antes de haver
+  conteúdo é dizer "não pode" sem ter por quê.
+- **Os botões do painel pegam o canal do IED; não pegam o sinal do OscLab.**
+  Um canal do IED (`c0:instantaneo`) é a amostra crua, e o filtro do cabeçalho
+  mais a medida do painel existem para dizer o que fazer com ela: com o filtro
+  ligado, `IA` vira `IA 60Hz`. Um sinal do OscLab (`v0:rms`, `q0:0:rms`) foi
+  escolhido pelo nome, com a grandeza DENTRO do nome, e não muda de significado
+  com um clique em outro lugar da tela. É o que permite `IA` e `IA RMS` no
+  mesmo gráfico — a comparação que mostra o atraso de um ciclo do filtro. A
+  tradução de (id pedido + filtro + medida) para o sinal que de fato se
+  desenha é `catalogo.efetivo`, e ela é a MESMA no desenho e na leitura.
 - **Unidade diferente, eixo diferente.** Um sinal de outra unidade vai para a
   escala da DIREITA e é desenhado tracejado, porque a altura dele não se
   compara com a dos outros traços. Um terceiro eixo não existe: o sinal é
@@ -411,10 +510,19 @@ usuário compõe a partir de sinais**:
 - **Ao abrir um registro**, aparecem por padrão: um gráfico analógico das
   correntes, um das tensões, e os **digitais que mudaram** ao longo do
   registro. Digital que ficou parado o tempo todo não conta nada e não ocupa
-  tela.
+  tela. — **feito**
 - **Depois**, o usuário cria novos diagramas — analógicos e fasoriais —
   acrescenta e remove sinais de cada um dinamicamente, e monta a análise dele.
+  — **feito para analógico e digital** (criar, reordenar, renomear, apagar,
+  pôr e tirar sinais). Falta o fasorial e o de Fourier.
 - **Por fim**, uma calculadora cria sinais novos a partir dos existentes.
+
+A ordem que ele pediu em 20/09/2026, depois dos painéis: **cursores magnéticos**
+(ele explica), **gráfico fasorial**, **gráfico de Fourier** (com a DC como
+*curva ao longo do tempo* — escolha dele entre as alternativas que ofereci),
+**calculadora** e então uma etapa pesada de **comissionamento** contra outros
+analisadores, incluindo a mesma oscilografia filtrada e não filtrada para
+validar o nosso filtro. Ver `claude/ideias-do-alexandre.md`.
 
 Três consequências para quem programa isto:
 
@@ -442,6 +550,65 @@ Três consequências para quem programa isto:
 | Formatos | COMTRADE é a base; depois SEL `.CEV`; PL4 para validar algoritmos |
 
 ## Detalhes que já custaram caro (não redescobrir)
+
+- **`display: flex` num `<th>` tira a célula do cálculo de colunas.** Com
+  `table-layout: fixed`, a largura vem da célula; virando contêiner flex ela
+  deixa de ser `table-cell` e a coluna encolhe para o conteúdo — a primeira
+  coluna da tabelinha caiu de 107 px para 43 px e o nome do sinal sumiu. O
+  flex vai num invólucro dentro do `th`.
+- **Campo que some do pacote não dá erro no navegador — dá tela errada.** A
+  refatoração para painéis tirou `dados.digitais` do pacote e `ajustarMargem`
+  continuou lendo: o resultado não foi exceção nenhuma, foi a margem esquerda
+  parada no mínimo e TODO nome de digital cortado. Há teste agora
+  (`test_a_tela_nao_le_campo_que_o_servidor_nao_manda`): ele varre os
+  `dados.<campo>` e `medida.<campo>` de `onda.js`, fora dos comentários, e
+  confere contra as chaves que as rotas devolvem.
+- **`re.S` vale para o PADRÃO INTEIRO.** Tirar comentário de JavaScript com
+  `re.sub(r"//.*|/\*.*?\*/", "", texto, flags=re.S)` come do primeiro `//` até
+  o fim do arquivo, e o teste que depende disso passa sempre sem olhar nada —
+  o pior tipo de teste. Duas passadas: bloco primeiro, depois `//[^\n]*`.
+- **Nome de variável repetido em escopos diferentes vira defeito.** `medida`
+  era o pacote da leitura dos cursores E o botão instantâneo/RMS dentro de
+  `bloco`. Hoje o botão é `botaoMedida`.
+- **Função referenciada e não definida é invisível até o clique.** A
+  refatoração perdeu `alternarSelecao` — o JavaScript não reclama na carga, só
+  ao clicar, e o sintoma que chega é "não consigo mais destacar um sinal". Se
+  uma refatoração mexeu em muitos trechos, clique em cada gesto antes de
+  entregar; o console não vai avisar sozinho.
+- **Não pôr um alvo de APAGAR colado no alvo de ESCOLHER.** O × de tirar o
+  sinal foi posto ao lado do nome na legenda e saiu: o nome é o alvo de
+  selecionar, e dois botões a poucos pixels um do outro, com efeitos opostos,
+  é o par que mais se erra. Tirar sinal é selecionar e apertar Delete, ou
+  desmarcar no «+ sinal».
+
+- **Script de remendo com uma substituição que falha no fim não escreve NADA.**
+  Um `patch` de doze trocas levantou `AssertionError` na última e perdeu as
+  onze anteriores — e o arquivo ficou com metade da refatoração, o que é pior
+  que nenhuma. **Escreva o arquivo a cada passo**, ou verifique todas as trocas
+  antes de escrever qualquer uma.
+- **Nunca substituir uma região de arquivo por ÍNDICE de linha.** Uma troca por
+  faixa apagou em silêncio o bloco de estado dos painéis que estava no meio
+  dela, e o defeito só apareceu no navegador (`pedidoComLayout is not
+  defined`). Casar por texto, sempre.
+- **Quem digita num campo não está dando atalho.** O `keydown` global da página
+  engolia os dígitos de quem renomeava um gráfico: teclar `1` punha um cursor
+  na oscilografia e chamava `preventDefault`, e o nome "01" saía "0". O
+  primeiro teste do handler é se o alvo é `INPUT`, `TEXTAREA` ou
+  `contentEditable`.
+- **`blur` dispara DENTRO do `replaceWith`.** Terminar a edição do nome por
+  `Enter` trocava o campo pelo botão, o que tirava o foco, o que chamava o
+  `terminar` de novo — "The node to be removed is no longer a child". Uma
+  variável `pronto` resolve; `isConnected` não, porque no meio da troca o nó
+  ainda está ligado.
+- **Cor de sinal não sai de nada do id.** A cor dos calculados vinha do
+  COMPRIMENTO do id, e `q0:0:rms` e `q0:2:rms` — um par que se põe junto o
+  tempo todo — caíam na mesma cor: duas curvas indistinguíveis no mesmo
+  gráfico, sem nada denunciando. Sai da posição entre os calculados daquele
+  painel.
+- **Teste que usa o acervo tem que trocar `paths` antes.** Rodar
+  `tests/test_acervo.py` fora do pytest (sem a fixture que aponta
+  `LIBRARY_DIR` para um diretório temporário) grava registros no acervo DE
+  VERDADE — e já gravou. Se for rodar à mão, troque os caminhos antes.
 
 - **Servidor velho com tela nova.** Os `.py` só são lidos quando o programa
   SOBE; o `.js` o navegador recarrega sozinho. Trocar de versão sem reiniciar
@@ -612,6 +779,7 @@ Três consequências para quem programa isto:
 | 0.4b | Componentes simétricas (3V0/3I0) | **feito** — entram na tela pela mão do usuário, pelo catálogo, nunca automaticamente |
 | 0.4b+ | Catálogo de sinais (IED × OscLab), segundo eixo, vínculo canal→fase corrigível | **feito** |
 | 0.4b++ | Selecionar sinal por clique, tirar da tela, desfazer | **feito** |
+| 0.4b+++ | Painéis: criar, reordenar, renomear; cor única por gráfico; unidade nos eixos | **feito** |
 | 0.4c | Harmônicos | |
 | 0.5 | Bruto/filtrado, descontinuidade, alinhamento | |
 | 0.6 | Localização de faltas (um e dois terminais) | |

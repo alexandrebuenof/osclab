@@ -18,9 +18,27 @@ import numpy as np
 from osclab.formats import fases, registry
 from osclab.formats.base import AnalogChannel, Filtering, Record
 from osclab.plot import catalogo, janela, leitura
+from tests import arranjo
 from tests.fabrica import escrever_comtrade
 
 PICO = 100.0
+
+
+def com_correntes(registro, acrescentados=(), medida="instantaneo"):
+    """Um painel com as correntes do registro e mais os sinais pedidos.
+
+    É o que a tela monta quando se aperta «+ sinal» num gráfico que abriu por
+    padrão: os canais do IED continuam lá e o sinal novo entra no fim — o que
+    é justamente o caso em que o segundo eixo e os avisos aparecem.
+    """
+    return [arranjo.analogico(
+        arranjo.ids_dos_canais(registro, "A") + list(acrescentados),
+        medida=medida, nome="Correntes")]
+
+
+def sinal(painel, identidade):
+    """O sinal de um painel pelo id com que foi pedido."""
+    return next(s for s in painel["sinais"] if s["id"] == identidade)
 
 
 def trifasico(defasagens=(0.0, -120.0, -240.0), amplitudes=(PICO, PICO, PICO),
@@ -103,10 +121,9 @@ def test_a_grandeza_esta_no_id_e_nao_depende_do_botao_de_filtro():
     r = trifasico()
     # Mesmo com o filtro ligado no gráfico, `IA RMS` continua eficaz
     # verdadeiro — e não a fundamental.
-    pacote = janela.montar(r, filtro=True, extras={"A": ["v0:rms"]},
-                           colunas=100_000)
-    grupo = next(g for g in pacote["grupos"] if g["unidade"] == "A")
-    assert grupo["extras"][0]["sinal"] == "IA RMS"
+    pacote = janela.montar(r, filtro=True, colunas=100_000,
+                           layout=com_correntes(r, ["v0:rms"]))
+    assert sinal(pacote["paineis"][0], "v0:rms")["sinal"] == "IA RMS"
 
 
 def test_registro_ja_filtrado_oferece_SO_o_que_existe_de_verdade():
@@ -132,23 +149,40 @@ def test_num_registro_filtrado_o_60Hz_e_o_proprio_canal():
     ficaria atrasada em relação à onda do próprio gráfico."""
     r = trifasico()
     r.filtering = Filtering.FILTRADO
-    pacote = janela.montar(r, extras={"A": ["v0:filtrado"]}, colunas=100_000)
-    grupo = next(g for g in pacote["grupos"] if g["unidade"] == "A")
-    serie = grupo["extras"][0]["serie"]
+    pacote = janela.montar(r, colunas=100_000,
+                           layout=com_correntes(r, ["v0:filtrado"]))
+    painel = pacote["paineis"][0]
+    serie = sinal(painel, "v0:filtrado")["serie"]
     assert serie[0] is not None          # a filtrada de verdade começaria vazia
-    assert serie[0] == grupo["canais"][0]["serie"][0]
+    assert serie[0] == painel["sinais"][0]["serie"][0]
 
 
-def test_o_canal_do_IED_sai_sempre_cru():
-    """A lista do IED entrega o que está no arquivo. Se o filtro do cabeçalho
-    a alterasse, o nome diria uma coisa e o traço seria outra."""
+def test_o_que_os_botoes_do_painel_pegam_e_o_que_eles_nao_pegam():
+    """A divisão que decide o significado de metade da tela.
+
+    Um canal do IED é a amostra crua, e os botões do painel — o filtro e a
+    medida — existem justamente para dizer o que fazer com ela: com o filtro
+    ligado, `IA` vira `IA 60Hz` e a curva começa um ciclo depois, porque não há
+    janela antes disso.
+
+    Um sinal do OscLab, não. `IA RMS` foi escolhido pelo nome, com grandeza
+    dentro do nome, e não pode mudar de significado com um clique em outro
+    lugar da tela — foi o que o usuário pediu quando disse que o sinal posto à
+    mão carrega a própria medida.
+    """
     r = trifasico()
-    pacote = janela.montar(r, filtro=True, extras={"A": ["c0:instantaneo"]},
-                           colunas=100_000)
-    grupo = next(g for g in pacote["grupos"] if g["unidade"] == "A")
-    serie = grupo["extras"][0]["serie"]
-    assert serie[0] is not None          # a filtrada começaria sem o 1º ciclo
-    assert max(v for v in serie if v is not None) == pytest_aprox(PICO, rel=1e-2)
+    r.filtering = Filtering.BRUTO        # senão `IA RMS` nem seria oferecido
+    pacote = janela.montar(r, filtro=True, colunas=100_000,
+                           layout=[arranjo.analogico(["c0:instantaneo",
+                                                      "v0:rms"])])
+    painel = pacote["paineis"][0]
+
+    do_ied = sinal(painel, "c0:instantaneo")
+    assert do_ied["sinal"] == "IA 60Hz"          # o botão pegou
+    assert do_ied["serie"][0] is None            # e a janela do filtro aparece
+
+    do_osclab = sinal(painel, "v0:rms")
+    assert do_osclab["sinal"] == "IA RMS"        # o botão não pegou
 
 
 def test_cada_conjunto_trifasico_rende_as_tres_componentes():
@@ -175,18 +209,6 @@ def test_sem_conjunto_completo_nao_ha_componente_nenhuma():
     assert "3V0" in componentes       # as tensões continuam completas
 
 
-def test_o_texto_da_url_vira_pedido_por_grupo():
-    assert catalogo.de_texto("A=v3:rms,q0:1:rms;kV=q1:0:rms") == {
-        "A": ["v3:rms", "q0:1:rms"], "kV": ["q1:0:rms"]}
-
-
-def test_texto_torto_nao_quebra_nada():
-    """A tela manda texto e o servidor não confia nele."""
-    assert catalogo.de_texto(None) == {}
-    assert catalogo.de_texto("=;;A=") == {}
-    assert catalogo.de_texto("A=v0:rms;lixo") == {"A": ["v0:rms"]}
-
-
 # ---------------------------------------------------------------------------
 # Quanto vale cada componente
 # ---------------------------------------------------------------------------
@@ -197,8 +219,9 @@ def test_equilibrado_em_abc_poe_tudo_na_positiva():
     custou um registro inteiro lido de cabeça para baixo."""
     r = trifasico()
     lido = leitura.em(r, [(float(r.time[300]), 0, 0.0), (None, 0, 0.0)],
-                      extras={"A": ["q0:0:rms", "q0:1:rms", "q0:2:rms"]})
-    valores = {k: v["valor"] for k, v in lido["cursores"][0]["extras"].items()}
+                      layout=[arranjo.analogico(
+                          ["q0:0:rms", "q0:1:rms", "q0:2:rms"])])
+    valores = {k: v["valor"] for k, v in lido["cursores"][0]["sinais"].items()}
     assert valores["q0:1:rms"] == pytest_aprox(PICO / math.sqrt(2.0))
     assert abs(valores["q0:2:rms"]) < 0.01
     assert abs(valores["q0:0:rms"]) < 0.01
@@ -210,8 +233,8 @@ def test_falta_fase_terra_levanta_o_3i0():
     aparecesse ali seria erro de conta."""
     r = trifasico(amplitudes=(10 * PICO, PICO, PICO))
     lido = leitura.em(r, [(float(r.time[300]), 0, 0.0), (None, 0, 0.0)],
-                      extras={"A": ["q0:0:rms"]})
-    tres_i0 = lido["cursores"][0]["extras"]["q0:0:rms"]["valor"]
+                      layout=[arranjo.analogico(["q0:0:rms"])])
+    tres_i0 = lido["cursores"][0]["sinais"]["q0:0:rms"]["valor"]
     # 3I0 = Ia+Ib+Ic; com Ib e Ic equilibrados eles se cancelam e sobra o
     # excesso da fase A: (10-1)·PICO, em eficaz.
     assert tres_i0 == pytest_aprox(9 * PICO / math.sqrt(2.0), rel=1e-3)
@@ -223,26 +246,26 @@ def test_a_curva_e_o_cursor_dao_o_MESMO_numero():
     divergem, em silêncio, meses depois."""
     r = trifasico(amplitudes=(3 * PICO, PICO, PICO))
     i = 400
-    pacote = janela.montar(r, extras={"A": ["q0:0:rms"]}, colunas=100_000)
-    grupo = next(g for g in pacote["grupos"] if g["unidade"] == "A")
-    desenhado = grupo["extras"][0]["serie"][i]
+    pacote = janela.montar(r, colunas=100_000,
+                           layout=com_correntes(r, ["q0:0:rms"]))
+    desenhado = sinal(pacote["paineis"][0], "q0:0:rms")["serie"][i]
 
     lido = leitura.em(r, [(float(r.time[i]), 0, 0.0), (None, 0, 0.0)],
-                      extras={"A": ["q0:0:rms"]})
+                      layout=com_correntes(r, ["q0:0:rms"]))
     # A tolerância é a do ARREDONDAMENTO do desenho, não da conta: a série sai
     # arredondada na resolução do eixo (ver `serie.arredondar`), porque mandar
     # dezesseis dígitos para desenhar um pixel é peso de rede por nada.
     assert abs(desenhado
-               - lido["cursores"][0]["extras"]["q0:0:rms"]["valor"]) < 0.02
+               - lido["cursores"][0]["sinais"]["q0:0:rms"]["valor"]) < 0.02
 
 
 def test_o_primeiro_ciclo_nao_tem_componente():
     """Não há janela antes dele. Zero seria um número, e número na tela é
     afirmação — diria "medi, e deu zero" onde não há o que medir."""
     r = trifasico()
-    pacote = janela.montar(r, extras={"A": ["q0:1:rms"]}, colunas=100_000)
-    grupo = next(g for g in pacote["grupos"] if g["unidade"] == "A")
-    assert grupo["extras"][0]["serie"][0] is None
+    pacote = janela.montar(r, colunas=100_000,
+                           layout=com_correntes(r, ["q0:1:rms"]))
+    assert sinal(pacote["paineis"][0], "q0:1:rms")["serie"][0] is None
 
 
 # ---------------------------------------------------------------------------
@@ -252,19 +275,21 @@ def test_o_primeiro_ciclo_nao_tem_componente():
 def test_sinal_de_outra_unidade_vai_para_o_eixo_da_direita():
     """100 A e 100 V na mesma altura seria leitura errada que não dá erro
     nenhum. Unidade diferente, eixo diferente — e a tela escreve os dois."""
-    pacote = janela.montar(trifasico(), extras={"A": ["c3:instantaneo"]},
-                           colunas=200)
-    grupo = next(g for g in pacote["grupos"] if g["unidade"] == "A")
-    assert grupo["extras"][0]["eixo"] == "dir"
-    assert grupo["eixo_dir"]["unidade"] == "V"
-    assert grupo["eixo_dir"]["marcacoes"]
+    r = trifasico()
+    pacote = janela.montar(r, colunas=200,
+                           layout=com_correntes(r, ["c3:instantaneo"]))
+    painel = pacote["paineis"][0]
+    assert sinal(painel, "c3:instantaneo")["eixo"] == "dir"
+    assert painel["eixo_dir"]["unidade"] == "V"
+    assert painel["eixo_dir"]["marcacoes"]
 
 
 def test_mesma_unidade_divide_o_eixo_da_esquerda():
-    pacote = janela.montar(trifasico(), extras={"A": ["q0:1:rms"]}, colunas=200)
-    grupo = next(g for g in pacote["grupos"] if g["unidade"] == "A")
-    assert grupo["extras"][0]["eixo"] == "esq"
-    assert grupo["eixo_dir"] is None
+    r = trifasico()
+    pacote = janela.montar(r, colunas=200, layout=com_correntes(r, ["q0:1:rms"]))
+    painel = pacote["paineis"][0]
+    assert sinal(painel, "q0:1:rms")["eixo"] == "esq"
+    assert painel["eixo_dir"] is None
 
 
 def test_uma_terceira_unidade_e_recusada_com_aviso():
@@ -276,18 +301,18 @@ def test_uma_terceira_unidade_e_recusada_com_aviso():
     r.analog_channels = tuple(canais)
     r.analog = np.vstack([r.analog, np.full((1, r.analog.shape[1]), 60.0)])
 
-    pacote = janela.montar(r, extras={"A": ["c3:instantaneo", "c6:instantaneo"]},
-                           colunas=200)
-    grupo = next(g for g in pacote["grupos"] if g["unidade"] == "A")
-    assert len(grupo["extras"]) == 1
-    assert grupo["avisos"] and "Hz" in grupo["avisos"][0]
+    pacote = janela.montar(r, colunas=200, layout=com_correntes(
+        r, ["c3:instantaneo", "c6:instantaneo"]))
+    painel = pacote["paineis"][0]
+    # As três correntes e a tensão entraram; o hertz ficou de fora, com aviso.
+    assert [s["id"] for s in painel["sinais"]][-1] == "c3:instantaneo"
+    assert painel["avisos"] and "Hz" in painel["avisos"][0]
 
 
 def test_id_que_nao_existe_e_ignorado_em_silencio():
-    pacote = janela.montar(trifasico(), extras={"A": ["v99:rms", "q7:1:rms", "lixo"]},
-                           colunas=200)
-    grupo = next(g for g in pacote["grupos"] if g["unidade"] == "A")
-    assert grupo["extras"] == []
+    pacote = janela.montar(trifasico(), colunas=200, layout=[
+        arranjo.analogico(["v99:rms", "q7:1:rms", "lixo"])])
+    assert pacote["paineis"][0]["sinais"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -304,18 +329,19 @@ def test_o_sinal_acrescentado_carrega_a_propria_medida(tmp_path):
     # registro bruto, então ele diz isso.
     r.filtering = Filtering.BRUTO
     lido = leitura.em(r, [(float(r.time[300]), 0, 0.0), (None, 0, 0.0)],
-                      medidas={"A": "instantaneo"}, extras={"A": ["v0:rms"]})
-    linha = lido["cursores"][0]["extras"]["v0:rms"]
+                      layout=com_correntes(r, ["v0:rms"]))
+    leituras = lido["cursores"][0]["sinais"]
+    linha = leituras["v0:rms"]
     # O gráfico está em instantâneo; o sinal acrescentado continua em RMS.
     assert linha["valor"] == linha["rms"]
-    assert lido["cursores"][0]["valores"][0]["grandeza"] == "instantaneo"
+    assert leituras["c0:instantaneo"]["grandeza"] == "instantaneo"
 
 
 def test_a_diferenca_entre_cursores_vale_para_os_acrescentados():
     r = trifasico(amplitudes=(3 * PICO, PICO, PICO))
     lido = leitura.em(r, [(float(r.time[200]), 0, 0.0), (float(r.time[400]), 0, 0.0)],
-                      extras={"A": ["q0:0:rms"]})
-    assert "q0:0:rms" in lido["entre"]["extras"]
+                      layout=com_correntes(r, ["q0:0:rms"]))
+    assert "q0:0:rms" in lido["entre"]["sinais"]
 
 
 def pytest_aprox(v, rel=1e-6):
@@ -396,3 +422,55 @@ def test_a_letra_do_neutro_sozinha_e_reconhecida():
     conta. E `Voltage A-G` continua sendo fase A."""
     assert fases.deduzir("Voltage N-G") == "N"
     assert fases.deduzir("Voltage A-G") == "A"
+
+
+# ---------------------------------------------------------------------------
+# O botão de medida de cada painel
+# ---------------------------------------------------------------------------
+
+def test_o_botao_de_medida_trava_onde_nao_ha_canal_do_IED():
+    """Botão que acende e não faz nada é pior que botão travado.
+
+    Num painel só de componentes simétricas o instantâneo/RMS não tem em que
+    pegar: elas são fasor e já saem em eficaz. Clicar nele trocava o rótulo da
+    tabelinha de `valor` para `RMS` e deixava os valores iguais — a tela
+    afirmando uma mudança que não houve.
+    """
+    r = trifasico()
+    so_componentes = janela.montar(r, colunas=200, layout=[
+        arranjo.analogico(["q0:0:rms", "q0:1:rms", "q0:2:rms"])])
+    assert so_componentes["paineis"][0]["medida_aplicavel"] is False
+
+    # Basta UM canal do IED no gráfico para o botão voltar a mandar em algo.
+    com_canal = janela.montar(r, colunas=200, layout=[
+        arranjo.analogico(["q0:1:rms", "c0:instantaneo"])])
+    assert com_canal["paineis"][0]["medida_aplicavel"] is True
+
+
+def test_painel_vazio_nao_trava_a_medida():
+    """Ali ainda não há contradição nenhuma: travar um controle antes de haver
+    conteúdo é dizer "não pode" sem ter por quê."""
+    pacote = janela.montar(trifasico(), colunas=200,
+                           layout=[arranjo.analogico([])])
+    assert pacote["paineis"][0]["medida_aplicavel"] is True
+
+
+def test_o_sinal_do_OscLab_nao_se_faz_passar_pelo_canal_do_arquivo():
+    """`IA RMS` não é `Current IA`: é conta nossa, com um ciclo de janela em
+    cima. O pacote precisa deixar a tela distinguir os dois — é pelo `familia`
+    que ela decide se escreve o nome do arquivo ao lado."""
+    r = trifasico()
+    pacote = janela.montar(r, colunas=200,
+                           layout=[arranjo.analogico(["c0:instantaneo"],
+                                                     medida="rms")])
+    linha = pacote["paineis"][0]["sinais"][0]
+    assert linha["sinal"] == "IA RMS"
+    assert linha["familia"] == "calculado"      # a tela some com o nome do arquivo
+    # E o canal de origem continua no pacote, para o hover e para o aviso de
+    # TC/TP: quem confere precisa saber de onde a conta saiu.
+    assert linha["nome"] == "Current IA"
+    assert linha["indice"] == 0
+
+    cru = janela.montar(r, colunas=200,
+                        layout=[arranjo.analogico(["c0:instantaneo"])])
+    assert cru["paineis"][0]["sinais"][0]["familia"] == "canal"

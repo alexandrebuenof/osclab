@@ -176,7 +176,7 @@ def test_a_janela_inteira_vem_por_padrao(cliente, tmp_path):
     dados = cliente.get(f"/api/onda/{sha}").get_json()
     assert dados["inteiro"] is True
     assert dados["de"] == dados["limite_de"]
-    assert dados["grupos"]
+    assert dados["paineis"]
 
 
 def test_zoom_pela_rota_estreita_a_janela(cliente, tmp_path):
@@ -263,18 +263,36 @@ def test_a_janela_nao_escorrega_a_cada_gesto(cliente, tmp_path):
 # A leitura dos cursores
 # ---------------------------------------------------------------------------
 
-def test_a_rota_de_leitura_devolve_valor_por_canal(cliente, tmp_path):
+def test_a_rota_de_leitura_devolve_valor_por_sinal(cliente, tmp_path):
+    """A leitura responde o que os painéis pediram, casado por id do sinal.
+
+    Por posição não daria: com painéis, o mesmo canal pode estar em dois
+    gráficos com medidas diferentes, e posição deixou de identificar nada.
+    """
     sha = _sha_de_um_registro(cliente, tmp_path, na=3, n=256)
     todo = cliente.get(f"/api/onda/{sha}").get_json()
     meio = (todo["de"] + todo["ate"]) / 2
+    arranjo = {"paineis": [{"id": "p1", "tipo": "analogico", "nome": "Correntes",
+                            "sinais": [f"c{k}:instantaneo" for k in range(3)],
+                            "medida": "instantaneo"}]}
 
-    dados = cliente.get(f"/api/onda/{sha}/leitura",
-                        query_string={"t1": meio}).get_json()
+    dados = cliente.post(f"/api/onda/{sha}/leitura", json=arranjo,
+                         query_string={"t1": meio}).get_json()
     cursor = dados["cursores"][0]
-    assert len(cursor["valores"]) == 3
-    assert cursor["valores"][0]["unidade"] == "A"
+    assert list(cursor["sinais"]) == ["c0:instantaneo", "c1:instantaneo",
+                                      "c2:instantaneo"]
+    assert cursor["sinais"]["c0:instantaneo"]["unidade"] == "A"
     assert dados["cursores"][1] is None
     assert dados["entre"] is None
+
+
+def test_sem_painel_nenhum_a_leitura_nao_inventa_sinal(cliente, tmp_path):
+    """A tabelinha mostra o que está na tela. Tela vazia, tabelinha vazia —
+    e não "todos os canais do arquivo", que ninguém pediu."""
+    sha = _sha_de_um_registro(cliente, tmp_path, na=3, n=256)
+    dados = cliente.get(f"/api/onda/{sha}/leitura",
+                        query_string={"t1": 0.05}).get_json()
+    assert dados["cursores"][0]["sinais"] == {}
 
 
 def test_a_rota_de_leitura_mede_o_tempo_entre_os_dois(cliente, tmp_path):
@@ -310,17 +328,194 @@ def test_leitura_de_registro_que_nao_existe(cliente):
     assert cliente.get("/api/onda/naoexiste/leitura").status_code == 404
 
 
+#: O arranjo que a tela manda no corpo do pedido: um painel com um canal só.
+UM_PAINEL = {"paineis": [{"id": "p1", "tipo": "analogico", "nome": "Correntes",
+                          "sinais": ["c0:instantaneo"], "medida": "instantaneo"}]}
+
+
 def test_a_rota_converte_para_primario(cliente, tmp_path):
     """A tela manda `lado` nos dois pedidos; os dois têm que responder igual."""
     sha = _sha_de_um_registro(cliente, tmp_path, na=1, n=128)
-    arquivo = cliente.get(f"/api/onda/{sha}").get_json()["grupos"][0]
-    primario = cliente.get(f"/api/onda/{sha}",
-                           query_string={"lado": "primario"}).get_json()["grupos"][0]
+    arquivo = cliente.post(f"/api/onda/{sha}",
+                           json=UM_PAINEL).get_json()["paineis"][0]
+    primario = cliente.post(f"/api/onda/{sha}", json=UM_PAINEL,
+                            query_string={"lado": "primario"}).get_json()["paineis"][0]
 
     assert arquivo["unidade"] == "A"
     assert primario["unidade"] == "kA"          # 12 000 A passam do limiar
 
     meio = 0.05
-    leitura_p = cliente.get(f"/api/onda/{sha}/leitura",
-                            query_string={"t1": meio, "lado": "primario"}).get_json()
-    assert leitura_p["cursores"][0]["valores"][0]["unidade"] == primario["unidade"]
+    leitura_p = cliente.post(f"/api/onda/{sha}/leitura", json=UM_PAINEL,
+                             query_string={"t1": meio,
+                                           "lado": "primario"}).get_json()
+    lido = leitura_p["cursores"][0]["sinais"]["c0:instantaneo"]
+    assert lido["unidade"] == primario["unidade"]
+
+
+def test_o_arranjo_da_tela_vai_no_corpo_do_pedido(cliente, tmp_path):
+    """Arranjo é estrutura, e estrutura não cabe em `query string`.
+
+    O nome de um gráfico pode ter vírgula, ponto-e-vírgula e acento; a lista de
+    sinais é aninhada. Empacotar isso numa URL seria inventar um formato só
+    para ter que desfazê-lo do outro lado — e a URL ainda tem teto de tamanho.
+    """
+    sha = _sha_de_um_registro(cliente, tmp_path, na=3, n=128)
+    pacote = cliente.post(f"/api/onda/{sha}", json={"paineis": [
+        {"id": "meu", "tipo": "analogico", "nome": "Só a fase C",
+         "sinais": ["c2:instantaneo"], "medida": "rms"},
+    ]}).get_json()
+
+    assert len(pacote["paineis"]) == 1
+    painel = pacote["paineis"][0]
+    assert painel["id"] == "meu"
+    assert painel["nome"] == "Só a fase C"          # o nome volta como foi
+    assert [s["id"] for s in painel["sinais"]] == ["c2:instantaneo"]
+
+
+def test_sem_arranjo_no_corpo_a_rota_abre_no_padrao(cliente, tmp_path):
+    """A primeira janela nasce antes de a tela ter arranjo nenhum."""
+    sha = _sha_de_um_registro(cliente, tmp_path, na=3, n=128)
+    do_get = cliente.get(f"/api/onda/{sha}").get_json()
+    torto = cliente.post(f"/api/onda/{sha}",
+                         json={"paineis": "nada disso"}).get_json()
+
+    assert [p["nome"] for p in do_get["paineis"]] == \
+        [p["nome"] for p in torto["paineis"]]
+    assert do_get["paineis"][0]["nome"] == "Correntes (A)"
+
+
+# ---------------------------------------------------------------------------
+# O contrato entre o pacote e a tela
+# ---------------------------------------------------------------------------
+
+def _campos_lidos_pela_tela(objeto: str) -> set[str]:
+    """Os campos que `onda.js` lê de um objeto vindo do servidor.
+
+    Só o primeiro nível: `dados.paineis` entra, `painel.tiras` não. É onde o
+    defeito mora — um campo de topo que o servidor deixou de mandar não dá
+    erro nenhum no navegador, vira `undefined`, e `undefined` desenha uma tela
+    plausível e errada.
+    """
+    import re
+
+    from osclab import paths
+    texto = (paths.STATIC_DIR / "js" / "onda.js").read_text(encoding="utf-8")
+    # Fora dos comentários: um campo citado só numa explicação não é leitura.
+    # Em duas passadas, e não numa alternância só: `re.S` vale para o padrão
+    # INTEIRO, então `//.*` com DOTALL comeria do primeiro `//` até o fim do
+    # arquivo — e o teste passaria sempre, sem olhar nada.
+    sem = re.sub(r"/\*.*?\*/", "", texto, flags=re.S)
+    sem = re.sub(r"//[^\n]*", "", sem)
+    return set(re.findall(rf"\b{objeto}\.([a-z_]+)", sem))
+
+
+def test_a_tela_nao_le_campo_que_o_servidor_nao_manda(cliente, tmp_path):
+    """O defeito que este teste existe para pegar já aconteceu duas vezes.
+
+    A refatoração para painéis tirou `dados.digitais` do pacote, e a tela
+    continuou lendo — o resultado não foi erro, foi a margem esquerda parada no
+    mínimo e TODO nome de digital cortado, sem nada denunciando. Um campo que
+    some é invisível em JavaScript; aqui ele aparece.
+    """
+    sha = _sha_de_um_registro(cliente, tmp_path, na=3, n=128)
+    pacote = cliente.get(f"/api/onda/{sha}").get_json()
+    faltando = _campos_lidos_pela_tela("dados") - set(pacote)
+    assert not faltando, f"onda.js lê do pacote da janela, e não vem: {faltando}"
+
+
+def test_a_tela_nao_le_campo_que_a_leitura_nao_manda(cliente, tmp_path):
+    """O mesmo, para o pacote dos cursores."""
+    sha = _sha_de_um_registro(cliente, tmp_path, na=3, n=128)
+    medida = cliente.get(f"/api/onda/{sha}/leitura",
+                         query_string={"t1": 0.05}).get_json()
+    faltando = _campos_lidos_pela_tela("medida") - set(medida)
+    assert not faltando, f"onda.js lê da leitura, e não vem: {faltando}"
+
+
+def _tokens_do_css() -> dict[str, dict[str, str]]:
+    """As cores de traço declaradas no `osclab.css`, por tema.
+
+    Lê o arquivo de verdade em vez de repetir a lista aqui: duas listas da
+    mesma paleta é como elas divergem, e a que divergisse seria justamente a
+    que o validador confere.
+    """
+    import re
+
+    from osclab import paths
+    texto = (paths.STATIC_DIR / "css" / "osclab.css").read_text(encoding="utf-8")
+    # O tema claro vive sob `[data-tema="claro"]`; o escuro é o `:root`. O
+    # corte é no SELETOR, em começo de linha — o comentário do topo do arquivo
+    # também cita `[data-tema="claro"]`, e cortar ali deixava o tema escuro
+    # com zero cores e o teste passando por vacuidade.
+    corte = texto.index(':root[data-tema="claro"]')
+    pedacos = {"escuro": texto[:corte], "claro": texto[corte:]}
+    padrao = re.compile(r"(--(?:fase-[abcn]|calculado-[123]|traco-[123]))\s*:\s*(#[0-9a-f]{6})")
+    return {tema: dict(padrao.findall(pedaco)) for tema, pedaco in pedacos.items()}
+
+
+def test_o_validador_de_paleta_confere_as_cores_QUE_ESTAO_NO_CSS():
+    """O `tools/paleta.py` carrega as cores na mão. Se o CSS mudar e ele não,
+    ele passa a aprovar uma paleta que ninguém está usando — e a garantia de
+    que as cores se separam vira papel."""
+    import importlib.util
+    import pathlib
+
+    caminho = pathlib.Path(__file__).resolve().parents[1] / "tools" / "paleta.py"
+    spec = importlib.util.spec_from_file_location("paleta", caminho)
+    paleta = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(paleta)
+
+    do_css = _tokens_do_css()
+    for tema, cores in do_css.items():
+        assert paleta.TEMAS[tema]["cores"] == cores, (
+            f"tema {tema}: o validador e o CSS discordam")
+
+
+def test_toda_cor_que_a_tela_usa_existe_no_css():
+    """Token que não existe devolve string vazia no `getComputedStyle`, e o
+    traço sai preto sobre fundo preto — invisível, sem erro nenhum."""
+    import re
+
+    from osclab import paths
+    js = (paths.STATIC_DIR / "js" / "onda.js").read_text(encoding="utf-8")
+    usados = set(re.findall(r'"(--[a-z0-9-]+)"', js))
+    css = (paths.STATIC_DIR / "css" / "osclab.css").read_text(encoding="utf-8")
+    declarados = set(re.findall(r"(--[a-z0-9-]+)\s*:", css))
+    assert not (usados - declarados), f"onda.js usa e o CSS não declara: {usados - declarados}"
+
+
+def test_as_cores_neutras_vao_da_mais_viva_para_a_mais_apagada():
+    """A ordem em que as cores são distribuídas não é gosto, é croma.
+
+    Um gráfico com três sinais calculados tem que receber as três cores que
+    mais se separam do fundo e umas das outras; o cinza — que quase não tem
+    cor — é o último. A ordem está escrita à mão no `onda.js`, e lista escrita
+    à mão sai de ordem: este teste mede o croma de verdade e confere.
+    """
+    import importlib.util
+    import math
+    import pathlib
+    import re
+
+    from osclab import paths
+    caminho = pathlib.Path(__file__).resolve().parents[1] / "tools" / "paleta.py"
+    spec = importlib.util.spec_from_file_location("paleta", caminho)
+    paleta = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(paleta)
+
+    js = (paths.STATIC_DIR / "js" / "onda.js").read_text(encoding="utf-8")
+    bloco = re.search(r"const CORES_NEUTRAS = \[(.*?)\];", js, re.S).group(1)
+    ordem = re.findall(r'"(--[a-z0-9-]+)"', bloco)
+    assert len(ordem) >= 4
+
+    def croma(token: str) -> float:
+        # O menor dos dois temas: uma cor que é viva no escuro e apagada no
+        # claro é apagada, para quem está com o tema claro aberto.
+        return min(
+            math.hypot(*paleta.para_lab(paleta.de_hex(t["cores"][token]))[1:])
+            for t in paleta.TEMAS.values()
+        )
+
+    cromas = [croma(x) for x in ordem]
+    assert cromas == sorted(cromas, reverse=True), (
+        f"fora de ordem: {list(zip(ordem, [round(c, 1) for c in cromas], strict=True))}")

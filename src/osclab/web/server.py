@@ -19,13 +19,27 @@ POST   /api/acervo                envio de arquivos (multipart)
 DELETE /api/acervo/<sha>          tira um registro do acervo
 GET    /onda/<sha>                a tela de formas de onda
 GET    /api/onda/<sha>            uma janela do registro, pronta para desenhar
-GET    /api/onda/<sha>/leitura    o valor de cada canal onde os cursores estão
+POST   /api/onda/<sha>            a mesma janela, com o arranjo de painéis
+GET    /api/onda/<sha>/leitura    o valor de cada sinal onde os cursores estão
+POST   /api/onda/<sha>/leitura    a mesma leitura, com o arranjo de painéis
+POST   /api/onda/<sha>/vinculos   corrige a fase de um canal, e guarda
 GET    /saude                     diagnóstico
 ```
 
 A rota da janela aceita `de`, `ate`, `colunas` e `lado` — e mais `zoom`, `foco`,
 `andar` e `tudo`, que são os gestos do mouse. É ela que sustenta o zoom sem o
 navegador nunca segurar o registro inteiro: ampliar é pedir outra janela.
+
+## Por que as duas rotas também atendem em POST
+
+Porque o arranjo dos gráficos é ESTRUTURA — uma lista de painéis, cada um com
+os seus sinais — e estrutura não cabe em `query string` sem inventar um formato
+para depois ter que desfazê-lo do outro lado. Um nome de gráfico escolhido pelo
+usuário pode ter vírgula, ponto-e-vírgula e acento; a URL ainda tem teto de
+tamanho, e um registro com trinta painéis o estoura.
+
+O GET continua valendo, e é ele que a tela usa na PRIMEIRA janela: ali ela
+ainda não tem arranjo nenhum, e quem monta o padrão é o servidor.
 """
 
 from __future__ import annotations
@@ -36,7 +50,7 @@ from osclab import paths, version
 from osclab.formats import registry
 from osclab.formats.base import FormatError
 from osclab.library import acervo
-from osclab.plot import catalogo, janela, leitura, navegacao, sinais
+from osclab.plot import janela, leitura, navegacao, paineis
 
 #: Teto do envio. Um `.dat` de SEL-487E tem 4,7 MB; alguém vai arrastar a pasta
 #: inteira de uma vez, e recusar por tamanho no meio disso seria irritante.
@@ -101,7 +115,7 @@ def create_app() -> Flask:
             na_antessala=_antessala_em_json(),
         )
 
-    @app.get("/api/onda/<sha>")
+    @app.route("/api/onda/<sha>", methods=["GET", "POST"])
     def janela_da_onda(sha: str):
         try:
             registro = acervo.ler(sha)
@@ -127,13 +141,10 @@ def create_app() -> Flask:
             colunas=int(_numero(request.args.get("colunas")) or 900),
             lado=request.args.get("lado", "arquivo"),
             filtro=request.args.get("filtro") in ("1", "sim", "true"),
-            medidas=sinais.medidas_de_texto(request.args.get("medidas")),
-            digitais_pedidos=_inteiros(request.args.get("digitais")),
-            extras=catalogo.de_texto(request.args.get("extras")),
-            ocultos=_inteiros(request.args.get("ocultos")),
+            layout=_layout(),
         ))
 
-    @app.get("/api/onda/<sha>/leitura")
+    @app.route("/api/onda/<sha>/leitura", methods=["GET", "POST"])
     def leitura_dos_cursores(sha: str):
         try:
             registro = acervo.ler(sha)
@@ -155,11 +166,10 @@ def create_app() -> Flask:
             registro, pedidos,
             lado=request.args.get("lado", "arquivo"),
             refere=int(refere) if refere is not None else None,
-            # As MESMAS escolhas do gráfico: a tabelinha mostra o que está
+            # O MESMO arranjo do gráfico: a tabelinha mostra o que está
             # desenhado, nunca outra coisa.
             filtro=request.args.get("filtro") in ("1", "sim", "true"),
-            medidas=sinais.medidas_de_texto(request.args.get("medidas")),
-            extras=catalogo.de_texto(request.args.get("extras")),
+            layout=_layout(),
         ))
 
     @app.post("/api/onda/<sha>/vinculos")
@@ -218,6 +228,24 @@ def _antessala_em_json() -> list[dict]:
             sorted(por_extensao.values())}
         for base, por_extensao in sorted(acervo.aguardando().items())
     ]
+
+
+def _layout() -> list | None:
+    """O arranjo de painéis que a tela mandou no corpo, ou `None`.
+
+    Vem no CORPO e não na URL porque é uma estrutura: painéis, com listas de
+    sinais dentro. Espremer isso numa query string daria um formato próprio
+    para escrever e para ler — dois lugares a mais para errar — e estouraria o
+    limite de tamanho num registro com muitos sinais na tela.
+
+    Sem corpo (um GET simples), devolve `None`, e o servidor monta o arranjo
+    padrão. É o que a primeira carga faz, e o que mantém a URL de uma janela
+    abrível à mão.
+    """
+    corpo = request.get_json(silent=True)
+    if not isinstance(corpo, dict):
+        return None
+    return paineis.de_json(corpo.get("paineis"))
 
 
 def _inteiros(texto: str | None) -> list[int] | None:

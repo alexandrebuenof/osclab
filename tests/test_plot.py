@@ -15,14 +15,17 @@ from osclab.dsp import fasor
 from osclab.formats import fases, registry
 from osclab.formats.base import AnalogChannel, Filtering
 from osclab.plot import (
+    conversao,
     escala,
     janela,
     leitura,
     navegacao,
+    paineis,
     serie,
     sinais,
     unidades,
 )
+from tests import arranjo
 from tests.fabrica import PICO, escrever_comtrade
 
 # ---------------------------------------------------------------------------
@@ -279,38 +282,83 @@ def _cru(registro):
     return registro
 
 
+def _montar(registro, *, medidas=None, layout=None, **kw):
+    """`janela.montar` com o arranjo com que a oscilografia abre.
+
+    O servidor não monta mais os gráficos sozinho: ele desenha a lista de
+    painéis que a tela mandou (ver `plot/paineis.py`). O arranjo padrão
+    continua existindo, e é o que quase todo teste daqui quer — um painel por
+    unidade do arquivo. `medidas` é a tradução do antigo `{"A": "rms"}`.
+    """
+    if layout is None:
+        layout = arranjo.padrao(registro, medidas)
+    return janela.montar(registro, layout=layout, **kw)
+
+
+def _em(registro, pedidos, *, medidas=None, layout=None, **kw):
+    """`leitura.em` com o MESMO arranjo do desenho.
+
+    A leitura também não tem mais "todos os canais" implícito: ela responde o
+    que algum painel pediu. Passar aqui o mesmo arranjo do gráfico é o que
+    garante que a tabelinha fale do que está na tela.
+    """
+    if layout is None:
+        layout = arranjo.padrao(registro, medidas)
+    return leitura.em(registro, pedidos, layout=layout, **kw)
+
+
+def _vals(pacote):
+    """As leituras de um cursor — ou do `entre` — na ordem em que foram pedidas.
+
+    A leitura passou a casar por **id do sinal**, e não por posição: com
+    painéis, o mesmo canal pode estar em dois gráficos com medidas diferentes,
+    e posição deixou de identificar coisa nenhuma. O dicionário guarda a ordem
+    de inserção, que é a ordem do painel.
+    """
+    return arranjo.valores(pacote)
+
+
+def test_a_janela_sem_arranjo_abre_no_padrao(tmp_path):
+    """Quem abre uma oscilografia ainda não escolheu nada, e a tela não pode
+    esperar escolha para mostrar alguma coisa."""
+    registro = _registro(tmp_path, na=3, n=128)
+    sozinha = janela.montar(registro)
+    assert [p["nome"] for p in sozinha["paineis"]] == \
+        [p.nome for p in paineis.padrao(registro, sozinha["lado_pedido"])]
+
+
 def test_a_janela_tem_tudo_que_a_tela_precisa(tmp_path):
-    pacote = janela.montar(_registro(tmp_path, na=3, n=256, taxa=960.0))
-    assert pacote["grupos"]
-    grupo = pacote["grupos"][0]
-    assert grupo["titulo"] == "Correntes (A)"
-    assert len(grupo["canais"]) == 3
+    pacote = _montar(_registro(tmp_path, na=3, n=256, taxa=960.0))
+    assert pacote["paineis"]
+    grupo = pacote["paineis"][0]
+    assert grupo["nome"] == "Correntes (A)"
+    assert len(grupo["sinais"]) == 3
     assert grupo["marcacoes"]
-    assert len(pacote["tempo"]) == len(grupo["canais"][0]["serie"])
+    assert len(pacote["tempo"]) == len(grupo["sinais"][0]["serie"])
 
 
 def test_as_fases_chegam_na_tela(tmp_path):
-    pacote = janela.montar(_registro(tmp_path, na=3))
-    assert [c["fase"] for c in pacote["grupos"][0]["canais"]] == ["A", "B", "C"]
+    pacote = _montar(_registro(tmp_path, na=3))
+    assert [c["fase"] for c in pacote["paineis"][0]["sinais"]] == ["A", "B", "C"]
 
 
 def test_a_amplitude_chega_certa_na_tela(tmp_path):
     """O que a tela desenha tem que ser o que o relé registrou."""
-    pacote = janela.montar(_registro(tmp_path, na=1, n=960, taxa=960.0))
-    serie_json = pacote["grupos"][0]["canais"][0]["serie"]
+    pacote = _montar(_registro(tmp_path, na=1, n=960, taxa=960.0))
+    serie_json = pacote["paineis"][0]["sinais"][0]["serie"]
     assert max(abs(v) for v in serie_json) == pytest.approx(PICO, rel=0.02)
 
 
 def test_a_janela_recorta(tmp_path):
     registro = _registro(tmp_path, n=1000, taxa=1000.0)
-    pacote = janela.montar(registro, de=0.2, ate=0.3)
+    pacote = _montar(registro, de=0.2, ate=0.3)
     assert pacote["de"] == pytest.approx(0.2, abs=1e-3)
     assert pacote["ate"] == pytest.approx(0.3, abs=1e-3)
     assert pacote["amostras_na_janela"] < 120
 
 
 def test_o_instante_do_disparo_vai_junto(tmp_path):
-    pacote = janela.montar(_registro(tmp_path, n=128, taxa=960.0))
+    pacote = _montar(_registro(tmp_path, n=128, taxa=960.0))
     assert pacote["disparo_s"] == pytest.approx(0.05, abs=1e-6)
 
 
@@ -320,8 +368,9 @@ def test_grupos_separados_por_unidade(tmp_path):
     texto = cfg.read_text(encoding="utf-8").replace(
         "2,CH2,B,,A,", "2,CH2,B,,kV,")
     cfg.write_text(texto, encoding="utf-8")
-    pacote = janela.montar(registry.read(cfg))
-    assert {g["unidade"] for g in pacote["grupos"]} == {"A", "kV"}
+    pacote = _montar(registry.read(cfg))
+    analogicos = [p for p in pacote["paineis"] if p["tipo"] == "analogico"]
+    assert {g["unidade"] for g in analogicos} == {"A", "kV"}
 
 
 # ---------------------------------------------------------------------------
@@ -332,25 +381,27 @@ def test_converte_para_primario(tmp_path):
     """A fábrica escreve relação 600/5 = 120 em cada canal.
 
     O pico secundário de 100 A vira 12 000 A primários — que passam do limiar e
-    saem em kA. Por isso a comparação leva o divisor do grupo.
+    saem em kA. Por isso a comparação leva o divisor da unidade, que é o mesmo
+    que o painel usou para desenhar.
     """
     registro = _registro(tmp_path, na=1, n=128)
-    secundario = janela.montar(registro, lado="secundario")
-    primario = janela.montar(registro, lado="primario")
+    secundario = _montar(registro, lado="secundario")
+    primario = _montar(registro, lado="primario")
 
-    pico_s = max(abs(v) for v in secundario["grupos"][0]["canais"][0]["serie"])
-    pico_p = max(abs(v) for v in primario["grupos"][0]["canais"][0]["serie"])
-    divisor = primario["grupos"][0]["divisor"]
+    pico_s = max(abs(v) for v in secundario["paineis"][0]["sinais"][0]["serie"])
+    pico_p = max(abs(v) for v in primario["paineis"][0]["sinais"][0]["serie"])
+    divisor, mostrada = unidades.por_unidade(registro, "primario")["A"]
 
+    assert mostrada == primario["paineis"][0]["unidade"]
     assert pico_p * divisor == pytest.approx(pico_s * 120.0, rel=0.01)
-    assert primario["grupos"][0]["canais"][0]["convertido"] is True
-    assert primario["grupos"][0]["canais"][0]["lado"] == "primario"
+    assert primario["paineis"][0]["sinais"][0]["convertido"] is True
+    assert primario["paineis"][0]["sinais"][0]["lado"] == "primario"
 
 
 def test_o_lado_do_arquivo_nao_converte_nada(tmp_path):
     registro = _registro(tmp_path, na=1, escala_primaria=True)
-    pacote = janela.montar(registro, lado="arquivo")
-    canal = pacote["grupos"][0]["canais"][0]
+    pacote = _montar(registro, lado="arquivo")
+    canal = pacote["paineis"][0]["sinais"][0]
     assert canal["convertido"] is False
     assert canal["lado"] == "primario"
 
@@ -359,7 +410,7 @@ def test_lado_invalido_cai_no_lado_natural_do_registro(tmp_path):
     """A tela só oferece primário e secundário. Quem não pediu nada — ou pediu
     besteira — recebe o lado em que o registro já está, para abrir uma
     oscilografia nunca converter nada sem o usuário mandar."""
-    pacote = janela.montar(_registro(tmp_path), lado="chutando")
+    pacote = _montar(_registro(tmp_path), lado="chutando")
     assert pacote["lado_pedido"] == "secundario"        # a fábrica escreve `S`
 
 
@@ -369,7 +420,7 @@ def test_registro_gravado_em_primario_abre_em_primario(tmp_path):
         "1,CH1,A,,A,0.01,0,0,-32767,32767,600.0,5.0,S",
         "1,CH1,A,,A,0.01,0,0,-32767,32767,600.0,5.0,P")
     cfg.write_text(texto, encoding="utf-8")
-    assert janela.montar(registry.read(cfg))["lado_pedido"] == "primario"
+    assert _montar(registry.read(cfg))["lado_pedido"] == "primario"
 
 
 def test_sem_relacao_declarada_nao_inventa(tmp_path):
@@ -380,10 +431,14 @@ def test_sem_relacao_declarada_nao_inventa(tmp_path):
         "1,CH1,A,,A,0.01,0,0,-32767,32767,600.0,5.0,S",
         "1,CH1,A,,A,0.01,0,0,-32767,32767,0,0,S")
     cfg.write_text(texto, encoding="utf-8")
-    pacote = janela.montar(registry.read(cfg), lado="primario")
-    canal = pacote["grupos"][0]["canais"][0]
+    registro = registry.read(cfg)
+    pacote = _montar(registro, lado="primario")
+    canal = pacote["paineis"][0]["sinais"][0]
+    assert conversao.relacao(registro.analog_channels[0]) == 0
     assert canal["convertido"] is False
-    assert canal["relacao"] == 0
+    # E o sinal diz em que lado ficou, que é como a tela sabe carimbar o aviso:
+    # pediu-se primário e este canal continua em secundário.
+    assert canal["lado"] == "secundario"
 
 
 # ---------------------------------------------------------------------------
@@ -512,12 +567,12 @@ def test_a_janela_leva_os_limites_do_registro_para_a_tela(tmp_path):
     t0, t1 = navegacao.extensao(r)
     meio = (t0 + t1) / 2
 
-    pacote = janela.montar(r)
+    pacote = _montar(r)
     assert pacote["limite_de"] == pytest.approx(t0)
     assert pacote["limite_ate"] == pytest.approx(t1)
     assert pacote["inteiro"] is True
 
-    pacote = janela.montar(r, de=meio, ate=t1)
+    pacote = _montar(r, de=meio, ate=t1)
     assert pacote["limite_de"] == pytest.approx(t0)
     assert pacote["inteiro"] is False
 
@@ -526,7 +581,7 @@ def test_a_janela_nunca_desenha_fora_do_registro(tmp_path):
     """Mesmo que alguém digite a janela na URL."""
     r = _registro(tmp_path, n=256, taxa=960.0)
     t0, t1 = navegacao.extensao(r)
-    pacote = janela.montar(r, de=t1 + 5.0, ate=t1 + 9.0)
+    pacote = _montar(r, de=t1 + 5.0, ate=t1 + 9.0)
     assert pacote["de"] >= t0 and pacote["ate"] <= t1
     assert pacote["amostras_na_janela"] > 0
 
@@ -547,7 +602,7 @@ def test_o_cursor_le_a_amostra_e_nao_o_traco(tmp_path):
 
     (cursor,), _ = _ler(r, [(instante, 0)])
     assert cursor["amostra"] == 1234
-    assert cursor["valores"][0]["valor"] == pytest.approx(
+    assert _vals(cursor)[0]["valor"] == pytest.approx(
         float(r.analog[0, 1234]), rel=1e-9)
 
 
@@ -629,16 +684,16 @@ def test_o_cursor_converte_para_primario(tmp_path):
     (arquivo,), _ = _ler(r, [(instante, 0)])
     (primario,), _ = _ler(r, [(instante, 0)], lado="primario")
 
-    grupo = janela.montar(r, lado="primario")["grupos"][0]
-    do_grafico = grupo["canais"][0]
-    assert primario["valores"][0]["lado"] == "primario"
-    assert primario["valores"][0]["valor"] * grupo["divisor"] == pytest.approx(
-        arquivo["valores"][0]["valor"] * do_grafico["relacao"], rel=1e-6)
+    divisor, _ = unidades.por_unidade(r, "primario")["A"]
+    relacao = conversao.relacao(r.analog_channels[0])
+    assert _vals(primario)[0]["lado"] == "primario"
+    assert _vals(primario)[0]["valor"] * divisor == pytest.approx(
+        _vals(arquivo)[0]["valor"] * relacao, rel=1e-6)
 
 
 def test_o_tempo_do_cursor_e_em_relacao_ao_disparo(tmp_path):
     r = _registro(tmp_path, na=1, n=256, taxa=960.0)
-    pacote = janela.montar(r)
+    pacote = _montar(r)
     disparo = pacote["disparo_s"]
     alvo = float(r.time[50])
 
@@ -648,7 +703,7 @@ def test_o_tempo_do_cursor_e_em_relacao_ao_disparo(tmp_path):
 
 def _ler(registro, pedidos, lado="arquivo"):
     # Cada pedido do teste é (instante, passo); o passo em ciclos entra como 0.
-    saida = leitura.em(registro, [(t, p, 0.0) for t, p in pedidos], lado=lado)
+    saida = _em(registro, [(t, p, 0.0) for t, p in pedidos], lado=lado)
     return saida["cursores"], saida["entre"]
 
 
@@ -656,7 +711,7 @@ def test_shift_seta_anda_um_ciclo_inteiro(tmp_path):
     """Quantas amostras cabem num ciclo é conta do servidor, não da tela."""
     r = _registro(tmp_path, na=1, n=512, taxa=960.0)     # 16 amostras/ciclo
     alvo = float(r.time[100])
-    saida = leitura.em(r, [(alvo, 0, 1.0), (alvo, 0, -2.0)])
+    saida = _em(r, [(alvo, 0, 1.0), (alvo, 0, -2.0)])
     assert saida["amostras_por_ciclo"] == pytest.approx(16.0)
     assert saida["cursores"][0]["amostra"] == 116
     assert saida["cursores"][1]["amostra"] == 68
@@ -689,13 +744,13 @@ def test_a_diferenca_entre_cursores_vem_do_servidor(tmp_path):
     r = _registro(tmp_path, na=2, n=512, taxa=960.0)
     a, b = float(r.time[10]), float(r.time[42])
 
-    saida = leitura.em(r, [(a, 0, 0.0), (b, 0, 0.0)])
+    saida = _em(r, [(a, 0, 0.0), (b, 0, 0.0)])
     esperado = [vb["valor"] - va["valor"] for va, vb in
-                zip(saida["cursores"][0]["valores"],
-                    saida["cursores"][1]["valores"], strict=True)]
+                zip(_vals(saida["cursores"][0]),
+                    _vals(saida["cursores"][1]), strict=True)]
 
-    assert [d["valor"] for d in saida["entre"]["valores"]] == pytest.approx(esperado)
-    assert all("casas" in d for d in saida["entre"]["valores"])
+    assert [d["valor"] for d in _vals(saida["entre"])] == pytest.approx(esperado)
+    assert all("casas" in d for d in _vals(saida["entre"]))
 
 
 def test_as_casas_do_tempo_vem_da_taxa_de_amostragem(tmp_path):
@@ -712,7 +767,7 @@ def test_amostras_vizinhas_saem_diferentes_na_tela(tmp_path):
     """O critério da regra: a última casa mostrada tem que mudar de uma amostra
     para a seguinte, senão a tela junta duas medidas distintas."""
     r = _registro(tmp_path, na=1, n=256, taxa=1200.0)
-    saida = leitura.em(r, [(float(r.time[100]), 0, 0.0), (float(r.time[101]), 0, 0.0)])
+    saida = _em(r, [(float(r.time[100]), 0, 0.0), (float(r.time[101]), 0, 0.0)])
     casas = saida["casas_ms"]
     a = round(saida["cursores"][0]["ms"], casas)
     b = round(saida["cursores"][1]["ms"], casas)
@@ -730,18 +785,22 @@ def test_amostras_vizinhas_saem_diferentes_na_tela(tmp_path):
 def test_secundario_nao_ganha_prefixo(tmp_path):
     """100 A de pico se lê melhor como 100 A do que como 0,1 kA."""
     r = _registro(tmp_path, na=1, n=128)
-    pacote = janela.montar(r, lado="secundario")
-    assert pacote["grupos"][0]["unidade"] == "A"
-    assert pacote["grupos"][0]["divisor"] == 1.0
+    painel = _montar(r, lado="secundario")["paineis"][0]
+    assert painel["unidade"] == "A"
+    assert max(abs(v) for v in painel["sinais"][0]["serie"]) == pytest.approx(
+        PICO, rel=0.02)
 
 
 def test_primario_grande_ganha_o_k(tmp_path):
     """12 000 A primários passam do limiar."""
     r = _registro(tmp_path, na=1, n=128)
-    grupo = janela.montar(r, lado="primario")["grupos"][0]
-    assert grupo["unidade"] == "kA"
-    assert grupo["divisor"] == 1000.0
-    assert grupo["titulo"] == "Correntes (kA)"
+    painel = _montar(r, lado="primario")["paineis"][0]
+    assert painel["unidade"] == "kA"
+    assert painel["nome"] == "Correntes (kA)"
+    # 100 A de pico × 120 = 12 000 A, desenhados como 12 kA: o traço vem
+    # dividido, senão o eixo diria kA e a curva estaria em A.
+    assert max(abs(v) for v in painel["sinais"][0]["serie"]) == pytest.approx(
+        12.0, rel=0.02)
 
 
 def test_o_prefixo_nao_muda_com_o_zoom(tmp_path):
@@ -749,20 +808,19 @@ def test_o_prefixo_nao_muda_com_o_zoom(tmp_path):
     pisca engana quem lê rápido."""
     r = _registro(tmp_path, na=1, n=1024, taxa=960.0)
     t0, t1 = navegacao.extensao(r)
-    inteiro = janela.montar(r, lado="primario")["grupos"][0]
-    pedaco = janela.montar(r, de=t0, ate=t0 + (t1 - t0) * 0.02,
-                           lado="primario")["grupos"][0]
+    inteiro = _montar(r, lado="primario")["paineis"][0]
+    pedaco = _montar(r, de=t0, ate=t0 + (t1 - t0) * 0.02,
+                           lado="primario")["paineis"][0]
     assert pedaco["unidade"] == inteiro["unidade"]
-    assert pedaco["divisor"] == inteiro["divisor"]
 
 
 def test_o_cursor_usa_a_mesma_unidade_do_grafico(tmp_path):
     """Gráfico em kA e cursor em A no mesmo instante seria mentira das boas: o
     usuário acreditaria no que estivesse olhando."""
     r = _registro(tmp_path, na=1, n=128)
-    grupo = janela.montar(r, lado="primario")["grupos"][0]
+    grupo = _montar(r, lado="primario")["paineis"][0]
     (cursor,), _ = _ler(r, [(float(r.time[20]), 0)], lado="primario")
-    assert cursor["valores"][0]["unidade"] == grupo["unidade"]
+    assert _vals(cursor)[0]["unidade"] == grupo["unidade"]
 
 
 def test_unidade_ja_prefixada_no_arquivo_nao_vira_kk(tmp_path):
@@ -772,9 +830,9 @@ def test_unidade_ja_prefixada_no_arquivo_nao_vira_kk(tmp_path):
         "1,CH1,A,,A,0.01,0,0,-32767,32767,600.0,5.0,S",
         "1,CH1,A,,kA,900.0,0,0,-32767,32767,1,1,P")
     cfg.write_text(texto, encoding="utf-8")
-    grupo = janela.montar(registry.read(cfg))["grupos"][0]
-    assert grupo["unidade"] == "kA"
-    assert grupo["divisor"] == 1.0
+    r = registry.read(cfg)
+    assert _montar(r)["paineis"][0]["unidade"] == "kA"
+    assert unidades.por_unidade(r, "primario")["kA"] == (1.0, "kA")
 
 
 def test_o_limiar_e_o_proprio_maximo_do_registro(tmp_path):
@@ -794,11 +852,11 @@ def test_a_curva_de_rms_nao_e_negativa_e_o_eixo_comeca_no_zero(tmp_path):
     """RMS não tem sinal. Manter a escala simétrica jogaria fora metade do
     gráfico — e a linha do zero deixaria de significar o que significa."""
     r = _registro(tmp_path, na=3, n=512, taxa=1200.0)
-    grupo = janela.montar(r, medidas={"A": "rms"})["grupos"][0]
+    grupo = _montar(r, medidas={"A": "rms"})["paineis"][0]
     assert grupo["minimo"] == 0.0
     assert grupo["maximo"] > 0.0
 
-    simetrico = janela.montar(r)["grupos"][0]
+    simetrico = _montar(r)["paineis"][0]
     assert simetrico["minimo"] < 0.0        # a onda continua em torno do zero
 
 
@@ -806,8 +864,8 @@ def test_o_primeiro_ciclo_do_registro_fica_sem_curva(tmp_path):
     """Não há janela antes dele. Desenhar zero ali seria inventar um valor —
     e um zero num gráfico de corrente lê-se como "não havia corrente"."""
     r = _registro(tmp_path, na=1, n=512, taxa=1200.0)      # 20 amostras/ciclo
-    serie_rms = janela.montar(r, medidas={"A": "rms"}, colunas=10_000)["grupos"][0]
-    valores = serie_rms["canais"][0]["serie"]
+    serie_rms = _montar(r, medidas={"A": "rms"}, colunas=10_000)["paineis"][0]
+    valores = serie_rms["sinais"][0]["serie"]
     assert valores[:19] == [None] * 19
     assert valores[19] is not None
 
@@ -819,9 +877,9 @@ def test_ampliar_no_meio_do_registro_nao_abre_buraco_na_curva(tmp_path):
     r = _registro(tmp_path, na=1, n=512, taxa=1200.0)
     t0, t1 = navegacao.extensao(r)
     meio = t0 + (t1 - t0) * 0.5
-    pedaco = janela.montar(r, de=meio, ate=meio + (t1 - t0) * 0.1,
-                           medidas={"A": "rms"}, colunas=10_000)["grupos"][0]
-    assert pedaco["canais"][0]["serie"][0] is not None
+    pedaco = _montar(r, de=meio, ate=meio + (t1 - t0) * 0.1,
+                           medidas={"A": "rms"}, colunas=10_000)["paineis"][0]
+    assert pedaco["sinais"][0]["serie"][0] is not None
 
 
 def test_a_tabelinha_mostra_a_mesma_grandeza_que_o_grafico(tmp_path):
@@ -830,10 +888,12 @@ def test_a_tabelinha_mostra_a_mesma_grandeza_que_o_grafico(tmp_path):
     r = _cru(_registro(tmp_path, na=1, n=512, taxa=1200.0))
     alvo = float(r.time[200])
 
-    inst = leitura.em(r, [(alvo, 0, 0.0)])["cursores"][0]["valores"][0]
-    fund = leitura.em(r, [(alvo, 0, 0.0)],
-                      filtro=True, medidas={"A": "rms"})["cursores"][0]["valores"][0]
-    efic = leitura.em(r, [(alvo, 0, 0.0)], medidas={"A": "rms"})["cursores"][0]["valores"][0]
+    def primeira(**kw):
+        return _vals(_em(r, [(alvo, 0, 0.0)], **kw)["cursores"][0])[0]
+
+    inst = primeira()
+    fund = primeira(filtro=True, medidas={"A": "rms"})
+    efic = primeira(medidas={"A": "rms"})
 
     assert inst["valor"] == inst["instantaneo"]
     assert fund["valor"] == fund["fundamental"]
@@ -848,9 +908,9 @@ def test_a_diferenca_entre_cursores_segue_a_grandeza(tmp_path):
     """A coluna 2−1 subtrai o que está na tela, não sempre o instantâneo."""
     r = _registro(tmp_path, na=1, n=512, taxa=1200.0)
     a, b = float(r.time[100]), float(r.time[300])
-    saida = leitura.em(r, [(a, 0, 0.0), (b, 0, 0.0)], medidas={"A": "rms"})
-    c1, c2 = (c["valores"][0]["valor"] for c in saida["cursores"])
-    assert saida["entre"]["valores"][0]["valor"] == pytest.approx(c2 - c1)
+    saida = _em(r, [(a, 0, 0.0), (b, 0, 0.0)], medidas={"A": "rms"})
+    c1, c2 = (_vals(c)[0]["valor"] for c in saida["cursores"])
+    assert _vals(saida["entre"])[0]["valor"] == pytest.approx(c2 - c1)
 
 
 def test_a_onda_filtrada_e_a_parte_real_do_mesmo_fasor(tmp_path):
@@ -861,12 +921,12 @@ def test_a_onda_filtrada_e_a_parte_real_do_mesmo_fasor(tmp_path):
     de dois jeitos, e duas escritas da mesma conta é como elas divergem.
     """
     r = _cru(_registro(tmp_path, na=1, n=512, taxa=1200.0))
-    pacote = janela.montar(r, filtro=True, colunas=10_000)
-    desenhado = pacote["grupos"][0]["canais"][0]["serie"]
+    pacote = _montar(r, filtro=True, colunas=10_000)
+    desenhado = pacote["paineis"][0]["sinais"][0]["serie"]
 
     i = 300
-    lido = leitura.em(r, [(float(r.time[i]), 0, 0.0)],
-                      filtro=True)["cursores"][0]["valores"][0]
+    lido = _vals(_em(r, [(float(r.time[i]), 0, 0.0)],
+                     filtro=True)["cursores"][0])[0]
     # A série desenhada começa na primeira amostra da janela, que é a 0.
     assert lido["valor"] == pytest.approx(desenhado[i], rel=1e-6)
 
@@ -875,14 +935,14 @@ def test_a_onda_filtrada_perde_a_componente_dc(tmp_path):
     """É o que um filtro de 60 Hz faz, e é por isso que a vista existe."""
     r = _cru(_registro(tmp_path, na=1, n=512, taxa=1200.0))
     r.analog[0, :] += 30.0                       # offset em todo o registro
-    grupo = janela.montar(r, filtro=True, colunas=10_000)["grupos"][0]
+    grupo = _montar(r, filtro=True, colunas=10_000)["paineis"][0]
     # A média é tomada sobre um número INTEIRO de ciclos (24, a 20 amostras por
     # ciclo). Num pedaço quebrado, a própria senoide deixaria resto e o teste
     # acusaria uma DC que não existe.
-    valores = grupo["canais"][0]["serie"][20:500]
+    valores = grupo["sinais"][0]["serie"][20:500]
     assert abs(sum(valores) / len(valores)) < 0.5      # a DC sumiu
 
-    crua = janela.montar(r, colunas=10_000)["grupos"][0]["canais"][0]["serie"][20:500]
+    crua = _montar(r, colunas=10_000)["paineis"][0]["sinais"][0]["serie"][20:500]
     assert sum(crua) / len(crua) == pytest.approx(30.0, abs=0.5)   # e estava lá
 
 
@@ -917,8 +977,8 @@ def test_a_curva_usa_a_taxa_DAQUELE_trecho(tmp_path):
     ser 96 — a curva saía errada, confiante, e nada na tela denunciava.
     """
     r = _duas_taxas(tmp_path)
-    grupo = janela.montar(r, filtro=True, medidas={"A": "rms"}, colunas=10_000)["grupos"][0]
-    valores = grupo["canais"][0]["serie"]
+    grupo = _montar(r, filtro=True, medidas={"A": "rms"}, colunas=10_000)["paineis"][0]
+    valores = grupo["sinais"][0]["serie"]
 
     # A fábrica gera senoide de PICO conhecido em todo o registro; o eficaz da
     # fundamental tem que dar o mesmo nos dois trechos, cada um com a sua janela.
@@ -930,8 +990,8 @@ def test_o_primeiro_ciclo_de_CADA_trecho_fica_sem_curva(tmp_path):
     """Uma janela com metade das amostras de um lado e metade do outro não é um
     ciclo de coisa nenhuma."""
     r = _duas_taxas(tmp_path)
-    valores = janela.montar(r, medidas={"A": "rms"},
-                            colunas=10_000)["grupos"][0]["canais"][0]["serie"]
+    valores = _montar(r, medidas={"A": "rms"},
+                            colunas=10_000)["paineis"][0]["sinais"][0]["serie"]
     assert valores[:15] == [None] * 15            # 16 amostras/ciclo no 1o trecho
     assert valores[15] is not None
     assert valores[240:335] == [None] * 95        # 96 amostras/ciclo no 2o
@@ -940,11 +1000,11 @@ def test_o_primeiro_ciclo_de_CADA_trecho_fica_sem_curva(tmp_path):
 
 def test_a_tela_e_avisada_da_taxa_variavel(tmp_path):
     """Não é erro, mas muda como se lê o gráfico — então aparece."""
-    pacote = janela.montar(_duas_taxas(tmp_path))
+    pacote = _montar(_duas_taxas(tmp_path))
     assert pacote["taxa_variavel"] is True
     assert [t["taxa_hz"] for t in pacote["trechos"]] == [960.0, 5760.0]
 
-    simples = janela.montar(_registro(tmp_path, na=1, n=128))
+    simples = _montar(_registro(tmp_path, na=1, n=128))
     assert simples["taxa_variavel"] is False
 
 
@@ -952,10 +1012,10 @@ def test_andar_um_ciclo_respeita_a_taxa_de_onde_o_cursor_esta(tmp_path):
     """Shift+seta anda UM CICLO. Num registro de taxa variável isso são 16
     amostras num trecho e 96 no outro — a tecla é a mesma, a conta não."""
     r = _duas_taxas(tmp_path)
-    no_grosso = leitura.em(r, [(float(r.time[100]), 0, 1.0)])
+    no_grosso = _em(r, [(float(r.time[100]), 0, 1.0)])
     assert no_grosso["cursores"][0]["amostra"] == 116        # 16 por ciclo
 
-    no_fino = leitura.em(r, [(float(r.time[400]), 0, 1.0)])
+    no_fino = _em(r, [(float(r.time[400]), 0, 1.0)])
     assert no_fino["cursores"][0]["amostra"] == 496          # 96 por ciclo
 
 
@@ -963,12 +1023,12 @@ def test_o_cursor_nao_le_fasor_atravessando_a_fronteira(tmp_path):
     """Logo depois da troca de taxa não há um ciclo inteiro do mesmo lado.
     Melhor traço que um número plausível e errado."""
     r = _duas_taxas(tmp_path)
-    colado = leitura.em(r, [(float(r.time[250]), 0, 0.0)])["cursores"][0]
-    assert colado["valores"][0]["fundamental"] is None
-    assert colado["valores"][0]["valor"] is not None          # o instantâneo fica
+    colado = _em(r, [(float(r.time[250]), 0, 0.0)])["cursores"][0]
+    assert _vals(colado)[0]["fundamental"] is None
+    assert _vals(colado)[0]["valor"] is not None          # o instantâneo fica
 
-    adiante = leitura.em(r, [(float(r.time[400]), 0, 0.0)])["cursores"][0]
-    assert adiante["valores"][0]["fundamental"] == pytest.approx(
+    adiante = _em(r, [(float(r.time[400]), 0, 0.0)])["cursores"][0]
+    assert _vals(adiante)[0]["fundamental"] == pytest.approx(
         PICO / 2**0.5, rel=0.02)
 
 
@@ -976,9 +1036,11 @@ def test_medida_desconhecida_cai_no_instantaneo(tmp_path):
     """A tela manda uma palavra; o servidor não confia nela."""
     r = _registro(tmp_path, na=1, n=128)
     lixo = {"A": "nada"}
-    assert janela.montar(r, medidas=lixo)["grupos"][0]["grandeza"] == "instantaneo"
-    lido = leitura.em(r, [(float(r.time[50]), 0, 0.0)], medidas=lixo)
-    assert lido["cursores"][0]["valores"][0]["grandeza"] == "instantaneo"
+    # O nome do sinal é o que denuncia a grandeza: `IA` é a amostra crua,
+    # `IA RMS` seria o eficaz. Uma palavra torta não pode virar medida.
+    assert _montar(r, medidas=lixo)["paineis"][0]["sinais"][0]["sinal"] == "IA"
+    lido = _em(r, [(float(r.time[50]), 0, 0.0)], medidas=lixo)
+    assert _vals(lido["cursores"][0])[0]["grandeza"] == "instantaneo"
 
 
 def test_cada_grupo_escolhe_a_sua_medida(tmp_path):
@@ -990,15 +1052,16 @@ def test_cada_grupo_escolhe_a_sua_medida(tmp_path):
     cfg.write_text(texto, encoding="utf-8")
     r = _cru(registry.read(cfg))
 
-    pacote = janela.montar(r, medidas={"A": "rms"})
-    por_unidade = {g["unidade_do_arquivo"]: g for g in pacote["grupos"]}
-    assert por_unidade["A"]["grandeza"] == "rms"
-    assert por_unidade["V"]["grandeza"] == "instantaneo"
+    def primeiro_sinal(pacote, unidade):
+        return arranjo.painel(pacote, unidade)["sinais"][0]["sinal"]
+
+    pacote = _montar(r, medidas={"A": "rms"})
+    assert primeiro_sinal(pacote, "A") == "IA RMS"
+    assert primeiro_sinal(pacote, "V") == "VA"
     # E com o filtro ligado, cada um vira a sua versão filtrada.
-    com_filtro = janela.montar(r, filtro=True, medidas={"A": "rms"})
-    por_unidade = {g["unidade_do_arquivo"]: g for g in com_filtro["grupos"]}
-    assert por_unidade["A"]["grandeza"] == "fundamental"
-    assert por_unidade["V"]["grandeza"] == "filtrado"
+    com_filtro = _montar(r, filtro=True, medidas={"A": "rms"})
+    assert primeiro_sinal(com_filtro, "A") == "IA 60Hz RMS"
+    assert primeiro_sinal(com_filtro, "V") == "VA 60Hz"
 
 
 def test_registro_ja_filtrado_nao_e_filtrado_de_novo(tmp_path):
@@ -1015,13 +1078,12 @@ def test_registro_ja_filtrado_nao_e_filtrado_de_novo(tmp_path):
 
     # O pedido chega, e o servidor o recusa: as amostras JÁ são a componente
     # de 60 Hz, e o nome do sinal não ganha sufixo de uma conta que não houve.
-    pacote = janela.montar(r, filtro=True, colunas=10_000)
+    pacote = _montar(r, filtro=True, colunas=10_000)
     assert pacote["filtro"] is False
-    assert pacote["grupos"][0]["grandeza"] == "instantaneo"
-    assert pacote["grupos"][0]["canais"][0]["sinal"] == "IA"
+    assert pacote["paineis"][0]["sinais"][0]["sinal"] == "IA"
 
     # E o mesmo vale para a tabelinha dos cursores, que é lida em laudo.
-    lido = leitura.em(r, [(0.05, 0, 0.0), (None, 0, 0.0)], filtro=True)
+    lido = _em(r, [(0.05, 0, 0.0), (None, 0, 0.0)], filtro=True)
     assert lido["filtro"] is False
 
     # A regra sozinha, sem registro nenhum: é ela que os dois consultam.
@@ -1035,7 +1097,7 @@ def test_o_nome_do_sinal_diz_o_que_foi_feito_com_o_canal(tmp_path):
     O nome nasce no Python porque é identidade, não rótulo de tela."""
     r = _cru(_registro(tmp_path, na=3, n=512, taxa=1200.0))
     def nomes(**kw):
-        return [c["sinal"] for c in janela.montar(r, **kw)["grupos"][0]["canais"]]
+        return [c["sinal"] for c in _montar(r, **kw)["paineis"][0]["sinais"]]
 
     assert nomes()[0] == "IA"
     assert nomes(medidas={"A": "rms"})[0] == "IA RMS"
@@ -1061,8 +1123,11 @@ def test_num_rele_de_trafo_o_nome_diz_de_que_lado_o_canal_e(tmp_path):
                               f"{k},TC {nivel}:I {fase},,,A,")
     cfg.write_text(texto, encoding="utf-8")
 
-    canais = janela.montar(registry.read(cfg),
-                           medidas={"A": "rms"})["grupos"][0]["canais"]
+    # Cru de propósito: num registro já filtrado não existe `IA RMS` — o
+    # catálogo cai na fundamental — e o que este teste afirma é o apelido do
+    # conjunto, não a medida.
+    canais = _montar(_cru(registry.read(cfg)),
+                     medidas={"A": "rms"})["paineis"][0]["sinais"]
     assert [c["sinal"] for c in canais] == [
         "IA RMS AT", "IB RMS AT", "IC RMS AT",
         "IA RMS BT", "IB RMS BT", "IC RMS BT",
@@ -1079,7 +1144,7 @@ def test_o_cursor_le_o_fasor_junto_com_o_instantaneo(tmp_path):
     r = _registro(tmp_path, na=3, n=512, taxa=1200.0)
     (cursor,), _ = _ler(r, [(float(r.time[200]), 0)])
 
-    canal = cursor["valores"][0]
+    canal = _vals(cursor)[0]
     assert canal["fundamental"] == pytest.approx(PICO / 2**0.5, rel=0.01)
     assert canal["rms"] == pytest.approx(canal["fundamental"], rel=0.01)
     assert abs(canal["dc"]) < 1.0            # senoide pura: quase sem DC
@@ -1093,12 +1158,12 @@ def test_o_nome_padronizado_chega_na_janela_e_na_leitura(tmp_path):
     """
     r = _registro(tmp_path, na=3, n=512, taxa=1200.0)
 
-    canal = janela.montar(r)["grupos"][0]["canais"][0]
+    canal = _montar(r)["paineis"][0]["sinais"][0]
     assert canal["nome"] == r.analog_channels[0].name
     assert canal["padrao"] == fases.padrao(r.analog_channels[0])
 
-    medida = leitura.em(r, [(float(r.time[200]), 0, 0.0)])
-    assert medida["cursores"][0]["valores"][0]["padrao"] == canal["padrao"]
+    medida = _em(r, [(float(r.time[200]), 0, 0.0)])
+    assert _vals(medida["cursores"][0])[0]["padrao"] == canal["padrao"]
     # A referência angular também se identifica pelos dois nomes: a tabelinha
     # sublinha um canal, e quem confere contra o SIGRA precisa saber qual.
     assert medida["referencia"]["padrao"] == \
@@ -1112,8 +1177,8 @@ def test_a_dc_em_unidade_acompanha_o_percentual(tmp_path):
     é ela que sobra para mostrar quando o percentual não pode existir.
     """
     r = _registro(tmp_path, na=1, n=512, taxa=1200.0)
-    medida = leitura.em(r, [(float(r.time[200]), 0, 0.0)])
-    canal = medida["cursores"][0]["valores"][0]
+    medida = _em(r, [(float(r.time[200]), 0, 0.0)])
+    canal = _vals(medida["cursores"][0])[0]
     assert canal["dc_valor"] is not None
     assert canal["casas_dc"] == leitura.casas(canal["dc_valor"])
 
@@ -1124,8 +1189,8 @@ def test_canal_sem_fundamental_nao_manda_percentual_para_a_tela(tmp_path):
     r = _registro(tmp_path, na=1, n=512, taxa=1200.0)
     # Zera o canal e deixa só um offset parado, como um canal morto de verdade.
     r.analog[0, :] = 0.1536
-    medida = leitura.em(r, [(float(r.time[200]), 0, 0.0)])
-    canal = medida["cursores"][0]["valores"][0]
+    medida = _em(r, [(float(r.time[200]), 0, 0.0)])
+    canal = _vals(medida["cursores"][0])[0]
 
     assert canal["dc"] is None                  # percentual: não existe
     assert canal["distorcao"] is None
@@ -1138,7 +1203,7 @@ def test_o_rms_tem_casas_decimais_proprias(tmp_path):
     mostra a diferença entre os dois — que num transitório passa de 40 %."""
     r = _registro(tmp_path, na=1, n=512, taxa=1200.0)
     (cursor,), _ = _ler(r, [(float(r.time[200]), 0)])
-    canal = cursor["valores"][0]
+    canal = _vals(cursor)[0]
     assert canal["casas_rms"] == leitura.casas(canal["rms"])
 
 
@@ -1147,7 +1212,7 @@ def test_sem_um_ciclo_antes_nao_ha_fasor_nem_rms(tmp_path):
     nulos juntos — a tela mostra traço, e não um número inventado."""
     r = _registro(tmp_path, na=1, n=512, taxa=1200.0)
     (cursor,), _ = _ler(r, [(float(r.time[2]), 0)])
-    canal = cursor["valores"][0]
+    canal = _vals(cursor)[0]
     for campo in ("fundamental", "angulo", "rms", "dc", "distorcao"):
         assert canal[campo] is None
     assert canal["valor"] is not None        # o instantâneo continua existindo
@@ -1163,10 +1228,10 @@ def test_a_referencia_angular_e_a_tensao_da_fase_a(tmp_path):
     cfg.write_text(texto, encoding="utf-8")
     r = registry.read(cfg)
 
-    saida = leitura.em(r, [(float(r.time[200]), 0, 0.0)])
+    saida = _em(r, [(float(r.time[200]), 0, 0.0)])
     assert saida["referencia"]["nome"] == "CH4"
     # A referência tem ângulo zero por definição.
-    assert saida["cursores"][0]["valores"][3]["angulo"] == pytest.approx(0.0, abs=1e-6)
+    assert _vals(saida["cursores"][0])[3]["angulo"] == pytest.approx(0.0, abs=1e-6)
 
 
 def test_o_usuario_pode_trocar_a_referencia(tmp_path):
@@ -1174,16 +1239,16 @@ def test_o_usuario_pode_trocar_a_referencia(tmp_path):
     r = _registro(tmp_path, na=3, n=512, taxa=1200.0)
     t = float(r.time[200])
 
-    padrao = leitura.em(r, [(t, 0, 0.0)])
-    trocada = leitura.em(r, [(t, 0, 0.0)], refere=1)
+    padrao = _em(r, [(t, 0, 0.0)])
+    trocada = _em(r, [(t, 0, 0.0)], refere=1)
 
     assert trocada["referencia"]["indice"] == 1
-    assert trocada["cursores"][0]["valores"][1]["angulo"] == pytest.approx(0.0, abs=1e-6)
+    assert _vals(trocada["cursores"][0])[1]["angulo"] == pytest.approx(0.0, abs=1e-6)
 
     # Trocar a referência GIRA todos os ângulos do mesmo tanto: as defasagens
     # entre canais não podem mudar — é o mesmo registro.
     def defasagem(saida, a, b):
-        vals = saida["cursores"][0]["valores"]
+        vals = _vals(saida["cursores"][0])
         return fasor.em_relacao_a(vals[a]["angulo"], vals[b]["angulo"])
 
     assert defasagem(padrao, 0, 2) == pytest.approx(defasagem(trocada, 0, 2), abs=1e-6)
@@ -1193,7 +1258,7 @@ def test_as_fases_saem_a_120_graus(tmp_path):
     """A fábrica gera três senoides defasadas de 120°."""
     r = _registro(tmp_path, na=3, n=512, taxa=1200.0)
     (cursor,), _ = _ler(r, [(float(r.time[200]), 0)])
-    angulos = [c["angulo"] for c in cursor["valores"]]
+    angulos = [c["angulo"] for c in _vals(cursor)]
 
     assert angulos[0] == pytest.approx(0.0, abs=1e-6)        # é a referência
     assert abs(angulos[1]) == pytest.approx(120.0, abs=0.5)
@@ -1205,8 +1270,8 @@ def test_sem_um_ciclo_antes_o_fasor_fica_vazio(tmp_path):
     responder com meia janela."""
     r = _registro(tmp_path, na=1, n=512, taxa=1200.0)
     (cursor,), _ = _ler(r, [(float(r.time[3]), 0)])
-    assert cursor["valores"][0]["fundamental"] is None
-    assert cursor["valores"][0]["valor"] is not None      # o instantâneo fica
+    assert _vals(cursor)[0]["fundamental"] is None
+    assert _vals(cursor)[0]["valor"] is not None      # o instantâneo fica
 
 
 def test_o_fasor_acompanha_primario_e_o_prefixo(tmp_path):
@@ -1214,11 +1279,11 @@ def test_o_fasor_acompanha_primario_e_o_prefixo(tmp_path):
     r = _registro(tmp_path, na=1, n=512, taxa=1200.0)
     t = float(r.time[200])
 
-    secundario = leitura.em(r, [(t, 0, 0.0)], lado="secundario")
-    primario = leitura.em(r, [(t, 0, 0.0)], lado="primario")
+    secundario = _em(r, [(t, 0, 0.0)], lado="secundario")
+    primario = _em(r, [(t, 0, 0.0)], lado="primario")
 
-    vs = secundario["cursores"][0]["valores"][0]
-    vp = primario["cursores"][0]["valores"][0]
+    vs = _vals(secundario["cursores"][0])[0]
+    vp = _vals(primario["cursores"][0])[0]
 
     assert vp["unidade"] == "kA"                     # 12 000 A passam do limiar
     assert vp["fundamental"] * 1000 == pytest.approx(vs["fundamental"] * 120,
@@ -1240,11 +1305,12 @@ def test_a_janela_leva_o_indice_do_canal_no_registro(tmp_path):
     cfg.write_text(texto, encoding="utf-8")
     r = registry.read(cfg)
 
-    pacote = janela.montar(r)
+    pacote = _montar(r)
+    analogicos = [g for g in pacote["paineis"] if g["tipo"] == "analogico"]
     por_indice = {c["indice"]: c["nome"]
-                  for g in pacote["grupos"] for c in g["canais"]}
+                  for g in analogicos for c in g["sinais"]}
 
     assert por_indice == {0: "CH1", 1: "CH2", 2: "CH3", 3: "CH4"}
-    # E os grupos de fato reordenaram: correntes 0 e 2, tensões 1 e 3.
-    assert [c["indice"] for c in pacote["grupos"][0]["canais"]] == [0, 2]
-    assert [c["indice"] for c in pacote["grupos"][1]["canais"]] == [1, 3]
+    # E os painéis de fato reordenaram: correntes 0 e 2, tensões 1 e 3.
+    assert [c["indice"] for c in analogicos[0]["sinais"]] == [0, 2]
+    assert [c["indice"] for c in analogicos[1]["sinais"]] == [1, 3]

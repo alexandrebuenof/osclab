@@ -81,17 +81,6 @@ def aplicavel(filtro: bool, filtragem: str) -> bool:
     return bool(filtro) and str(filtragem) != "filtrado"
 
 
-def por_grupo(unidade: str, filtro: bool, medidas: dict[str, str] | None) -> str:
-    """A grandeza de um grupo, pela unidade dele.
-
-    Cada gráfico escolhe a sua medida — corrente em RMS e tensão em
-    instantâneo ao mesmo tempo é leitura comum numa falta. O filtro, não: ele é
-    propriedade do sinal inteiro, e meia tela filtrada seria armadilha.
-    """
-    escolhida = (medidas or {}).get(unidade.strip(), "instantaneo")
-    return resolver(filtro, escolhida)
-
-
 def nome(padrao: str, grandeza: str, rotulo: str = "") -> str:
     """O nome do sinal: o canal, o que foi feito com ele, e de que conjunto é.
 
@@ -111,17 +100,3 @@ def nome(padrao: str, grandeza: str, rotulo: str = "") -> str:
         return ""
     partes = [padrao, SUFIXOS.get(grandeza, ""), (rotulo or "").strip()]
     return " ".join(p for p in partes if p)
-
-
-def medidas_de_texto(texto: str | None) -> dict[str, str]:
-    """Lê `A:rms,kV:instantaneo` — o que a tela manda na URL.
-
-    Tudo que não casar é ignorado em silêncio: a tela manda uma palavra, e o
-    servidor não confia nela. Grupo sem escolha fica no instantâneo.
-    """
-    saida: dict[str, str] = {}
-    for parte in (texto or "").split(","):
-        unidade, _, medida = parte.partition(":")
-        if unidade.strip() and medida.strip() in MEDIDAS:
-            saida[unidade.strip()] = medida.strip()
-    return saida

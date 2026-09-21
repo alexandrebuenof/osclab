@@ -15,8 +15,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from osclab.dsp import envoltoria, fasor
-from osclab.formats import conjuntos, fases
+from osclab.dsp import fasor
+from osclab.formats import fases
 from osclab.formats.base import Record, Trecho
 from osclab.plot import (
     catalogo,
@@ -24,6 +24,7 @@ from osclab.plot import (
     digitais,
     escala,
     navegacao,
+    paineis,
     serie,
     sinais,
     unidades,
@@ -32,27 +33,21 @@ from osclab.plot.conversao import LADOS
 
 #: Versão do formato do pacote da janela. Sobe quando a tela passa a depender
 #: de um campo novo. Ver o comentário em `montar`.
-CONTRATO = 3
+CONTRATO = 5
 
 
 def montar(registro: Record, *, de: float | None = None, ate: float | None = None,
-           colunas: int = 900, lado: str = "arquivo",
-           filtro: bool = False, medidas: dict[str, str] | None = None,
-           digitais_pedidos: list[int] | None = None,
-           extras: dict[str, list[str]] | None = None,
-           ocultos: list[int] | None = None) -> dict:
+           colunas: int = 900, lado: str = "arquivo", filtro: bool = False,
+           layout: list | None = None) -> dict:
     """O pacote de uma janela, pronto para o navegador.
 
-    `filtro` vale para o registro inteiro; `medidas` é a escolha de CADA
-    gráfico, pela unidade do grupo. Ver `plot/sinais.py`.
+    `layout` é a lista de painéis que a tela montou (ver `plot/paineis.py`).
+    Sem ela, sai o arranjo padrão: um painel por unidade do arquivo e um com os
+    digitais que mudaram.
 
-    `extras` é o que o usuário acrescentou a cada gráfico, pela unidade do
-    arquivo: `{"A": ["q0:0:rms", "c3:rms"]}`. Nada entra aí sozinho — ver
-    `plot/catalogo.py`.
-
-    `ocultos` são os canais que ele TIROU do gráfico, por índice. O grupo
-    continua existindo mesmo ficando vazio: é dele que sai o botão que traz o
-    canal de volta, e um grupo que some leva o botão junto.
+    `filtro` vale para o registro inteiro; a medida (instantâneo × RMS) é de
+    cada painel. Os dois juntos decidem o que um canal do IED vira ali dentro —
+    ver `catalogo.efetivo`.
     """
     if lado not in LADOS:
         lado = "arquivo"
@@ -76,181 +71,28 @@ def montar(registro: Record, *, de: float | None = None, ate: float | None = Non
     trechos = registro.trechos
     por_ciclo = max((fasor.amostras_por_ciclo(t.taxa_hz, registro.line_frequency)
                      for t in trechos), default=0)
-    # Basta UM grupo pedir envoltória para a margem ser necessária. Sinal
-    # acrescentado à mão conta: componente simétrica é sempre fasor, e canal em
-    # RMS também olha um ciclo para trás.
-    alguma_envoltoria = (filtro
-                         or any(m == "rms" for m in (medidas or {}).values())
-                         or any(lista for lista in (extras or {}).values()))
-    margem = (por_ciclo - 1) if alguma_envoltoria and por_ciclo > 0 else 0
+    margem = (por_ciclo - 1) if por_ciclo > 0 else 0
     j0 = max(i0 - margem, 0)
     janela_de_trechos = _trechos_recortados(trechos, j0, i1)
-
-    escondidos = set(ocultos or ())
-    grupos: dict[str, list] = {}
-    for canal in registro.analog_channels:
-        # O grupo nasce mesmo sem canal visível — ver a docstring.
-        alvo = grupos.setdefault(canal.unit.strip(), [])
-        if canal.index not in escondidos:
-            alvo.append(canal)
 
     # O prefixo `k` sai do registro inteiro, nunca da janela: se saísse da
     # janela, o eixo trocaria de kA para A ao ampliar a pré-falta.
     escalas = unidades.por_unidade(registro, lado)
-    # O apelido do conjunto (AT/BT, W/X) entra no nome do sinal. Num relé de
-    # trafo, sem ele dois canais diferentes se chamariam `IA`.
-    rotulos = conjuntos.rotulos_por_canal(registro)
-
     disponiveis = catalogo.de_registro(registro, lado)
-    catalogo_por_id = {s.id: s for s in disponiveis}
+    por_id = {x.id: x for x in disponiveis}
 
-    saida_grupos = []
-    for unidade, canais in grupos.items():
-        # A envoltória é calculada com o ciclo de história e recortada depois.
-        # Calcular só dentro da janela daria uma curva que começa errada.
-        grandeza = sinais.por_grupo(unidade, filtro, medidas)
-        com_margem = registro.analog[[c.index for c in canais], j0:i1]
-        bruto = envoltoria.calcular(com_margem, janela_de_trechos,
-                                    registro.line_frequency, grandeza)[:, i0 - j0:]
-        divisor, mostrada = escalas.get(unidade, (1.0, unidade))
+    arranjo = layout if layout is not None else paineis.padrao(registro, lado)
+    tempo_digitais = digitais.tempo_das_colunas(registro, i0, i1, colunas)
+    todos_digitais = digitais.resumos(registro)
 
-        convertidos = []
-        for k, canal in enumerate(canais):
-            v, lado_final, foi = conversao.converter(bruto[k], canal, lado)
-            convertidos.append((canal, v / divisor, lado_final, foi))
-
-        # Os sinais acrescentados à mão. Os da MESMA unidade dividem o eixo da
-        # esquerda com os canais — mesma escala, mesma leitura. Os de outra
-        # unidade vão para um segundo eixo, à direita.
-        pedidos = [catalogo_por_id[i] for i in (extras or {}).get(unidade, [])
-                   if i in catalogo_por_id]
-        unidade_dir = next((s.unidade for s in pedidos if s.unidade != unidade), None)
-        avisos = []
-        acrescentados = []
-        for s_extra in pedidos:
-            if s_extra.unidade not in (unidade, unidade_dir):
-                # Um terceiro eixo não existe: a tela tem dois lados, e o
-                # terceiro sinal seria desenhado numa escala que não está
-                # escrita em lugar nenhum.
-                avisos.append(f"{s_extra.nome} ({s_extra.unidade_mostrada}) não "
-                              "cabe: o gráfico já tem dois eixos.")
-                continue
-            valores = catalogo.serie(registro, s_extra, j0, i1,
-                                     janela_de_trechos, lado,
-                                     escalas)[i0 - j0:]
-            acrescentados.append((s_extra, valores,
-                                  "dir" if s_extra.unidade != unidade else "esq"))
-
-        pilha = np.vstack([v for _, v, _, _ in convertidos]) if convertidos else \
-            np.empty((0, tempo.size))
-        pilha_esq = np.vstack([pilha] + [v for _, v, e in acrescentados if e == "esq"]) \
-            if any(e == "esq" for _, _, e in acrescentados) else pilha
-        reducao = serie.reduzir(tempo, pilha_esq, colunas)
-
-        finitos = reducao.valores[np.isfinite(reducao.valores)]
-        minimo = float(finitos.min()) if finitos.size else -1.0
-        maximo = float(finitos.max()) if finitos.size else 1.0
-        base, topo = escala.faixa(minimo, maximo)
-        intervalo = topo - base
-
-        eixo_dir = None
-        reducao_dir = None
-        pela_direita = [v for _, v, e in acrescentados if e == "dir"]
-        if pela_direita:
-            reducao_dir = serie.reduzir(tempo, np.vstack(pela_direita), colunas)
-            f_dir = reducao_dir.valores[np.isfinite(reducao_dir.valores)]
-            base_d, topo_d = escala.faixa(float(f_dir.min()) if f_dir.size else -1.0,
-                                          float(f_dir.max()) if f_dir.size else 1.0)
-            _, mostrada_dir = escalas.get(unidade_dir, (1.0, unidade_dir))
-            eixo_dir = {
-                "unidade": mostrada_dir,
-                "unidade_do_arquivo": unidade_dir,
-                "minimo": base_d,
-                "maximo": topo_d,
-                "marcacoes": escala.marcacoes(base_d, topo_d, alvo=4),
-                "casas": escala.casas_decimais(topo_d - base_d),
-            }
-
-        canais_json = []
-        for k, (canal, _, lado_final, foi) in enumerate(convertidos):
-            fase, origem = fases.da_canal(canal)
-            canais_json.append({
-                # O índice do canal no REGISTRO, não na posição do grupo: a
-                # tela usa isto para casar cada linha com a leitura do cursor,
-                # que vem na ordem do arquivo. Casar por posição erraria em
-                # qualquer registro que intercale corrente e tensão.
-                "indice": canal.index,
-                "nome": canal.name,
-                # O nome do ARQUIVO acima; o nome do SOFTWARE aqui. Os dois
-                # aparecem na tela, para ficar claro o que é qual.
-                "padrao": fases.padrao(canal),
-                # O nome do SINAL: o do canal mais o que foi feito com ele.
-                # `IA` e `IA RMS` são coisas diferentes e a tela diz qual é qual.
-                "sinal": sinais.nome(fases.padrao(canal), grandeza,
-                                     rotulos.get(canal.index, "")),
-                "unidade": mostrada,
-                "fase": fase,
-                "fase_origem": str(origem),
-                "lado": lado_final,
-                "convertido": foi,
-                "relacao": round(conversao.relacao(canal), 4),
-                "serie": serie.arredondar(reducao.valores[k], intervalo),
-            })
-
-        # As séries dos acrescentados saem das MESMAS reduções: quem está no
-        # eixo da esquerda foi reduzido junto com os canais, quem está na
-        # direita tem a sua. Reduzir de novo, à parte, daria colunas com outro
-        # alinhamento — e duas curvas do mesmo instante em x diferentes.
-        extras_json = []
-        k_esq = len(convertidos)
-        k_dir = 0
-        for s_extra, _, eixo in acrescentados:
-            if eixo == "esq":
-                valores = serie.arredondar(reducao.valores[k_esq], intervalo)
-                k_esq += 1
-                unidade_do_sinal = mostrada
-            else:
-                valores = serie.arredondar(reducao_dir.valores[k_dir],
-                                           eixo_dir["maximo"] - eixo_dir["minimo"])
-                k_dir += 1
-                unidade_do_sinal = eixo_dir["unidade"]
-            extras_json.append({
-                "id": s_extra.id,
-                "sinal": s_extra.nome,
-                "familia": s_extra.familia,
-                "origem": s_extra.origem,
-                "descricao": s_extra.descricao,
-                "unidade": unidade_do_sinal,
-                "eixo": eixo,
-                "serie": valores,
-            })
-
-        saida_grupos.append({
-            "unidade": mostrada,
-            "unidade_do_arquivo": unidade,
-            "grandeza": grandeza,
-            "medida": "rms" if grandeza in ("rms", "fundamental") else "instantaneo",
-            "divisor": divisor,
-            "titulo": serie.titulo_do_grupo(mostrada),
-            "minimo": base,
-            "maximo": topo,
-            "marcacoes": escala.marcacoes(base, topo, alvo=4),
-            "casas": escala.casas_decimais(intervalo),
-            "canais": canais_json,
-            # O que o usuário acrescentou a ESTE gráfico, e o segundo eixo
-            # quando algum deles veio de outra unidade.
-            "extras": extras_json,
-            "eixo_dir": eixo_dir,
-            "avisos": avisos,
-        })
-
-    # Os digitais: por padrão só os que MUDARAM, na ordem em que mudaram — a
-    # tela passa a contar a sequência do evento de cima para baixo. Ver
-    # `plot/digitais.py` para por que esse é o único critério que se sustenta
-    # num relé de 5760 entradas binárias.
-    todos = digitais.resumos(registro)
-    escolhidos = (digitais.escolhidos_por_padrao(registro)
-                  if digitais_pedidos is None else list(digitais_pedidos))
+    saida = []
+    for painel in arranjo:
+        if painel.tipo == paineis.DIGITAL:
+            saida.append(_painel_digital(registro, painel, i0, i1, colunas))
+        else:
+            saida.append(_painel_analogico(
+                registro, painel, por_id, escalas, lado, filtro,
+                tempo, j0, i0, i1, janela_de_trechos, colunas))
 
     # O eixo do tempo é reduzido do mesmo jeito que os canais, para os dois
     # ficarem com o mesmo comprimento. Um canal fictício de zeros serve: o que
@@ -301,8 +143,7 @@ def montar(registro: Record, *, de: float | None = None, ate: float | None = Non
         "tempo": [round(float(x), 9) for x in tempo_saida],
         "marcacoes_tempo": escala.marcacoes(t0, t1, alvo=6),
         "disparo_s": _disparo(registro),
-        "grupos": saida_grupos,
-        "ocultos": sorted(escondidos),
+        "paineis": saida,
         # Tudo que se PODE acrescentar, para a tela montar a busca sem precisar
         # de outra chamada. O nome de cada sinal nasce aqui, no Python, porque
         # é identidade: o mesmo nome tem que valer na legenda, na tabelinha e
@@ -316,19 +157,180 @@ def montar(registro: Record, *, de: float | None = None, ate: float | None = Non
                       "canal": x.canal,
                       "grandeza_do_canal": x.grandeza_do_canal}
                      for x in disponiveis],
-        "digitais": {
-            "tiras": digitais.tiras(registro, i0, i1, colunas, escolhidos),
-            "tempo": digitais.tempo_das_colunas(registro, i0, i1, colunas),
-            # A lista inteira vai junto para a busca funcionar sem outro
-            # pedido: é nome e um inteiro por canal, barato até nos 5760 de um
-            # SEL-487E, e evita uma viagem a cada letra digitada.
-            "disponiveis": [{"indice": r.indice, "nome": r.nome,
-                             "mudou": r.mudou,
-                             "instante": r.instante} for r in todos],
-            "mudaram": sum(1 for r in todos if r.mudou),
-            "escolhidos": escolhidos,
-        },
+        # Os digitais do REGISTRO — a lista inteira, para a busca. Quais estão
+        # na tela é assunto de cada painel.
+        "digitais_disponiveis": [{"indice": r.indice, "nome": r.nome,
+                                  "mudou": r.mudou, "instante": r.instante}
+                                 for r in todos_digitais],
+        "digitais_mudaram": sum(1 for r in todos_digitais if r.mudou),
+        "tempo_digitais": tempo_digitais,
     }
+
+
+def _painel_digital(registro: Record, painel, i0: int, i1: int,
+                    colunas: int) -> dict:
+    """Um painel de tiras digitais."""
+    indices = paineis.indices_digitais(painel)
+    return {
+        "id": painel.id,
+        "tipo": paineis.DIGITAL,
+        "nome": painel.nome or "Digitais",
+        "do_padrao": painel.do_padrao,
+        "sinais_pedidos": [str(k) for k in indices],
+        "tiras": digitais.tiras(registro, i0, i1, colunas, indices),
+    }
+
+
+def _painel_analogico(registro: Record, painel, por_id: dict, escalas: dict,
+                      lado: str, filtro: bool, tempo, j0: int, i0: int, i1: int,
+                      janela_de_trechos, colunas: int) -> dict:
+    """Um painel de ondas: os sinais, as duas escalas e os avisos.
+
+    A unidade do painel é a do PRIMEIRO sinal que entrou nele — não há
+    unidade "do painel" decidida de fora. Quem vier depois com outra unidade
+    vai para o eixo da direita; um terceiro tipo de unidade é recusado, porque
+    a tela tem dois lados e o terceiro seria desenhado numa escala que não
+    está escrita em lugar nenhum.
+    """
+    pedidos = []
+    for identidade in painel.sinais:
+        alvo = catalogo.efetivo(identidade, painel.medida, filtro, por_id)
+        if alvo is not None:
+            pedidos.append((identidade, alvo))
+
+    unidade_esq = pedidos[0][1].unidade if pedidos else ""
+    unidade_dir = next((s.unidade for _, s in pedidos if s.unidade != unidade_esq),
+                       None)
+
+    avisos, escolhidos = [], []
+    for identidade, alvo in pedidos:
+        if alvo.unidade not in (unidade_esq, unidade_dir):
+            avisos.append(f"{alvo.nome} ({alvo.unidade_mostrada}) não cabe: "
+                          "o gráfico já tem dois eixos.")
+            continue
+        valores = catalogo.serie(registro, alvo, j0, i1, janela_de_trechos,
+                                 lado, escalas)[i0 - j0:]
+        escolhidos.append((identidade, alvo, valores,
+                           "dir" if alvo.unidade != unidade_esq else "esq"))
+
+    def faixa(quais):
+        if not quais:
+            return None
+        pilha = np.vstack([v for _, _, v, _ in quais])
+        reducao = serie.reduzir(tempo, pilha, colunas)
+        finitos = reducao.valores[np.isfinite(reducao.valores)]
+        base, topo = escala.faixa(float(finitos.min()) if finitos.size else -1.0,
+                                  float(finitos.max()) if finitos.size else 1.0)
+        return reducao, base, topo
+
+    pela_esquerda = [x for x in escolhidos if x[3] == "esq"]
+    pela_direita = [x for x in escolhidos if x[3] == "dir"]
+    esq = faixa(pela_esquerda)
+    dir_ = faixa(pela_direita)
+
+    base, topo = (esq[1], esq[2]) if esq else (-1.0, 1.0)
+    intervalo = topo - base
+    _, mostrada_esq = escalas.get(unidade_esq, (1.0, unidade_esq))
+
+    eixo_dir = None
+    if dir_:
+        _, mostrada_dir = escalas.get(unidade_dir, (1.0, unidade_dir))
+        eixo_dir = {
+            "unidade": mostrada_dir,
+            "unidade_do_arquivo": unidade_dir,
+            "minimo": dir_[1],
+            "maximo": dir_[2],
+            "marcacoes": escala.marcacoes(dir_[1], dir_[2], alvo=4),
+            "casas": escala.casas_decimais(dir_[2] - dir_[1]),
+        }
+
+    canais = {c.index: c for c in registro.analog_channels}
+    sinais_json = []
+    k_esq = k_dir = 0
+    for identidade, alvo, _, eixo in escolhidos:
+        if eixo == "esq":
+            valores = serie.arredondar(esq[0].valores[k_esq], intervalo)
+            k_esq += 1
+            unidade_mostrada = mostrada_esq
+        else:
+            valores = serie.arredondar(dir_[0].valores[k_dir],
+                                       eixo_dir["maximo"] - eixo_dir["minimo"])
+            k_dir += 1
+            unidade_mostrada = eixo_dir["unidade"]
+
+        canal = canais.get(alvo.canal) if alvo.canal >= 0 else None
+        fase, _origem = fases.da_canal(canal) if canal is not None else ("", "")
+        lado_final = lado
+        convertido = True
+        if canal is not None:
+            _, lado_final, convertido = conversao.converter(
+                np.zeros(1), canal, lado)
+
+        sinais_json.append({
+            # O id PEDIDO é a identidade do sinal no painel: é por ele que a
+            # tela o tira, o seleciona e o casa com a leitura do cursor. O
+            # efetivo é o que foi calculado depois dos botões.
+            "id": identidade,
+            "id_efetivo": alvo.id,
+            "familia": alvo.familia,
+            # O nome do ARQUIVO, quando há canal por trás; e o nome NOSSO. Os
+            # dois aparecem na tela, para ficar claro o que é qual.
+            "nome": canal.name if canal is not None else "",
+            # O nome NOSSO: para um canal do IED é a fundamental que
+            # vinculamos (`IA`); para uma conta nossa é o nome dela
+            # (`IA RMS`, `3I0`). Vazio quando não reconhecemos o canal — o
+            # OscLab não batiza o que não conseguiu identificar.
+            "sinal": (alvo.fundamental if alvo.familia == "canal" else alvo.nome),
+            "padrao": (alvo.fundamental if alvo.familia == "canal" else alvo.nome),
+            "descricao": alvo.descricao,
+            "indice": canal.index if canal is not None else None,
+            "fase": fase,
+            "unidade": unidade_mostrada,
+            "eixo": eixo,
+            "lado": lado_final,
+            "convertido": convertido,
+            "serie": valores,
+        })
+
+    return {
+        "id": painel.id,
+        "tipo": paineis.ANALOGICO,
+        # Enquanto o usuário não renomeou, o nome sai da unidade — e por isso
+        # acompanha a troca de lado, que muda `A` para `kA`.
+        "nome": (serie.titulo_do_grupo(mostrada_esq)
+                 if painel.do_padrao or not painel.nome else painel.nome),
+        "do_padrao": painel.do_padrao,
+        "medida": painel.medida,
+        "medida_aplicavel": _medida_aplicavel(painel, por_id),
+        "unidade": mostrada_esq,
+        "unidade_do_arquivo": unidade_esq,
+        "minimo": base,
+        "maximo": topo,
+        "marcacoes": escala.marcacoes(base, topo, alvo=4) if esq else [],
+        "casas": escala.casas_decimais(intervalo),
+        "eixo_dir": eixo_dir,
+        "avisos": avisos,
+        "sinais": sinais_json,
+    }
+
+
+def _medida_aplicavel(painel, por_id: dict) -> bool:
+    """Se o botão instantâneo/RMS tem em que pegar neste painel.
+
+    Ele só manda nos canais do IED — ver `catalogo.efetivo`. Num painel que só
+    tem componentes simétricas, que são fasor e **só existem em eficaz**,
+    clicar nele não muda número nenhum: o rótulo da tabelinha troca de `valor`
+    para `RMS` e os valores ficam iguais. Botão que acende e não faz nada é
+    pior que botão travado — o usuário acredita que a tabela mudou.
+
+    Painel VAZIO é o único caso em que ele continua solto mesmo sem ninguém
+    para mandar: ali ainda não há contradição nenhuma, e travar um controle
+    antes de haver conteúdo é dizer "não pode" sem ter por quê.
+    """
+    if not painel.sinais:
+        return True
+    return any(identidade in por_id and por_id[identidade].familia == "canal"
+               for identidade in painel.sinais)
 
 
 def _trechos_recortados(trechos, j0: int, i1: int) -> list:

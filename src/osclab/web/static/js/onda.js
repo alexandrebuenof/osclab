@@ -63,7 +63,7 @@
   //: navegador recarrega o `.js` sozinho: quem troca de versão sem reiniciar
   //: fica com tela nova e servidor velho, e o resultado é uma tela que mostra
   //: coisas que não fazem sentido sem dar erro nenhum. Já custou três rodadas.
-  const CONTRATO = 3;
+  const CONTRATO = 5;
 
   //: A margem de cima abriga a etiqueta numerada dos cursores, que fica FORA da
   //: área de desenho: por dentro ela tapa o pico da onda — e o pico é
@@ -144,7 +144,7 @@
 
   //: As células das tabelinhas, por canal: `{indice, celas, botao}`. O índice
   //: é o do canal NO REGISTRO — é por ele que se casa com a leitura do cursor.
-  let celulas = { canais: [] };
+  let celulas = [];
 
   //: De que lado os valores são mostrados: "arquivo", "secundario" ou
   //: "primario". Vai junto em todo pedido, porque a conversão pela relação de
@@ -165,9 +165,65 @@
   //: mesmo tempo é leitura comum numa falta.
   let filtro = lerGuardado("osclab:filtro", ["0", "1"], "0") === "1";
 
-  //: A medida de cada grupo, pela unidade dele. Quem não está aqui é
-  //: instantâneo.
-  let medidas = lerMedidasGuardadas();
+  //: O ARRANJO da tela: a lista de painéis, na ordem em que aparecem. Cada um
+  //: é `{id, tipo, nome, sinais[], medida}`. É o estado principal desta tela —
+  //: tudo que o usuário monta mora aqui, e é isto que vai ao servidor a cada
+  //: pedido. Ver `plot/paineis.py` para por que o NOME e a ORDEM não são
+  //: assunto do servidor.
+  let paineis = [];
+
+  //: Contador dos ids que a tela cria. Não reaproveita número de painel
+  //: apagado: id repetido casaria seleção e leitura com o painel errado.
+  let proximoId = 1;
+
+  const painelPorId = (id) => paineis.find((x) => x.id === id);
+
+  /** O corpo de um pedido: o arranjo, ou nada na primeira carga.
+   *
+   * Vai no CORPO, e não na URL, porque é uma estrutura — painéis com listas de
+   * sinais dentro. Sem arranjo nenhum, o servidor monta o padrão, e é assim
+   * que a primeira janela nasce.
+   */
+  function pedidoComLayout() {
+    if (!paineis.length) return undefined;
+    return {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        paineis: paineis.map((x) => ({
+          id: x.id, tipo: x.tipo, nome: x.nome, do_padrao: x.do_padrao,
+          medida: x.medida, sinais: x.sinais,
+        })),
+      }),
+    };
+  }
+
+  /** Na primeira carga, a tela adota o arranjo que o servidor montou.
+   *
+   * Só na primeira: depois disso quem manda no arranjo é a tela. Readotar a
+   * cada resposta apagaria em silêncio um sinal que o servidor tenha recusado
+   * (um terceiro eixo, por exemplo) — o aviso já diz que ele não coube, e
+   * tirá-lo da lista tiraria também a chance de o usuário entender por quê.
+   */
+  function adotarPaineis() {
+    if (paineis.length || !dados.paineis) return;
+    paineis = dados.paineis.map((x) => ({
+      id: x.id,
+      tipo: x.tipo,
+      nome: x.nome,
+      do_padrao: !!x.do_padrao,
+      medida: x.medida || "instantaneo",
+      //: `id do sinal → token de cor`. Só da tela: cor não muda número
+      //: nenhum, então não vai ao servidor. Entra no Ctrl+Z junto com o
+      //: resto do arranjo.
+      cores: {},
+      sinais: x.tipo === "digital"
+        ? (x.tiras || []).map((s) => String(s.indice))
+        : (x.sinais || []).map((s) => s.id),
+    }));
+    proximoId = paineis.length + 1;
+  }
+
 
   //: Como cada vista se chama no canto da tabelinha. Curto: a coluna é estreita.
   const ROTULO = {
@@ -255,15 +311,9 @@
     }
     if (gesto.tudo) p.set("tudo", "1");
     if (filtro) p.set("filtro", "1");
-    const escolhas = medidasEmTexto();
-    if (escolhas) p.set("medidas", escolhas);
-    if (digitaisNaTela !== null) p.set("digitais", digitaisNaTela.join(","));
-    const acrescentados = extrasEmTexto();
-    if (acrescentados) p.set("extras", acrescentados);
-    if (ocultos.size) p.set("ocultos", [...ocultos].join(","));
 
     try {
-      const r = await fetch(`/api/onda/${sha}?${p}`);
+      const r = await fetch(`/api/onda/${sha}?${p}`, pedidoComLayout());
       if (!r.ok) {
         const erro = await r.json().catch(() => ({}));
         throw new Error(erro.erro || `o servidor respondeu ${r.status}`);
@@ -276,6 +326,7 @@
       // Na primeira carga quem decidiu o lado foi o servidor; a tela obedece,
       // senão nenhum botão ficaria aceso.
       lado = dados.lado_pedido;
+      adotarPaineis();
       marcarLado();
       // O veredito de bruto × filtrado chega junto com a janela: é ele que
       // trava o botão e é ele que a tira anuncia.
@@ -359,12 +410,19 @@
     // O segundo eixo precisa de espaço à direita, e — como a margem esquerda —
     // ele vale para TODOS os gráficos: dois eixos do tempo que terminam em x
     // diferentes põem o mesmo instante em dois lugares da tela.
-    const temDireito = (dados && dados.grupos || []).some((g) => g.eixo_dir);
+    const temDireito = (dados && dados.paineis || []).some((x) => x.eixo_dir);
     MARGEM.dir = temDireito ? 62 : MARGEM_DIR_BASE;
 
     MARGEM.esq = MARGEM_BASE;
-    const tiras = dados && dados.digitais ? dados.digitais.tiras : null;
-    if (!tiras || !tiras.length) return;
+    // As tiras estão espalhadas pelos painéis digitais — pode haver mais de
+    // um. A margem é UMA SÓ para a tela inteira, então quem manda é o nome
+    // mais largo de todos: se cada painel tivesse a sua, dois eixos do tempo
+    // começariam em x diferentes e o mesmo instante apareceria em dois
+    // lugares. (Saía de `dados.digitais`, que deixou de existir com os
+    // painéis — e sem isto os nomes voltavam todos cortados.)
+    const tiras = (dados && dados.paineis || [])
+      .flatMap((x) => x.tiras || []);
+    if (!tiras.length) return;
     regua.font = FONTE_TIRA;
     const maior = Math.max(...tiras.map((t) => regua.measureText(t.nome).width));
     const teto = Math.max(MARGEM_BASE, Math.round((area.clientWidth || 900) * 0.42));
@@ -398,36 +456,46 @@
 
   // --- montagem da página -------------------------------------------------
 
+  //: Sobe a cada desenho e invalida os mapas de cor guardados em cada painel.
+  //: Sem ele, trocar uma cor à mão não repintaria nada — o mapa velho
+  //: continuaria valendo.
+  let seloDoDesenho = 0;
+
   function desenharTudo() {
     if (!dados) return;
+    seloDoDesenho += 1;
 
-    if (!dados.grupos || dados.grupos.length === 0) {
+    if (!dados.paineis || dados.paineis.length === 0) {
       area.replaceChildren(criar("p", "vazio", "Este registro não tem canal analógico."));
       return;
     }
 
     ajustarMargem();
+    // O nome de um painel que nunca foi renomeado vem da unidade, e a unidade
+    // muda quando se troca de primário para secundário. Enquanto a marca
+    // estiver de pé, o nome da tela segue o do servidor.
+    for (const vindo of dados.paineis) {
+      const meu = painelPorId(vindo.id);
+      if (meu && meu.do_padrao) meu.nome = vindo.nome;
+    }
     // Sinal que saiu da tela não pode continuar selecionado: o Delete seguinte
     // apagaria algo que o usuário não está mais vendo.
     selecionados = selecionados.filter((s) => {
-      if (s.tipo === "digital") {
-        return (dados.digitais ? dados.digitais.tiras : [])
-          .some((t) => t.indice === s.chave);
-      }
-      const grupo = dados.grupos.find((g) => g.unidade_do_arquivo === s.unidade);
-      if (!grupo) return false;
-      return s.tipo === "canal"
-        ? grupo.canais.some((c) => c.indice === s.chave)
-        : (grupo.extras || []).some((e) => e.id === s.chave);
+      const painel = dados.paineis.find((x) => x.id === s.painel);
+      if (!painel) return false;
+      return s.tipo === "digital"
+        ? (painel.tiras || []).some((t) => t.indice === s.chave)
+        : (painel.sinais || []).some((x) => x.id === s.chave);
     });
-    celulas = { canais: [], extras: [] };
+    celulas = [];
     linhasDoTempo = [];
-    const temDigitais = dados.digitais && dados.digitais.tiras.length > 0;
-    blocos = dados.grupos.map((grupo, i) =>
-      bloco(grupo, !temDigitais && i === dados.grupos.length - 1)
-    );
-    if (temDigitais) blocos.push(blocoDigitais(dados.digitais));
-    area.replaceChildren(...blocos);
+    blocos = dados.paineis.map((painel, i) => {
+      const ultimo = i === dados.paineis.length - 1;
+      return painel.tipo === "digital"
+        ? blocoDigitais(painel, ultimo)
+        : bloco(painel, ultimo);
+    });
+    area.replaceChildren(...blocos, rodapeDosPaineis());
 
     rodape.classList.remove("atencao");
     rodape.textContent =
@@ -441,6 +509,96 @@
     marcarLegenda();
   }
 
+  /** Os botões que criam um painel novo, no fim da lista.
+   *
+   * No fim, e não no topo: a tela se lê de cima para baixo como a sequência do
+   * evento, e um botão no meio disso seria um degrau. Dois botões em vez de um
+   * menu porque são só dois tipos — abrir menu para escolher entre duas coisas
+   * é um clique a mais para não ganhar nada.
+   */
+  function rodapeDosPaineis() {
+    const barra = criar("div", "novo-painel");
+    for (const [tipo, rotulo] of [["analogico", "+ gráfico analógico"],
+                                  ["digital", "+ gráfico digital"]]) {
+      const b = criar("button", "medida", rotulo);
+      b.title = tipo === "analogico"
+        ? "Cria um gráfico de ondas vazio. Os sinais entram pelo «+ sinal» dele."
+        : "Cria um gráfico de tiras digitais vazio.";
+      b.addEventListener("click", () => criarPainel(tipo));
+      barra.append(b);
+    }
+    return barra;
+  }
+
+  /** Cria um painel vazio, com nome genérico.
+   *
+   * O nome é genérico de propósito: obrigar a batizar um gráfico antes de ver
+   * o que tem dentro dele é pedir uma decisão na hora errada. Quem quiser
+   * renomeia depois, clicando no título.
+   */
+  function criarPainel(tipo) {
+    guardarParaDesfazer();
+    const quantos = paineis.filter((x) => x.tipo === tipo).length + 1;
+    const nome = tipo === "digital" ? `Gráfico digital ${quantos}`
+                                    : `Gráfico analógico ${quantos}`;
+    paineis.push({ id: `t${proximoId++}`, tipo, nome, sinais: [],
+                   medida: "instantaneo", do_padrao: false, cores: {} });
+    carregar();
+  }
+
+  function apagarPainel(id) {
+    guardarParaDesfazer();
+    paineis = paineis.filter((x) => x.id !== id);
+    selecionados = selecionados.filter((x) => x.painel !== id);
+    carregar();
+  }
+
+  /** Sobe ou desce um painel na lista. */
+  function moverPainel(id, passo) {
+    const i = paineis.findIndex((x) => x.id === id);
+    const j = i + passo;
+    if (i < 0 || j < 0 || j >= paineis.length) return;
+    guardarParaDesfazer();
+    const [x] = paineis.splice(i, 1);
+    paineis.splice(j, 0, x);
+    carregar();
+  }
+
+  function renomearPainel(id, nome) {
+    const painel = painelPorId(id);
+    if (!painel || painel.nome === nome) return;
+    guardarParaDesfazer();
+    painel.nome = nome;
+    // A partir daqui o nome é do usuário: o servidor para de reescrevê-lo
+    // quando a unidade muda.
+    painel.do_padrao = false;
+    // O nome é rótulo da tela: não muda número nenhum, então não precisa do
+    // servidor. Redesenhar basta, e é instantâneo.
+    dados.paineis.forEach((x) => { if (x.id === id) x.nome = nome; });
+    desenharTudo();
+  }
+
+  /** Troca os sinais de um painel e recarrega. */
+  function trocarSinais(id, ids) {
+    const painel = painelPorId(id);
+    if (!painel) return;
+    // Fechar a janela sem ter mexido nas caixinhas não é ação nenhuma: gastar
+    // um passo do Ctrl+Z com isso faria o desfazer parecer quebrado, porque o
+    // primeiro toque não mudaria nada na tela.
+    const mesmos = painel.sinais.length === ids.length
+                && painel.sinais.every((x, i) => x === ids[i]);
+    if (mesmos) return;
+    guardarParaDesfazer();
+    painel.sinais = ids;
+    // Cor de sinal que saiu do gráfico não fica guardada: se ele voltar, volta
+    // com a cor automática, que é o que alguém espera de um sinal novo.
+    const ficam = new Set(ids);
+    for (const chave of Object.keys(painel.cores || {})) {
+      if (!ficam.has(chave)) delete painel.cores[chave];
+    }
+    carregar();              // a escala vertical muda; a leitura vem junto
+  }
+
   /** Aviso dos canais que não puderam ser convertidos, ou "".
    *
    * O programa avisa, nunca bloqueia — e nunca converte por palpite: quando o
@@ -450,9 +608,9 @@
   function semRelacao() {
     if (lado === "arquivo" || !dados) return "";
     const teimosos = [];
-    for (const grupo of dados.grupos) {
-      for (const canal of grupo.canais) {
-        if (canal.lado !== lado) teimosos.push(canal.nome);
+    for (const painel of dados.paineis) {
+      for (const sinal of (painel.sinais || [])) {
+        if (sinal.nome && sinal.lado !== lado) teimosos.push(sinal.nome);
       }
     }
     if (!teimosos.length) return "";
@@ -470,29 +628,26 @@
   const FINA = 1;
   const GROSSA = 7;
 
-  /** O bloco dos digitais: uma tira por canal, no mesmo eixo de tempo.
+  /** Um painel de tiras digitais.
    *
    * Nasce como um `.grafico` igual aos outros de propósito — assim os gestos
    * (roda, arrasto, seleção) e os cursores funcionam nele sem uma linha a
    * mais: `areaDoEvento` procura o `.tela` mais próximo e acha este também.
    */
-  function blocoDigitais(digitais) {
+  function blocoDigitais(painel, ultimo) {
     const el = criar("section", "grafico digitais");
+    const quantos = painel.tiras.length;
 
-    const titulo = criar("h2", "grafico-titulo");
-    const quantos = digitais.tiras.length;
-    titulo.append(criar("span", null,
-      `Digitais (${quantos} ${quantos === 1 ? "sinal" : "sinais"})`));
-
-    const parados = digitais.disponiveis.length - digitais.mudaram;
+    const parados = (dados.digitais_disponiveis || []).length
+                  - (dados.digitais_mudaram || 0);
     const busca = criar("button", "medida", "+ sinal");
-    busca.title = `${digitais.mudaram} mudaram durante o registro e estão na `
-                + `tela; ${parados} ficaram parados. Clique para procurar `
+    busca.title = `${dados.digitais_mudaram} digitais mudaram durante o `
+                + `registro; ${parados} ficaram parados. Clique para procurar `
                 + "qualquer um pelo nome e trazê-lo para cá.";
-    busca.addEventListener("click", () => abrirBusca(digitais));
+    busca.addEventListener("click", () => abrirBusca(painel));
 
-    titulo.append(busca);
-    el.append(titulo);
+    el.append(cabecalhoDoPainel(painel, [busca],
+                                `${quantos} ${quantos === 1 ? "sinal" : "sinais"}`));
 
     const corpo = criar("div", "grafico-corpo");
     const caixa = criar("div", "tela");
@@ -503,13 +658,16 @@
     corpo.append(caixa, criar("div", "sem-tabela"));
     el.append(corpo);
 
-    // O nome inteiro na dica do navegador, tira por tira. E' o que salva o
-    // modo cortado: o nome completo esta' sempre a um segundo de distancia,
-    // sem gastar largura de desenho nenhuma.
+    if (!quantos) {
+      el.append(criar("p", "vazio",
+        "Nenhum digital neste gráfico. Use o «+ sinal» para trazer os que "
+        + "você quer ver aqui."));
+    }
+
     canvas.addEventListener("pointermove", (evento) => {
       const caixaCanvas = canvas.getBoundingClientRect();
       const k = Math.floor((evento.clientY - caixaCanvas.top - MARGEM.topo) / TIRA);
-      const tira = digitais.tiras[k];
+      const tira = painel.tiras[k];
       const dica = tira ? tira.nome : "";
       if (canvas.title !== dica) canvas.title = dica;
       // Sobre o NOME, o cursor vira o de clicar: ali não se arrasta nem se
@@ -523,7 +681,7 @@
     canvas.addEventListener("click", (evento) => {
       const caixaCanvas = canvas.getBoundingClientRect();
       if (evento.clientX - caixaCanvas.left >= MARGEM.esq) return;  // o desenho
-      const achado = digitalPerto(digitais, evento.clientY - caixaCanvas.top);
+      const achado = digitalPerto(painel, evento.clientY - caixaCanvas.top);
       if (!achado) return;
       // Sem isto, o clique sobe até o `document` e a regra de "clicou fora,
       // limpa a seleção" desfaria o que acabou de ser feito.
@@ -532,8 +690,74 @@
     });
 
     el._canvas = canvas;
-    el._digitais = digitais;
+    el._painel = painel;
+    el._ultimo = ultimo;
     return el;
+  }
+
+  /** O cabeçalho de um painel: nome, controles de arranjo e o que mais vier.
+   *
+   * O mesmo nos dois tipos de painel, e por isso está num lugar só: um
+   * cabeçalho que muda de forma conforme o conteúdo faria o usuário procurar
+   * o botão de novo a cada gráfico.
+   */
+  function cabecalhoDoPainel(painel, botoes, contagem) {
+    const titulo = criar("h2", "grafico-titulo");
+
+    // O nome é botão: clicar abre a edição. Não há lápis nem menu — o alvo é
+    // o próprio texto, que é onde a mão vai.
+    const nome = criar("button", "nome-painel", painel.nome);
+    nome.title = "clique para renomear este gráfico";
+    nome.addEventListener("click", () => editarNome(nome, painel));
+    titulo.append(nome);
+
+    if (contagem) titulo.append(criar("span", "contagem-painel", contagem));
+    for (const b of botoes) titulo.append(b);
+
+    const arranjo = criar("span", "arranjo");
+    const i = paineis.findIndex((x) => x.id === painel.id);
+    for (const [rotulo, passo, dica] of [["▲", -1, "subir este gráfico"],
+                                         ["▼", 1, "descer este gráfico"]]) {
+      const b = criar("button", "mexer", rotulo);
+      b.title = dica;
+      b.disabled = i + passo < 0 || i + passo >= paineis.length;
+      b.addEventListener("click", () => moverPainel(painel.id, passo));
+      arranjo.append(b);
+    }
+    const fechar = criar("button", "mexer fechar-painel", "×");
+    fechar.title = "tirar este gráfico da tela (Ctrl+Z desfaz)";
+    fechar.addEventListener("click", () => apagarPainel(painel.id));
+    arranjo.append(fechar);
+    titulo.append(arranjo);
+    return titulo;
+  }
+
+  /** Troca o título por um campo de texto, e devolve o título no fim. */
+  function editarNome(botao, painel) {
+    const campo = document.createElement("input");
+    campo.type = "text";
+    campo.className = "nome-painel-campo";
+    campo.value = painel.nome;
+    // O `blur` dispara DENTRO do `replaceWith` — tirar o campo do documento
+    // tira o foco dele —, e sem esta trava o segundo `terminar` tentava
+    // substituir um nó que já saiu. Uma bandeira própria é mais confiável que
+    // consultar `isConnected` no meio da operação que o desconecta.
+    let pronto = false;
+    const terminar = (guardar) => {
+      if (pronto) return;
+      pronto = true;
+      const novo = campo.value.trim();
+      campo.replaceWith(botao);
+      if (guardar && novo) renomearPainel(painel.id, novo);
+    };
+    campo.addEventListener("keydown", (evento) => {
+      if (evento.key === "Enter") terminar(true);
+      if (evento.key === "Escape") { evento.stopPropagation(); terminar(false); }
+    });
+    campo.addEventListener("blur", () => terminar(true));
+    botao.replaceWith(campo);
+    campo.focus();
+    campo.select();
   }
 
   /** A etiqueta numerada dos cursores, ACIMA da moldura.
@@ -573,10 +797,10 @@
   }
 
   /** Desenha as tiras. Mesmo eixo de tempo das ondas, mesmo arrasto. */
-  function pintarDigitais(canvas, digitais) {
-    const linhas = digitais.tiras;
+  function pintarDigitais(canvas, painel) {
+    const linhas = painel.tiras;
     const cssLargura = canvas.parentElement.clientWidth;
-    const cssAltura = MARGEM.topo + linhas.length * TIRA + MARGEM.baixo;
+    const cssAltura = MARGEM.topo + Math.max(linhas.length, 1) * TIRA + MARGEM.baixo;
     const dpr = window.devicePixelRatio || 1;
 
     canvas.style.width = `${cssLargura}px`;
@@ -591,8 +815,8 @@
     const x0 = MARGEM.esq;
     const x1 = cssLargura - MARGEM.dir;
     const y0 = MARGEM.topo;
-    const y1 = y0 + linhas.length * TIRA;
-    if (x1 <= x0 || !linhas.length) return;
+    const y1 = y0 + Math.max(linhas.length, 1) * TIRA;
+    if (x1 <= x0) return;
 
     const tMin = dados.de;
     const tMax = dados.ate;
@@ -606,10 +830,11 @@
     //
     // O corte é pela largura medida, não por um número fixo de letras: fonte
     // monoespaçada hoje, proporcional amanhã, e a etiqueta continua cabendo.
-    const haEscolha = selecionados.some((x) => x.tipo === "digital");
+    const haEscolha = selecionados.some(
+      (x) => x.tipo === "digital" && x.painel === painel.id);
     ctx.textAlign = "right";
     linhas.forEach((tira, k) => {
-      const escolhida = estaSelecionado(null, "digital", tira.indice);
+      const escolhida = estaSelecionado(painel, "digital", tira.indice);
       ctx.fillStyle = escolhida ? token("--destaque") : token("--suave");
       ctx.globalAlpha = haEscolha && !escolhida ? 0.4 : 1;
       const meio = y0 + k * TIRA + TIRA / 2;
@@ -642,11 +867,11 @@
     // um digital que nunca sobe seria indistinguível de um que não foi
     // desenhado. E como a linha nunca troca de altura, o olho lê a tira
     // inteira sem subir e descer: o que salta é a espessura.
-    const tempo = digitais.tempo;
+    const tempo = dados.tempo_digitais || [];
     const corBarra = token("--digital");
     const corEscolhida = token("--destaque");
     linhas.forEach((tira, k) => {
-      const escolhida = estaSelecionado(null, "digital", tira.indice);
+      const escolhida = estaSelecionado(painel, "digital", tira.indice);
       const meio = Math.round(y0 + k * TIRA + TIRA / 2);
       ctx.globalAlpha = haEscolha && !escolhida ? 0.35 : 1;
 
@@ -664,10 +889,6 @@
         // Pulso de uma amostra num registro longo cai numa coluna só: o
         // mínimo de 1 px é o que o mantém visível. Trip que some da tela é
         // pior que trip mais gordo do que é.
-        // Mesmo azul nos dois estados: quem distingue é a ESPESSURA. Clarear
-        // o zero deixava a linha quase invisível no tema claro, e um canal
-        // apagado precisa se ver tanto quanto um aceso — é ele que prova que
-        // o sinal existe e não mudou.
         ctx.fillRect(a, meio - alto / 2, Math.max(fim(j) - a, 1), alto);
       };
 
@@ -714,18 +935,19 @@
     pintarEtiquetas(ctx, emX, x0, x1, y0);
   }
 
-  //: Quais digitais estão na tela. `null` = ainda não se escolheu, e o servidor
-  //: decide (os que mudaram). Lista vazia é escolha legítima e não é `null`.
-  let digitaisNaTela = null;
-
-  /** A busca: qualquer digital do arquivo, pelo nome, para trazer à tela.
+  /** A busca: qualquer digital do arquivo, para pôr NESTE painel.
    *
    * Existe porque "só os que mudaram" é o padrão certo e não é a regra toda:
    * num laudo, às vezes o que importa é provar que um sinal **não** mudou.
    * Escondido não pode virar inexistente.
    */
-  function abrirBusca(digitais) {
-    const escolhidos = new Set(digitaisNaTela ?? digitais.escolhidos);
+  function abrirBusca(painel) {
+    const disponiveis = dados.digitais_disponiveis || [];
+    // Quem sabe o que está no painel é o ARRANJO da tela, não a resposta do
+    // servidor: a resposta traz as tiras desenhadas, que é outra coisa (um
+    // canal pedido e inexistente não vira tira, e continua pedido).
+    const meu = painelPorId(painel.id);
+    const escolhidos = new Set((meu ? meu.sinais : []).map(Number));
     const janelinha = criar("dialog", "busca");
 
     const campo = document.createElement("input");
@@ -737,11 +959,11 @@
       const procura = campo.value.trim().toUpperCase();
       // A busca filtra só os que ainda NÃO estão na tela: os outros já se veem
       // no gráfico, e quem procura está procurando entre os que faltam.
-      const fora = digitais.disponiveis
+      const fora = disponiveis
         .filter((d) => !escolhidos.has(d.indice))
         .filter((d) => !procura || d.nome.toUpperCase().includes(procura))
         .slice(0, 300);
-      const naTela = digitais.disponiveis.filter((d) => escolhidos.has(d.indice));
+      const naTela = disponiveis.filter((d) => escolhidos.has(d.indice));
 
       const desenhar = (d) => {
         const item = criar("label", d.mudou ? "achado mudou" : "achado");
@@ -764,7 +986,7 @@
 
       montarAchados(lista, fora, naTela, desenhar,
                     procura ? "Nenhum digital com esse nome fora da tela."
-                            : "Todos os digitais do registro já estão na tela.");
+                            : "Todos os digitais do registro já estão aqui.");
     };
 
     campo.addEventListener("input", desenharLista);
@@ -775,11 +997,10 @@
       // A ordem é a da lista (hora da mudança), não a de clique: a tela conta
       // a sequência do evento, e isso não pode depender de em que ordem o
       // usuário marcou as caixas.
-      guardarParaDesfazer();
-      digitaisNaTela = digitais.disponiveis
-        .filter((d) => escolhidos.has(d.indice)).map((d) => d.indice);
+      const ids = disponiveis
+        .filter((d) => escolhidos.has(d.indice)).map((d) => String(d.indice));
       janelinha.close();
-      carregar();
+      trocarSinais(painel.id, ids);
     });
 
     // Fechar sem escolher nada. O Esc já fazia isso, e Esc é um atalho que
@@ -791,7 +1012,7 @@
     fechar.addEventListener("click", () => janelinha.close());
 
     const cabeca = criar("div", "cabeca");
-    cabeca.append(criar("h3", null, "Sinais digitais"), campo, fechar);
+    cabeca.append(criar("h3", null, `Digitais de ${painel.nome}`), campo, fechar);
     janelinha.append(cabeca, lista, aplicar);
     janelinha.addEventListener("close", () => janelinha.remove());
     document.body.append(janelinha);
@@ -809,14 +1030,100 @@
    */
   function montarAchados(lista, fora, naTela, desenhar, vazio) {
     const nos = fora.length
-      ? fora.map(desenhar)
+      ? fora.map((x) => desenhar(x, false))
       : [criar("p", "vazio", vazio)];
     if (naTela.length) {
       nos.push(criar("div", "divisor",
                      `já na tela (${naTela.length}) — desmarque para tirar`));
-      nos.push(...naTela.map(desenhar));
+      // O segundo argumento diz que a linha é de um sinal que JÁ está no
+      // gráfico — só ali existe cor para mostrar e para trocar.
+      nos.push(...naTela.map((x) => desenhar(x, true)));
     }
     lista.replaceChildren(...nos);
+  }
+
+  /** O quadrinho com a cor de um sinal, e a listinha para trocá-la.
+   *
+   * Mesmo gesto do lápis do vínculo, e de propósito: clicar troca o quadrinho
+   * por um `<select>`, escolher aplica na hora, sair fecha. Dois controles
+   * parecidos na mesma janela precisam se comportar igual, senão cada um vira
+   * uma coisa nova para aprender.
+   *
+   * A cor do traço é a de agora, com a escolha do usuário já aplicada — é o
+   * que o quadrinho tem que mostrar, senão ele não serve de referência.
+   */
+  function caixaDeCor(painel, x) {
+    // `corDoSinal` resolve a cor contra os VIZINHOS do painel, então precisa
+    // do sinal desenhado — o do catálogo não tem fase nem posição.
+    const doPainel = () =>
+      (painel.sinais || []).find((s) => s.id === x.id) || { id: x.id };
+    const corAgora = () => corDoSinal(doPainel(), painel);
+
+    const botao = criar("button", "cor-do-sinal");
+    botao.type = "button";
+    botao.style.background = corAgora();
+    botao.title = "cor deste sinal no gráfico — clique para trocar";
+    botao.setAttribute("aria-label", "trocar a cor deste sinal");
+
+    botao.addEventListener("click", (evento) => {
+      // O clique não pode virar clique no `<label>`, senão marca a caixinha.
+      evento.preventDefault();
+      evento.stopPropagation();
+
+      // As cores em BOLINHAS, e não numa lista de nomes: "ocre" e "oliva" são
+      // a mesma palavra para quem está escolhendo a cor de uma curva. O que se
+      // está comparando é cor, então o que tem que estar na tela é cor.
+      const paleta = criar("span", "paleta");
+      const valendo = corEscolhida(painel.id, x.id) || corDoTokenAtual(painel, x);
+
+      let pronto = false;
+      const fechar = () => {
+        if (pronto) return;
+        pronto = true;
+        botao.style.background = corAgora();
+        paleta.replaceWith(botao);
+      };
+
+      for (const cor of PALETA) {
+        const bolinha = criar("button", "cor-opcao");
+        bolinha.type = "button";
+        bolinha.style.background = token(cor);
+        bolinha.title = cor === valendo ? "cor atual" : "usar esta cor";
+        if (cor === valendo) bolinha.classList.add("escolhida");
+        bolinha.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          escolherCor(painel.id, x.id, cor);
+          fechar();
+        });
+        paleta.append(bolinha);
+      }
+
+      // Sai do ar ao perder o foco para fora dela, e no Esc. `focusout` e não
+      // `blur` porque o foco anda ENTRE as bolinhas, e cada passo desses é um
+      // blur que fecharia a paleta na cara de quem está navegando por teclado.
+      paleta.addEventListener("focusout", (e) => {
+        if (!paleta.contains(e.relatedTarget)) fechar();
+      });
+      paleta.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") { e.stopPropagation(); fechar(); }
+      });
+
+      botao.replaceWith(paleta);
+      paleta.firstChild.focus();
+    });
+    return botao;
+  }
+
+  /** O TOKEN da cor que um sinal está usando agora neste painel.
+   *
+   * `corDoSinal` devolve o código da cor, que é o que se pinta; aqui é preciso
+   * o token, que é o que se compara com a paleta para marcar qual bolinha está
+   * valendo. Guardar o token, e não o código, é o que faz a escolha acompanhar
+   * o tema claro e o escuro.
+   */
+  function corDoTokenAtual(painel, x) {
+    return coresDoPainel(painel).get(x.id) || "";
   }
 
   //: Como a tela escreve de onde veio o vínculo de cada canal.
@@ -942,30 +1249,18 @@
     }
   }
 
-  /** Troca os sinais acrescentados a um gráfico e recarrega a janela. */
-  function trocarExtras(unidade, ids) {
-    guardarParaDesfazer();
-    extras[unidade] = ids;
-    carregar();                 // a escala do gráfico muda; a leitura vem junto
-  }
-
-  /** O catálogo: o que se pode acrescentar a UM gráfico.
+  /** O catálogo: o que se pode pôr NESTE painel.
    *
    * Duas abas, porque são duas coisas diferentes e a tela não pode deixar
-   * dúvida sobre qual é qual: em `canais` está o que o relé gravou; em
-   * `calculados`, o que saiu de uma conta nossa. Um relatório que diz
-   * "3I0 = 412 A" tem que deixar claro que aquele número é do OscLab.
+   * dúvida sobre qual é qual: em `IED` está o que o relé gravou; em `OscLab`,
+   * o que saiu de uma conta nossa. Um relatório que diz "3I0 = 412 A" tem que
+   * deixar claro que aquele número é do OscLab.
    */
-  function abrirCatalogo(grupo) {
-    const unidade = grupo.unidade_do_arquivo;
-    // Um canal da MESMA unidade do gráfico já tem lugar ali: marcar e desmarcar
-    // é mostrar e esconder, não acrescentar. Canal de outra unidade é que vira
-    // sinal acrescentado, no segundo eixo. Para quem usa, é a mesma caixinha.
-    const daCasa = (x) => x.familia === "canal" && x.unidade === unidade;
-    const escolhidos = new Set(extras[unidade] || []);
-    for (const x of (dados.catalogo || [])) {
-      if (daCasa(x) && !ocultos.has(x.canal)) escolhidos.add(x.id);
-    }
+  function abrirCatalogo(painel) {
+    // Os ids vêm do ARRANJO da tela; `painel.sinais` da resposta é a lista de
+    // sinais DESENHADOS, com série e escala dentro — outra coisa.
+    const meu = painelPorId(painel.id);
+    const escolhidos = new Set(meu ? meu.sinais : []);
     //: Correções de fase pendentes nesta janela: canal → fase pedida. Só vão
     //: para o servidor quando se aplica; o × desiste de tudo.
     const correcoes = new Map();
@@ -979,8 +1274,7 @@
 
     const abas = criar("div", "abas");
     const botoesDeAba = {};
-    for (const [chave, rotulo] of [["canal", "IED"],
-                                   ["calculado", "OscLab"]]) {
+    for (const [chave, rotulo] of [["canal", "IED"], ["calculado", "OscLab"]]) {
       const b = criar("button", "aba", rotulo);
       b.title = chave === "canal"
         ? "Os canais analógicos como o IED os gravou, com o nome que o "
@@ -1010,7 +1304,7 @@
                     || (x.origem || "").toUpperCase().includes(procura));
       const naTela = todos.filter((x) => escolhidos.has(x.id));
 
-      const desenhar = (x) => {
+      const desenhar = (x, naTela = false) => {
         const item = criar("label", "achado mudou");
         const marca = document.createElement("input");
         marca.type = "checkbox";
@@ -1021,20 +1315,25 @@
         });
         const nome = criar("span", "nome", x.nome);
         nome.title = x.descricao + (x.origem ? ` — de ${x.origem}` : "");
-        item.append(marca, nome);
+        item.append(marca);
+        // A cor só existe para quem já está desenhado: para os de fora ela
+        // ainda não foi decidida, e um quadrinho ali prometeria uma escolha
+        // que o programa não teria como cumprir.
+        if (naTela) item.append(caixaDeCor(painel, x));
+        item.append(nome);
         // Só o canal do IED leva coisa à direita: o vínculo com a
         // fundamental, que é conferência. De que canais saiu uma variável
-        // calculada fica no hover do nome — escrever isso em toda linha enchia
-        // a lista de texto repetido, e o que importa ali é o NOME do sinal.
+        // calculada fica no hover do nome — escrever isso em toda linha
+        // enchia a lista de texto repetido.
         if (x.familia === "canal") {
           item.append(vinculoDoCanal(x, correcoes, desenharLista));
         }
-        // Unidade diferente da do gráfico vai para o segundo eixo, e isso
+        // Unidade diferente da do painel vai para o segundo eixo, e isso
         // precisa estar escrito ANTES de o usuário marcar.
-        if (x.unidade !== unidade) {
+        if (painel.unidade_do_arquivo && x.unidade !== painel.unidade_do_arquivo) {
           const marcaEixo = criar("span", "quando", `→ ${x.unidade_mostrada}`);
           marcaEixo.title = "Outra unidade: este sinal vai para a escala da "
-                          + "direita, e é desenhado tracejado.";
+                          + "direita.";
           item.append(marcaEixo);
         }
         return item;
@@ -1058,20 +1357,14 @@
     aplicar.addEventListener("click", async () => {
       // A ordem é a do catálogo, não a de clique: a tela não pode mudar de
       // arrumação conforme a ordem em que alguém marcou as caixas.
-      const catalogo = dados.catalogo || [];
-      const ids = catalogo.filter((x) => escolhidos.has(x.id)).map((x) => x.id);
+      const ids = (dados.catalogo || [])
+        .filter((x) => escolhidos.has(x.id)).map((x) => x.id);
       janelinha.close();
       // As correções de fase vão PRIMEIRO e são gravadas no servidor: elas
       // mudam o nome de tudo que vem depois, inclusive dos sinais que se
       // acabou de escolher.
       if (correcoes.size) await gravarVinculos(correcoes);
-
-      for (const x of catalogo.filter(daCasa)) {
-        if (escolhidos.has(x.id)) ocultos.delete(x.canal);
-        else ocultos.add(x.canal);
-      }
-      trocarExtras(unidade, ids.filter((id) => !catalogo.some(
-        (x) => x.id === id && daCasa(x))));
+      trocarSinais(painel.id, ids);
     });
 
     const fechar = criar("button", "fechar", "×");
@@ -1081,12 +1374,36 @@
     fechar.addEventListener("click", () => janelinha.close());
 
     const cabeca = criar("div", "cabeca");
-    cabeca.append(criar("h3", null, `Sinais de ${grupo.titulo}`), campo, fechar);
+    cabeca.append(criar("h3", null, `Sinais de ${painel.nome}`), campo, fechar);
     janelinha.append(cabeca, abas, lista, aplicar);
     janelinha.addEventListener("close", () => janelinha.remove());
     document.body.append(janelinha);
     janelinha.showModal();
     campo.focus();
+  }
+
+  /** A unidade de um eixo, escrita na folga de cima.
+   *
+   * Menor e mais apagada que os números: quem lê o gráfico está lendo os
+   * números, e a unidade é a legenda deles. Chamar mais atenção que a medida
+   * seria inverter a hierarquia da tela.
+   *
+   * Devolve a fonte como estava — quem chama continua desenhando números
+   * depois, e uma fonte trocada em silêncio no meio do desenho é dos defeitos
+   * mais difíceis de achar.
+   */
+  function escreverUnidade(ctx, unidade, x, y, alinhamento) {
+    if (!unidade) return;
+    const fonte = ctx.font;
+    const alinhado = ctx.textAlign;
+    const opacidade = ctx.globalAlpha;
+    ctx.font = "10px ui-monospace, Consolas, monospace";
+    ctx.textAlign = alinhamento;
+    ctx.globalAlpha = 0.65;
+    ctx.fillText(unidade, x, y);
+    ctx.font = fonte;
+    ctx.textAlign = alinhado;
+    ctx.globalAlpha = opacidade;
   }
 
   //: Distância máxima, em pixels, entre o clique e o traço para o clique valer
@@ -1102,11 +1419,12 @@
    */
   function escolherSinal(canvas, x, y, acumular = false) {
     const bloco = blocos.find((b) => b._canvas === canvas);
-    if (!bloco) return;
+    if (!bloco || !bloco._painel) return;
 
-    const achado = bloco._digitais
-      ? digitalPerto(bloco._digitais, y)
-      : sinalPerto(bloco._grupo, canvas, x, y);
+    const painel = bloco._painel;
+    const achado = painel.tipo === "digital"
+      ? digitalPerto(painel, y)
+      : sinalPerto(painel, canvas, x, y);
 
     if (!achado) {
       if (!acumular) marcarSelecao([]);
@@ -1115,22 +1433,24 @@
     alternarSelecao(achado, acumular);
   }
 
-  /** Acrescenta, tira ou troca a seleção — a regra é uma só na tela inteira.
+  /** Põe ou tira um sinal da seleção. O MESMO comportamento nos três lugares
+   * que selecionam: o traço da onda, o nome da legenda e o nome da tira
+   * digital. Três gestos com três regras seria três coisas para aprender.
    *
-   * Sem Ctrl o clique TROCA (e clicar no que já estava escolhido desmarca);
-   * com Ctrl, acumula. Vale para o traço, para o nome na legenda e para o nome
-   * da tira digital: três lugares, um comportamento.
+   * Sem Ctrl o clique TROCA a seleção — é o gesto de "quero olhar este" — e
+   * clicar de novo no único escolhido desmarca, que é como se desfaz sem ter
+   * que mirar no vazio. Com Ctrl acumula, que é como se monta a comparação de
+   * duas ou três fases.
    */
   function alternarSelecao(alvo, acumular) {
-    const jaEstava = selecionados.some((x) => mesmoSinal(x, alvo));
+    const jaEstava = selecionados.some((s) => mesmoSinal(s, alvo));
     if (acumular) {
       marcarSelecao(jaEstava
-        ? selecionados.filter((x) => !mesmoSinal(x, alvo))
+        ? selecionados.filter((s) => !mesmoSinal(s, alvo))
         : [...selecionados, alvo]);
       return;
     }
-    const sozinho = jaEstava && selecionados.length === 1;
-    marcarSelecao(sozinho ? [] : [alvo]);
+    marcarSelecao(jaEstava && selecionados.length === 1 ? [] : [alvo]);
   }
 
   function marcarSelecao(novos) {
@@ -1140,22 +1460,22 @@
   }
 
   /** A tira digital sob o clique. Não há distância a medir: a faixa é a tira. */
-  function digitalPerto(digitais, y) {
+  function digitalPerto(painel, y) {
     const k = Math.floor((y - MARGEM.topo) / TIRA);
-    const tira = digitais.tiras[k];
+    const tira = painel.tiras[k];
     if (!tira) return null;
-    return { unidade: null, tipo: "digital", chave: tira.indice,
+    return { painel: painel.id, tipo: "digital", chave: tira.indice,
              nome: tira.nome };
   }
 
-  /** O sinal desenhado mais perto de `(x, y)` naquele gráfico, ou `null`.
+  /** O sinal desenhado mais perto de `(x, y)` naquele painel, ou `null`.
    *
    * Compara pela distância VERTICAL na coluna sob o cursor, e não pela
    * distância ao traço inteiro: num gráfico de onda as curvas se cruzam o
    * tempo todo, e o que o olho entende por "cliquei nesta" é a que está na
    * altura do clique naquele instante.
    */
-  function sinalPerto(grupo, canvas, x, y) {
+  function sinalPerto(painel, canvas, x, y) {
     const cssLargura = canvas.parentElement.clientWidth;
     const x0 = MARGEM.esq;
     const x1 = cssLargura - MARGEM.dir;
@@ -1179,50 +1499,38 @@
 
     let achado = null;
     let menor = PERTO;
-    const olhar = (serie, minimo, maximo, alvo) => {
+    for (const sinal of (painel.sinais || [])) {
+      const eixo = sinal.eixo === "dir" ? painel.eixo_dir : painel;
+      if (!eixo) continue;
       // Três colunas: a onda sobe muito dentro de uma coluna só, e o traço
       // desenhado liga uma à outra.
       for (const k of [i - 1, i, i + 1]) {
-        const v = serie[k];
+        const v = sinal.serie[k];
         if (v === null || v === undefined) continue;
-        const d = Math.abs(emY(v, minimo, maximo) - y);
-        if (d < menor) { menor = d; achado = alvo; }
+        const d = Math.abs(emY(v, eixo.minimo, eixo.maximo) - y);
+        if (d < menor) {
+          menor = d;
+          achado = { painel: painel.id, tipo: "sinal", chave: sinal.id,
+                     nome: sinal.sinal || sinal.nome };
+        }
       }
-    };
-
-    for (const canal of grupo.canais) {
-      olhar(canal.serie, grupo.minimo, grupo.maximo,
-            { unidade: grupo.unidade_do_arquivo, tipo: "canal",
-              chave: canal.indice, nome: canal.sinal || canal.nome });
-    }
-    for (const extra of (grupo.extras || [])) {
-      const eixo = extra.eixo === "dir" ? grupo.eixo_dir : grupo;
-      olhar(extra.serie, eixo.minimo, eixo.maximo,
-            { unidade: grupo.unidade_do_arquivo, tipo: "extra",
-              chave: extra.id, nome: extra.sinal });
     }
     return achado;
   }
 
   /** Tira da tela tudo que está selecionado, de uma vez.
    *
-   * Nada some do registro: canal do arquivo e digital voltam pelo «+ sinal»,
-   * onde aparecem desmarcados, e o Ctrl+Z traz tudo de volta de um golpe.
+   * Nada some do registro: o sinal volta pelo «+ sinal», onde aparece
+   * desmarcado, e o Ctrl+Z traz tudo de volta de um golpe.
    */
   function apagarSelecionados() {
     if (!selecionados.length) return;
     guardarParaDesfazer();
 
-    for (const { unidade, tipo, chave } of selecionados) {
-      if (tipo === "extra") {
-        extras[unidade] = (extras[unidade] || []).filter((x) => x !== chave);
-      } else if (tipo === "canal") {
-        ocultos.add(chave);
-      } else if (tipo === "digital") {
-        const atuais = digitaisNaTela ?? (dados.digitais
-          ? dados.digitais.escolhidos : []);
-        digitaisNaTela = atuais.filter((x) => x !== chave);
-      }
+    for (const { painel: id, chave } of selecionados) {
+      const painel = painelPorId(id);
+      if (!painel) continue;
+      painel.sinais = painel.sinais.filter((x) => x !== String(chave));
     }
     selecionados = [];
     carregar();
@@ -1231,134 +1539,276 @@
   /** Repinta o que já está montado. É o que roda a cada movimento do mouse. */
   function repintar() {
     for (const b of blocos) {
-      if (b._digitais) pintarDigitais(b._canvas, b._digitais);
-      else pintar(b._canvas, b._grupo, b._ultimo);
+      if (!b._painel) continue;
+      if (b._painel.tipo === "digital") pintarDigitais(b._canvas, b._painel);
+      else pintar(b._canvas, b._painel, b._ultimo);
     }
   }
 
-  function bloco(grupo, ultimo) {
+  function bloco(painel, ultimo) {
     const el = criar("section", "grafico");
 
-    const titulo = criar("h2", "grafico-titulo");
-    titulo.append(criar("span", null, grupo.titulo));
-
-    // A medida é de CADA gráfico: corrente em RMS e tensão em instantâneo ao
+    // A medida é de CADA painel: corrente em RMS e tensão em instantâneo ao
     // mesmo tempo é leitura comum numa falta. Discreto de propósito — é escolha
-    // de vista, não um dado do registro.
-    const medida = criar("button", "medida", grupo.medida === "rms" ? "RMS" : "instantâneo");
-    medida.classList.toggle("escolhido", grupo.medida === "rms");
-    medida.title = grupo.medida === "rms"
-      ? "Mostrando o eficaz da janela de um ciclo. Clique para ver o valor instantâneo."
-      : "Clique para ver o eficaz da janela de um ciclo em vez do valor instantâneo.";
-    medida.addEventListener("click", () => alternarMedida(grupo.unidade_do_arquivo));
+    // de vista, não um dado do registro. Ela manda nos canais do IED que estão
+    // aqui; sinal escolhido à mão carrega a própria grandeza.
+    // `botaoMedida`, e não `medida`: `medida` é o pacote da leitura dos
+    // cursores, lá em cima. Duas coisas diferentes com o mesmo nome é como se
+    // lê uma pelo outra ao mexer no arquivo meses depois.
+    const botaoMedida = criar("button", "medida",
+                              painel.medida === "rms" ? "RMS" : "instantâneo");
+    botaoMedida.classList.toggle("escolhido", painel.medida === "rms");
+    // Travado quando não há canal do IED neste gráfico para ele mandar — num
+    // painel só de componentes simétricas, por exemplo, que são fasor e já
+    // são eficazes. Fica visível e inerte, com a explicação no title, igual
+    // ao botão do filtro num registro que o relé já filtrou: esconder
+    // deixaria o usuário procurando um botão que ele viu nos outros gráficos.
+    botaoMedida.disabled = painel.medida_aplicavel === false;
+    botaoMedida.title = botaoMedida.disabled
+      ? "Não há canal do IED neste gráfico para medir em eficaz. As "
+        + "componentes simétricas são fasor e já saem em eficaz; sinais do "
+        + "OscLab carregam a grandeza no próprio nome."
+      : painel.medida === "rms"
+        ? "Mostrando o eficaz da janela de um ciclo dos canais do IED deste "
+          + "gráfico. Clique para ver o valor instantâneo."
+        : "Clique para ver os canais do IED deste gráfico em eficaz de um ciclo.";
+    botaoMedida.addEventListener("click", () => alternarMedida(painel.id));
 
-    // Acrescentar sinal a ESTE gráfico. O catálogo inteiro vem no pacote da
+    // Acrescentar sinal a ESTE painel. O catálogo inteiro vem no pacote da
     // janela; a busca só o separa em abas.
     const mais = criar("button", "medida", "+ sinal");
-    mais.title = "Acrescentar um canal do arquivo ou uma componente calculada "
-               + "a este gráfico.";
-    mais.addEventListener("click", () => abrirCatalogo(grupo));
-    titulo.append(medida, mais);
+    mais.title = "Acrescentar um canal do IED ou uma variável do OscLab a "
+               + "este gráfico.";
+    mais.addEventListener("click", () => abrirCatalogo(painel));
+
+    el.append(cabecalhoDoPainel(painel, [botaoMedida, mais]));
 
     // O que não coube: sinal de uma terceira unidade, que não tem eixo.
-    for (const aviso of (grupo.avisos || [])) {
-      titulo.append(criar("span", "aviso-extra", aviso));
+    for (const aviso of (painel.avisos || [])) {
+      el.querySelector(".grafico-titulo").append(
+        criar("span", "aviso-extra", aviso));
     }
-    el.append(titulo);
 
     const legenda = criar("ul", "legenda");
-    for (const canal of grupo.canais) {
+    for (const sinal of (painel.sinais || [])) {
       const item = criar("li");
-      item.dataset.tipo = "canal";
-      item.dataset.chave = String(canal.indice);
+      item.dataset.painel = painel.id;
+      item.dataset.chave = sinal.id;
+      const cor = corDoSinal(sinal, painel);
       const marca = criar("span", "marca");
-      marca.style.background = corDaFase(canal.fase);
-      item.append(marca, criar("span", "nome", canal.nome));
+      marca.style.background = cor;
+      item.append(marca);
 
-      // O nome do ARQUIVO acima, o nome do OSCLAB aqui — e a moldura é o que
-      // os separa a olho. Cada fabricante nomeia como quer (`Current IA`,
-      // `TC BUC 69kV:I A`, `IAW`); o nome padronizado é sempre o mesmo, e é
-      // por ele que o resto do programa vai falar dos canais quando calcular
-      // componentes simétricas e localização de falta. Quem analisa um evento
-      // com registros de dois fabricantes precisa ver os dois lado a lado.
-      if (canal.sinal) {
-        const nosso = criar("span", "padrao", canal.sinal);
-        nosso.style.color = corDaFase(canal.fase);
-        nosso.title = `${canal.sinal} — nome dado pelo OscLab. O canal do `
-                    + `arquivo é "${canal.nome}"; o sufixo diz o que foi feito `
-                    + "com ele. IA e IA RMS são sinais diferentes.";
+      // O nome do ARQUIVO à esquerda; o nome do OSCLAB na moldura em itálico.
+      // Cada fabricante nomeia como quer (`Current IA`, `TC BUC 69kV:I A`,
+      // `IAW`); o nome padronizado é sempre o mesmo, e é por ele que o resto
+      // do programa fala dos sinais. Quem analisa um evento com registros de
+      // dois fabricantes precisa ver os dois lado a lado.
+      const doArquivo = nomeDoArquivo(sinal);
+      if (doArquivo) item.append(criar("span", "nome", doArquivo));
+      if (sinal.sinal) {
+        const nosso = criar("span", "padrao", sinal.sinal);
+        nosso.style.color = cor;
+        nosso.title = `${sinal.sinal} — nome dado pelo OscLab. `
+                    + `${sinal.descricao || ""}`
+                    + (doArquivo ? "" : deQualCanal(sinal));
         item.append(nosso);
-      } else if (canal.fase) {
+      } else if (sinal.fase) {
         // Sem grandeza reconhecida não há nome padronizado: mostra só a fase,
         // sem moldura, porque um palpite com cara de nome nosso é pior que
         // nome nenhum.
-        item.append(criar("span", "fase", canal.fase));
+        item.append(criar("span", "fase", sinal.fase));
       }
 
       // A etiqueta marca a EXCEÇÃO, não a regra. Com o cabeçalho já dizendo
       // "primário", carimbar "prim." em todos os canais é ruído; o que precisa
-      // saltar aos olhos é o canal que NÃO pôde ser convertido, porque o
-      // arquivo não trouxe a relação de TC/TP.
-      if (dados.lado_pedido === "arquivo") {
-        if (canal.lado === "primario") item.append(criar("span", "lado", "prim."));
-      } else if (canal.lado !== dados.lado_pedido) {
-        const aviso = criar("span", "lado sem-relacao",
-                            canal.lado === "primario" ? "prim." : "sec.");
-        aviso.title = "O arquivo não declara a relação de TC/TP deste canal, "
-                    + "então o valor ficou como está — em "
-                    + (canal.lado === "primario" ? "primário." : "secundário.");
-        item.append(aviso);
+      // saltar aos olhos é o canal que NÃO pôde ser convertido.
+      // Pelo ÍNDICE, e não pelo nome do arquivo: `IA RMS` não mostra o nome
+      // do canal, mas continua vindo de um canal que pode não ter relação de
+      // TC/TP declarada — e o aviso é sobre o canal.
+      if (sinal.indice !== null && sinal.indice !== undefined) {
+        if (dados.lado_pedido === "arquivo") {
+          if (sinal.lado === "primario") item.append(criar("span", "lado", "prim."));
+        } else if (sinal.lado !== dados.lado_pedido) {
+          const aviso = criar("span", "lado sem-relacao",
+                              sinal.lado === "primario" ? "prim." : "sec.");
+          aviso.title = "O arquivo não declara a relação de TC/TP deste canal, "
+                      + "então o valor ficou como está — em "
+                      + (sinal.lado === "primario" ? "primário." : "secundário.");
+          item.append(aviso);
+        }
       }
-      selecionavel(item, grupo, "canal", canal.indice);
+
+      if (sinal.eixo === "dir") {
+        const ladoDir = criar("span", "lado", `→ ${sinal.unidade}`);
+        ladoDir.title = "Este sinal está na escala da DIREITA, porque a "
+                      + "unidade dele não é a do gráfico — a altura dele não "
+                      + "se compara com a dos outros traços.";
+        item.append(ladoDir);
+      }
+
+      // Sem × aqui: o nome da legenda é o alvo de ESCOLHER, e um alvo de
+      // apagar a poucos pixels dele é o par de botões que mais se erra. Tirar
+      // um sinal é escolher e apertar Delete, ou desmarcá-lo no «+ sinal».
+      selecionavel(item, painel, sinal.id);
       legenda.append(item);
     }
-
-    // Os acrescentados à mão, marcados como tais: o nome é só o nosso (não há
-    // nome de arquivo para um 3I0), e quem está no segundo eixo diz isso.
-    (grupo.extras || []).forEach((extra, i) => {
-      const item = criar("li", "extra");
-      item.dataset.tipo = "extra";
-      item.dataset.chave = extra.id;
-      const cor = corDoExtra(extra, i);
-      const marca = criar("span", extra.eixo === "dir" ? "marca tracejada" : "marca");
-      marca.style.background = cor;
-      const nosso = criar("span", "padrao", extra.sinal);
-      nosso.style.color = cor;
-      nosso.title = `${extra.sinal} — ${extra.descricao}`
-                  + (extra.origem ? ` (de ${extra.origem})` : "");
-      item.append(marca, nosso);
-      if (extra.eixo === "dir") {
-        const lado = criar("span", "lado", `→ ${extra.unidade}`);
-        lado.title = "Este sinal está na escala da DIREITA, porque a unidade "
-                   + "dele não é a do gráfico.";
-        item.append(lado);
-      }
-      const tirar = criar("button", "tirar", "×");
-      tirar.title = "tirar este sinal do gráfico";
-      tirar.addEventListener("click", () =>
-        trocarExtras(grupo.unidade_do_arquivo,
-                     (extras[grupo.unidade_do_arquivo] || [])
-                       .filter((x) => x !== extra.id)));
-      item.append(tirar);
-      selecionavel(item, grupo, "extra", extra.id);
-      legenda.append(item);
-    });
     el.append(legenda);
 
-    // A onda e a tabelinha daquele grupo, lado a lado e alinhadas. As células
+    // A onda e a tabelinha daquele painel, lado a lado e alinhadas. As células
     // existem desde já, com traços: criá-las ao pôr o cursor empurraria o
     // gráfico e a onda fugiria de debaixo do mouse no meio da medição.
     const corpo = criar("div", "grafico-corpo");
     const caixa = criar("div", "tela");
     const canvas = document.createElement("canvas");
     caixa.append(canvas);
-    corpo.append(caixa, tabelinha(grupo));
+    corpo.append(caixa, tabelinha(painel));
     el.append(corpo);
 
+    if (!(painel.sinais || []).length) {
+      el.append(criar("p", "vazio",
+        "Nenhum sinal neste gráfico. Use o «+ sinal» para escolher o que "
+        + "você quer ver aqui."));
+    }
+
     el._canvas = canvas;
-    el._grupo = grupo;
+    el._painel = painel;
     el._ultimo = ultimo;
     return el;
+  }
+
+  /** O nome do ARQUIVO, que só aparece quando o sinal É o canal do arquivo.
+   *
+   * Com o gráfico em RMS o traço não é mais `Current IA`: é `IA RMS`, que é
+   * conta nossa sobre aquele canal. Escrever os dois nomes ali afirmava que a
+   * curva era a que o relé gravou — e não é, ela tem um ciclo de janela em
+   * cima. O canal de origem continua no hover, que é onde se confere.
+   */
+  const nomeDoArquivo = (sinal) =>
+    (sinal.familia === "canal" ? (sinal.nome || "") : "");
+
+  /** " — de Current IA", para o hover de um sinal que o OscLab calculou. */
+  const deQualCanal = (sinal) => (sinal.nome ? ` — de ${sinal.nome}` : "");
+
+  //: As cores de FASE. São convenção de campo da distribuidora (azul-A,
+  //: âmbar-B, vermelho-C), e por isso não se distribuem a qualquer sinal:
+  //: quem as veste está afirmando de que fase é.
+  const CORES_DE_FASE = {
+    A: "--fase-a", B: "--fase-b", C: "--fase-c", N: "--fase-n",
+  };
+
+  //: As cores SEM fase, na ordem em que são distribuídas. É delas que sai a
+  //: cor de um sinal calculado, e é para cá que vai um canal cuja cor de fase
+  //: já está ocupada no gráfico — pôr `Voltage A-G` no âmbar da fase B para
+  //: não repetir o azul resolveria a repetição inventando uma fase.
+  //:
+  //: A ordem é por CROMA, da mais viva para a mais apagada (o número é o croma
+  //: em Lab, o menor dos dois temas). Não é gosto: as primeiras a sair são as
+  //: que mais se afastam do fundo e umas das outras, e um gráfico com três
+  //: sinais calculados merece as três melhores. O cinza é o último de todos —
+  //: quase sem cor, ele só se distingue pela posição, e serve de sobra.
+  //:
+  //: Nenhuma delas se confunde com cor de fase: a mais próxima guarda ΔE 16,2
+  //: do vermelho da fase C. Conferido com `tools/paleta.py`.
+  const CORES_NEUTRAS = [
+    "--traco-2",      // laranja  croma 78,6
+    "--traco-1",      // verde    croma 74,0
+    "--calculado-1",  // roxo     croma 59,7
+    "--calculado-2",  // rosa     croma 53,7
+    "--traco-3",      // oliva    croma 35,0
+    "--calculado-3",  // cinza    croma  7,1
+  ];
+
+  //: Tudo que a paleta oferece à mão, na ordem em que aparece nas bolinhas.
+  const PALETA = [
+    "--fase-a", "--fase-b", "--fase-c", "--fase-n",
+    ...CORES_NEUTRAS,
+  ];
+
+  /** A cor que o usuário escolheu para um sinal deste painel, ou `""`.
+   *
+   * Mora no arranjo da TELA, junto do nome e da ordem, e não vai ao servidor:
+   * cor não muda número nenhum. Por isso também entra no Ctrl+Z, que desfaz o
+   * que está na tela.
+   */
+  function corEscolhida(idDoPainel, idDoSinal) {
+    const meu = painelPorId(idDoPainel);
+    return (meu && meu.cores && meu.cores[idDoSinal]) || "";
+  }
+
+  function escolherCor(idDoPainel, idDoSinal, corToken) {
+    const meu = painelPorId(idDoPainel);
+    if (!meu) return;
+    guardarParaDesfazer();
+    meu.cores = meu.cores || {};
+    if (corToken) meu.cores[idDoSinal] = corToken;
+    else delete meu.cores[idDoSinal];
+    // Cor é rótulo: não muda número nenhum, então não precisa do servidor.
+    desenharTudo();
+  }
+
+  /** As cores de TODOS os sinais de um painel, decididas de uma vez.
+   *
+   * De uma vez porque a regra é sobre o conjunto: **um gráfico nunca repete
+   * cor**. Duas curvas da mesma cor no mesmo eixo não se distinguem, e era o
+   * que acontecia ao pôr `Current IA` e `Voltage A-G` no mesmo gráfico — as
+   * duas são fase A, as duas saíam azuis. Decidir sinal a sinal não tem como
+   * ver isso: a cor de um depende de quem já está lá.
+   *
+   * A ordem das decisões:
+   *
+   * 1. **A escolha do usuário manda**, e é reservada antes de tudo. Se ele
+   *    pediu duas iguais, são duas iguais — ele que sabe por quê.
+   * 2. Um canal com fase reconhecida fica com a **cor da fase dele**, se ela
+   *    ainda estiver livre.
+   * 3. Todo o resto — calculados, e canais cuja cor de fase já foi tomada —
+   *    pega a primeira cor NEUTRA livre. Nunca uma cor de fase: ela afirma uma
+   *    fase, e um sinal que a vestisse por sobra estaria mentindo.
+   *
+   * Passando de dez sinais num gráfico as cores se repetem, e não há o que
+   * fazer: cor que se distingue de outras nove, nos dois temas e sob
+   * daltonismo, é recurso escasso — ver `tools/paleta.py`. A legenda e a
+   * tabelinha sempre nomeiam o sinal, então a cor nunca carrega sozinha a
+   * identidade.
+   */
+  function coresDoPainel(painel) {
+    // O mapa é o mesmo para todos os sinais do painel, e `pintar` pergunta a
+    // cor de cada um a cada quadro do arrasto. Guardado por desenho: sem isto
+    // seria um mapa novo por curva por quadro.
+    if (painel._cores && painel._selo === seloDoDesenho) return painel._cores;
+    const mapa = new Map();
+    const usadas = new Set();
+    const lista = (painel && painel.sinais) || [];
+
+    for (const sinal of lista) {
+      const escolhida = corEscolhida(painel.id, sinal.id);
+      if (!escolhida) continue;
+      mapa.set(sinal.id, escolhida);
+      usadas.add(escolhida);
+    }
+
+    const primeiraLivre = () =>
+      CORES_NEUTRAS.find((x) => !usadas.has(x))
+      // Acabaram: volta ao começo. Repetir é ruim; não desenhar é pior.
+      || CORES_NEUTRAS[usadas.size % CORES_NEUTRAS.length];
+
+    for (const sinal of lista) {
+      if (mapa.has(sinal.id)) continue;
+      const daFase = CORES_DE_FASE[sinal.fase];
+      const cor = (daFase && !usadas.has(daFase)) ? daFase : primeiraLivre();
+      mapa.set(sinal.id, cor);
+      usadas.add(cor);
+    }
+    painel._selo = seloDoDesenho;
+    painel._cores = mapa;
+    return mapa;
+  }
+
+  /** A cor de um sinal dentro de um painel, já resolvida contra os vizinhos. */
+  function corDoSinal(sinal, painel) {
+    if (!painel) return token("--suave");
+    const cor = coresDoPainel(painel).get(sinal.id);
+    return cor ? (token(cor) || cor) : token("--suave");
   }
 
   /** Clicar no nome da legenda escolhe o sinal, igual a clicar no traço.
@@ -1367,12 +1817,10 @@
    * sobrepostas na pré-falta, acertar o traço certo com o mouse é sorte. O
    * nome na legenda está sempre no mesmo lugar e não se move.
    */
-  function selecionavel(item, grupo, tipo, chave) {
+  function selecionavel(item, painel, chave) {
     item.classList.add("clicavel");
     item.addEventListener("click", (evento) => {
-      // O × de tirar o sinal tem a sua própria ação.
-      if (evento.target.closest(".tirar")) return;
-      alternarSelecao({ unidade: grupo.unidade_do_arquivo, tipo, chave },
+      alternarSelecao({ painel: painel.id, tipo: "sinal", chave },
                       evento.ctrlKey || evento.metaKey);
     });
   }
@@ -1380,18 +1828,15 @@
   /** Acende na legenda o sinal escolhido no gráfico. */
   function marcarLegenda() {
     for (const b of blocos) {
-      if (!b._grupo) continue;
+      if (!b._painel) continue;
       for (const item of b.querySelectorAll(".legenda li")) {
-        const tipo = item.dataset.tipo;
-        const chave = tipo === "canal" ? Number(item.dataset.chave)
-                                       : item.dataset.chave;
-        item.classList.toggle("escolhido",
-                              estaSelecionado(b._grupo, tipo, chave));
+        item.classList.toggle("escolhido", selecionados.some(
+          (s) => s.painel === item.dataset.painel && s.chave === item.dataset.chave));
       }
     }
   }
 
-  /** A tabelinha de um grupo: os canais dele, sempre nas mesmas três colunas.
+  /** A tabelinha de um painel: os sinais dele, sempre nas mesmas três colunas.
    *
    * Cursor 1, cursor 2 e a diferença — em qualquer grandeza. A largura nunca
    * muda, e isso é de propósito: tabela que cresce e encolhe empurra o gráfico
@@ -1400,14 +1845,15 @@
    * O que não cabe em três colunas (ângulo, DC, distorção, e o instantâneo
    * quando o gráfico não está mostrando ele) fica no hover de cada valor.
    */
-  function tabelinha(grupo) {
+  function tabelinha(painel) {
     const tabela = criar("table", "mini");
 
     const cabeca = criar("tr");
     // O canto diz que grandeza está na tabela. NÃO é botão: quem manda é o
-    // cabeçalho da página, e dois lugares mandando na mesma coisa é como eles
-    // passam a discordar.
-    const canto = criar("th", "unidade", ROTULO[grupo.grandeza] || "valor");
+    // botão do próprio painel, e dois lugares mandando na mesma coisa é como
+    // eles passam a discordar.
+    const canto = criar("th", "unidade",
+                        painel.medida === "rms" ? "RMS" : "valor");
     canto.title = "Escolha a medida no topo deste gráfico e o filtro no cabeçalho";
     cabeca.append(canto);
 
@@ -1422,51 +1868,59 @@
     thead.append(cabeca);
 
     const tbody = criar("tbody");
-    for (const canal of grupo.canais) {
+    for (const sinal of (painel.sinais || [])) {
       const linha = criar("tr");
-
-      // O nome é botão: clicar nele faz o canal virar o zero dos ângulos, como
-      // no SIGRA. Ângulo absoluto não existe — alguém tem que ser o zero.
-      const nome = criar("th", canal.fase ? `canal fase-${canal.fase}` : "canal");
-      const alvo = criar("button", "refere", canal.nome);
-      // A coluna é estreita e o nome do arquivo é o que o engenheiro
-      // reconhece, então é ele que fica escrito. O nome do OscLab aparece na
-      // legenda logo acima, e aqui no title, para o par ficar sempre à mão.
-      alvo.title = (canal.padrao ? `${canal.padrao} — ${canal.nome}` : canal.nome)
-                 + " — clique para medir os ângulos a partir dele";
-      alvo.addEventListener("click", () => escolherReferencia(canal.indice));
-      nome.append(alvo);
-
-      const celas = [criar("td", "valor-1 vazio-valor", "—"),
-                     criar("td", "valor-2 vazio-valor", "—"),
-                     criar("td", "vazio-valor", "—")];
-
-      linha.append(nome, ...celas);
-      tbody.append(linha);
-      celulas.canais.push({ indice: canal.indice, celas, botao: alvo });
-    }
-
-    // Os acrescentados, casados pelo `id` e não pela posição: eles não estão
-    // na lista de canais do registro, e a ordem deles é a de quem escolheu.
-    for (const extra of (grupo.extras || [])) {
-      const linha = criar("tr", "extra");
       const nome = criar("th", "canal");
-      const etiqueta = criar("span", "padrao", extra.sinal);
-      etiqueta.title = `${extra.sinal} — ${extra.descricao}`;
-      nome.append(etiqueta);
-      // A unidade da linha, quando NÃO é a do gráfico. O rótulo da tabela vale
-      // para as outras linhas; sem este aviso, 72,8 V se leria como 72,8 A.
-      if (extra.unidade !== grupo.unidade) {
-        const un = criar("span", "unidade-extra", `(${extra.unidade})`);
-        un.title = "Este sinal está em outra unidade, na escala da direita.";
-        nome.append(un);
+      // O `th` continua sendo célula de tabela: pôr `display:flex` nele tirava
+      // a célula do cálculo de colunas do `table-layout: fixed`, e a primeira
+      // coluna encolhia para o tamanho do conteúdo — o nome sumia. Quem é
+      // flex é este invólucro.
+      const rotulo = criar("span", "rotulo");
+      nome.append(rotulo);
+      // A MESMA função de cor do desenho, e não uma classe de CSS por fase:
+      // era por isso que as componentes simétricas saíam cinzas na tabela e
+      // coloridas no gráfico. Tabela e traço têm que combinar por construção,
+      // senão voltam a divergir na próxima cor que se acrescente.
+      nome.style.color = corDoSinal(sinal, painel);
+
+      if (sinal.indice !== null && sinal.indice !== undefined) {
+        // O nome é botão: clicar nele faz o canal virar o zero dos ângulos,
+        // como no SIGRA. Ângulo absoluto não existe — alguém tem que ser o
+        // zero.
+        const alvo = criar("button", "refere",
+                           nomeDoArquivo(sinal) || sinal.sinal || sinal.nome);
+        alvo.title = (sinal.sinal ? `${sinal.sinal} — de ${sinal.nome}` : sinal.nome)
+                   + " — clique para medir os ângulos a partir dele";
+        alvo.addEventListener("click", () => escolherReferencia(sinal.indice));
+        rotulo.append(alvo);
+      } else {
+        const etiqueta = criar("span", "padrao", sinal.sinal);
+        etiqueta.title = `${sinal.sinal} — ${sinal.descricao || ""}`;
+        rotulo.append(etiqueta);
       }
+
+      // A unidade em TODA linha, e não só na que está no segundo eixo. Desde
+      // que um gráfico pode misturar sinais, a unidade deixou de ser dedutível
+      // do título: `81,67` numa linha de V1 se lê como 81 V secundários quando
+      // são 81 kV primários — erro de três ordens de grandeza que não tem nada
+      // na tela para denunciá-lo.
+      if (sinal.unidade) {
+        const un = criar("span", "unidade-extra", `(${sinal.unidade})`);
+        un.title = sinal.eixo === "dir"
+          ? "Este sinal está na escala da DIREITA, porque a unidade dele não é "
+            + "a do gráfico."
+          : `valores em ${sinal.unidade}`;
+        rotulo.append(un);
+      }
+
       const celas = [criar("td", "valor-1 vazio-valor", "—"),
                      criar("td", "valor-2 vazio-valor", "—"),
                      criar("td", "vazio-valor", "—")];
       linha.append(nome, ...celas);
       tbody.append(linha);
-      celulas.extras.push({ id: extra.id, celas });
+      celulas.push({ painel: painel.id, id: sinal.id, celas,
+                     botao: nome.querySelector(".refere"),
+                     indice: sinal.indice });
     }
 
     // A última linha é o tempo, e o rótulo dela é o botão que troca a unidade.
@@ -1543,63 +1997,33 @@
     }
   }
 
-  function lerMedidasGuardadas() {
-    try {
-      const guardado = JSON.parse(localStorage.getItem("osclab:medidas") || "{}");
-      const limpo = {};
-      for (const [unidade, medida] of Object.entries(guardado)) {
-        if (medida === "rms") limpo[unidade] = "rms";
-      }
-      return limpo;
-    } catch {
-      return {};
-    }
-  }
-
   function guardar(chave, valor) {
     try {
       localStorage.setItem(chave, valor);
     } catch { /* não poder lembrar não impede de usar */ }
   }
 
-  /** O que o servidor precisa saber para montar cada grupo: `A:rms,kV:rms`. */
-  const medidasEmTexto = () =>
-    Object.entries(medidas).map(([u, m]) => `${u}:${m}`).join(",");
-
-  //: O que o usuário acrescentou a cada gráfico: unidade do arquivo → ids de
-  //: sinal. Nada entra aqui sozinho — ver `plot/catalogo.py`.
-  let extras = {};
-
-  //: Os canais que ele TIROU do gráfico, por índice no registro. Vão para o
-  //: servidor porque a escala vertical depende de quem está desenhado: esconder
-  //: só no navegador deixaria o eixo esticado por um canal que não se vê.
-  let ocultos = new Set();
-
-  //: Os sinais selecionados por clique. Cada um é `{unidade, tipo, chave}`;
-  //: `tipo` é `canal`, `extra` ou `digital`. Lista, e não um só, porque
-  //: comparar duas fases é o gesto mais comum do ofício — e porque apagar
-  //: quatro sinais um a um é quatro vezes o mesmo trabalho.
+  //: Os sinais selecionados por clique. Cada um é `{painel, tipo, chave}`;
+  //: `tipo` é `sinal` ou `digital`. Lista, e não um só, porque comparar duas
+  //: fases é o gesto mais comum do ofício — e porque apagar quatro sinais um a
+  //: um é quatro vezes o mesmo trabalho.
   let selecionados = [];
 
-  //: A pilha do desfazer. Cada item é uma fotografia do que está na tela.
-  //: Ações que mexem em DADO gravado (a correção de fase) ficam de fora: o
-  //: Ctrl+Z desfaz o que se está vendo, não o que se decidiu.
+  //: A pilha do desfazer. Cada item é uma fotografia do ARRANJO. Ações que
+  //: mexem em dado gravado (a correção de fase) ficam de fora: o Ctrl+Z desfaz
+  //: o que se está vendo, não o que se decidiu.
   const desfazer = [];
 
   const mesmoSinal = (a, b) =>
-    a.tipo === b.tipo && a.chave === b.chave && a.unidade === b.unidade;
+    a.tipo === b.tipo && a.chave === b.chave && a.painel === b.painel;
 
-  const estaSelecionado = (grupo, tipo, chave) =>
+  const estaSelecionado = (painel, tipo, chave) =>
     selecionados.some((s) => mesmoSinal(s, {
-      unidade: grupo ? grupo.unidade_do_arquivo : null, tipo, chave }));
+      painel: painel ? painel.id : null, tipo, chave }));
 
-  /** Guarda o estado atual da tela para o Ctrl+Z. */
+  /** Guarda o arranjo atual para o Ctrl+Z. */
   function guardarParaDesfazer() {
-    desfazer.push({
-      extras: JSON.parse(JSON.stringify(extras)),
-      ocultos: [...ocultos],
-      digitais: digitaisNaTela === null ? null : [...digitaisNaTela],
-    });
+    desfazer.push(JSON.parse(JSON.stringify(paineis)));
     // Vinte passos é mais do que qualquer análise precisa, e segura a memória.
     if (desfazer.length > 20) desfazer.shift();
   }
@@ -1607,39 +2031,10 @@
   function desfazerUltimo() {
     const antes = desfazer.pop();
     if (!antes) return;
-    extras = antes.extras;
-    ocultos = new Set(antes.ocultos);
-    digitaisNaTela = antes.digitais;
+    paineis = antes;
     selecionados = [];
     carregar();
   }
-
-  const extrasEmTexto = () =>
-    Object.entries(extras)
-      .filter(([, ids]) => ids && ids.length)
-      .map(([u, ids]) => `${u}=${ids.join(",")}`).join(";");
-
-  //: As cores dos sinais CALCULADOS. Não são fase nenhuma — pintá-los com a
-  //: cor de uma fase faria 3I0 se passar por IA no gráfico de correntes.
-  const CORES_CALCULADAS = ["--calculado-1", "--calculado-2", "--calculado-3"];
-
-  function corDoExtra(extra, ordem) {
-    if (extra.familia === "calculado") {
-      return token(CORES_CALCULADAS[ordem % CORES_CALCULADAS.length]);
-    }
-    // Canal acrescentado à mão continua com a cor da fase dele: é a mesma
-    // corrente, e trocar a cor faria parecer outro sinal.
-    const achado = (dados.catalogo || []).find((x) => x.id === extra.id);
-    return corDaFase(faseDoNome(achado ? achado.nome : extra.sinal));
-  }
-
-  /** A letra da fase no começo do nome do sinal (`IA RMS` → `A`). */
-  function faseDoNome(nome) {
-    const casou = /^[IV]([ABCN])\b/.exec((nome || "").trim());
-    return casou ? casou[1] : "";
-  }
-
-  const medidaDe = (grupo) => medidas[grupo.unidade_do_arquivo] || "instantaneo";
 
   function alternarFiltro() {
     if (filtroTravado()) return;
@@ -1649,10 +2044,10 @@
     recarregar();
   }
 
-  function alternarMedida(unidade) {
-    if (medidas[unidade] === "rms") delete medidas[unidade];
-    else medidas[unidade] = "rms";
-    guardar("osclab:medidas", JSON.stringify(medidas));
+  function alternarMedida(id) {
+    const painel = painelPorId(id);
+    if (!painel) return;
+    painel.medida = painel.medida === "rms" ? "instantaneo" : "rms";
     recarregar();
   }
 
@@ -1780,7 +2175,7 @@
 
   // --- desenho ------------------------------------------------------------
 
-  function pintar(canvas, grupo, ultimo) {
+  function pintar(canvas, painel, ultimo) {
     const cssLargura = canvas.parentElement.clientWidth;
     const cssAltura = ALTURA + (ultimo ? MARGEM.baixo : 8);
     const dpr = window.devicePixelRatio || 1;
@@ -1809,7 +2204,7 @@
     const emX = (t) =>
       x0 + ((t - tMin) / (tMax - tMin || 1)) * (x1 - x0) + arrastoPx;
     const emY = (v) =>
-      y1 - ((v - grupo.minimo) / (grupo.maximo - grupo.minimo || 1)) * (y1 - y0);
+      y1 - ((v - painel.minimo) / (painel.maximo - painel.minimo || 1)) * (y1 - y0);
 
     const corLinha = token("--linha");
     const corSuave = token("--suave");
@@ -1824,7 +2219,7 @@
     ctx.fillStyle = corSuave;
     ctx.lineWidth = 1;
     ctx.textAlign = "right";
-    for (const marca of grupo.marcacoes) {
+    for (const marca of painel.marcacoes) {
       const y = Math.round(emY(marca)) + 0.5;
       ctx.globalAlpha = marca === 0 ? 0.9 : 0.4;
       ctx.beginPath();
@@ -1832,15 +2227,22 @@
       ctx.lineTo(x1, y);
       ctx.stroke();
       ctx.globalAlpha = 1;
-      ctx.fillText(formatar(marca, grupo.casas), x0 - 8, y);
+      ctx.fillText(formatar(marca, painel.casas), x0 - 8, y);
     }
+
+    // A unidade do eixo, na folga de cima — onde não há número nem curva.
+    // Discreta de propósito: ela não é uma medida, é o que dá sentido a todas
+    // as outras. Existe porque um gráfico pode misturar sinais e o título
+    // deixou de dizer a unidade: `81,67` num eixo mudo se lê como 81 V quando
+    // são 81 kV, e três ordens de grandeza não podem depender de memória.
+    escreverUnidade(ctx, painel.unidade, x0 - 8, y0 - MARGEM.topo / 2, "right");
 
     // --- o segundo eixo, à direita ---------------------------------------
     //
     // Sem linha de grade própria: duas grades cruzadas na mesma área viram
     // xadrez e nenhuma das duas se lê. A grade é a da esquerda; a régua da
     // direita são os números, alinhados nas marcações DELA.
-    const dir = grupo.eixo_dir;
+    const dir = painel.eixo_dir;
     const emYdir = (v) => dir
       ? y1 - ((v - dir.minimo) / (dir.maximo - dir.minimo || 1)) * (y1 - y0)
       : y1;
@@ -1849,6 +2251,7 @@
       for (const marca of dir.marcacoes) {
         ctx.fillText(formatar(marca, dir.casas), x1 + 8, Math.round(emYdir(marca)));
       }
+      escreverUnidade(ctx, dir.unidade, x1 + 8, y0 - MARGEM.topo / 2, "left");
       ctx.textAlign = "right";
     }
 
@@ -1891,56 +2294,37 @@
     // que se quer é destacar UM traço sem perder de vista onde ele passa em
     // relação aos vizinhos — tirar os vizinhos da tela tiraria justamente a
     // comparação que fez alguém clicar ali.
-    const haEscolha = selecionados.some(
-      (x) => x.unidade === grupo.unidade_do_arquivo);
+    //
+    // O sinal do segundo eixo era desenhado TRACEJADO, como aviso de que a
+    // altura dele não se compara com a dos outros. Saiu: desde que o gráfico
+    // nunca repete cor, a cor sozinha já separa as curvas, e o tracejado
+    // gastava a única variação de traço que sobrava — que vale mais guardada
+    // para algo que ainda não existe. Quem está no segundo eixo continua
+    // dizendo isso na legenda (`→ kV`), na tabelinha e no próprio eixo.
+    const haEscolha = selecionados.some((x) => x.painel === painel.id);
     ctx.lineJoin = "round";
-    for (const canal of grupo.canais) {
-      const escolhido = estaSelecionado(grupo, "canal", canal.indice);
+    for (const sinal of (painel.sinais || [])) {
+      const escolhido = estaSelecionado(painel, "sinal", sinal.id);
+      ctx.save();
       ctx.globalAlpha = haEscolha && !escolhido ? 0.3 : 1;
       ctx.lineWidth = escolhido ? 2.6 : 1.4;
-      ctx.strokeStyle = corDaFase(canal.fase);
+      ctx.strokeStyle = corDoSinal(sinal, painel);
+      const paraY = sinal.eixo === "dir" ? emYdir : emY;
       ctx.beginPath();
       let comecou = false;
-      const s = canal.serie;
+      const s = sinal.serie;
       for (let i = 0; i < s.length; i++) {
         const v = s[i];
         if (v === null) { comecou = false; continue; }
         const x = emX(tempo[i]);
-        const y = emY(v);
-        if (comecou) ctx.lineTo(x, y);
-        else { ctx.moveTo(x, y); comecou = true; }
-      }
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-
-    // --- os sinais acrescentados à mão ------------------------------------
-    //
-    // Quem está no segundo eixo é desenhado TRACEJADO. Não é enfeite: ele está
-    // numa escala diferente da do resto do gráfico, e a altura dele não se
-    // compara com a dos outros traços. O tracejado é o aviso.
-    (grupo.extras || []).forEach((extra, i) => {
-      const escolhido = estaSelecionado(grupo, "extra", extra.id);
-      ctx.save();
-      ctx.globalAlpha = haEscolha && !escolhido ? 0.3 : 1;
-      ctx.strokeStyle = corDoExtra(extra, i);
-      ctx.lineWidth = escolhido ? 2.8 : 1.6;
-      if (extra.eixo === "dir") ctx.setLineDash([7, 4]);
-      const paraY = extra.eixo === "dir" ? emYdir : emY;
-      ctx.beginPath();
-      let comecou = false;
-      const s = extra.serie;
-      for (let k = 0; k < s.length; k++) {
-        const v = s[k];
-        if (v === null) { comecou = false; continue; }
-        const x = emX(tempo[k]);
         const y = paraY(v);
         if (comecou) ctx.lineTo(x, y);
         else { ctx.moveTo(x, y); comecou = true; }
       }
       ctx.stroke();
       ctx.restore();
-    });
+    }
+    ctx.globalAlpha = 1;
 
     // --- os cursores de medição: a linha ----------------------------------
     // A etiqueta numerada vem depois, fora do recorte e fora do gráfico.
@@ -2057,10 +2441,6 @@
     if (referencia !== null) p.set("refere", String(referencia));
     // A mesma grandeza do gráfico: a tabelinha nunca mostra outra coisa.
     if (filtro) p.set("filtro", "1");
-    const escolhas = medidasEmTexto();
-    if (escolhas) p.set("medidas", escolhas);
-    const acrescentados = extrasEmTexto();
-    if (acrescentados) p.set("extras", acrescentados);
     cursores.forEach((t, k) => {
       if (t === null) return;
       p.set(`t${k + 1}`, String(t));
@@ -2069,7 +2449,7 @@
     });
 
     try {
-      const r = await fetch(`/api/onda/${sha}/leitura?${p}`);
+      const r = await fetch(`/api/onda/${sha}/leitura?${p}`, pedidoComLayout());
       if (r.ok) {
         medida = await r.json();
 
@@ -2131,37 +2511,21 @@
   function mostrarLeitura() {
     const c = medida ? medida.cursores : [null, null];
 
-    // Os valores chegam numa lista por cursor, na ordem dos canais analógicos
-    // do registro; as tabelinhas foram montadas na mesma ordem, grupo a grupo.
-    // Até a subtração vem pronta: quantas casas mostrar e a diferença entre os
-    // dois instantes são decisões de `plot/leitura.py`, onde há teste.
-    //
-    // O casamento é por ÍNDICE do canal no registro, nunca por posição: os
-    // grupos reordenam os canais (correntes juntas, tensões juntas) e a leitura
-    // vem na ordem do arquivo. Num registro que intercale as duas, casar por
-    // posição poria a tensão na linha da corrente.
-    const diferencas = medida && medida.entre ? medida.entre.valores : null;
+    // Tudo casado pelo ID DO SINAL — o mesmo id que o painel pediu. Era por
+    // POSIÇÃO enquanto a tabelinha mostrava os canais do arquivo na ordem do
+    // arquivo; com painéis, o mesmo canal pode estar em dois deles com medidas
+    // diferentes, e posição deixou de identificar coisa nenhuma.
+    const diferencas = medida && medida.entre ? (medida.entre.sinais || {}) : null;
     const escolhido = medida && medida.referencia ? medida.referencia.indice : null;
 
-    for (const { indice, celas, botao } of celulas.canais) {
-      botao.classList.toggle("escolhido", indice === escolhido);
-
+    for (const { id, celas, botao, indice } of celulas) {
+      if (botao) botao.classList.toggle("escolhido", indice === escolhido);
       for (const k of [0, 1]) {
-        const v = c[k] ? c[k].valores[indice] : null;
+        const v = c[k] && c[k].sinais ? c[k].sinais[id] : null;
         escrever(celas[k], v);
         celas[k].title = v ? emPalavras(v) : "";
       }
-      escrever(celas[2], diferencas && diferencas[indice]);
-    }
-
-    const difExtras = medida && medida.entre ? (medida.entre.extras || {}) : null;
-    for (const { id, celas } of celulas.extras) {
-      for (const k of [0, 1]) {
-        const v = c[k] && c[k].extras ? c[k].extras[id] : null;
-        escrever(celas[k], v);
-        celas[k].title = v ? emPalavras(v) : "";
-      }
-      escrever(celas[2], difExtras && difExtras[id]);
+      escrever(celas[2], diferencas && diferencas[id]);
     }
 
     mostrarTempo(c);
@@ -2296,8 +2660,8 @@
     if (!a) return false;
     if (a.x < a.x0 || a.x > a.x1) return false;
     const bloco = blocos.find((b) => b._canvas === a.canvas);
-    const embaixo = bloco && bloco._digitais
-      ? MARGEM.topo + bloco._digitais.tiras.length * TIRA
+    const embaixo = bloco && bloco._painel && bloco._painel.tipo === "digital"
+      ? MARGEM.topo + Math.max(bloco._painel.tiras.length, 1) * TIRA
       : ALTURA - 4;
     return a.y >= MARGEM.topo && a.y <= embaixo;
   }
@@ -2473,6 +2837,15 @@
 
   document.addEventListener("keydown", (evento) => {
     if (!dados) return;
+    // Digitando num campo, as teclas são do campo. Sem isto, renomear um
+    // gráfico com um número no nome era impossível: o `1` ia parar no cursor
+    // de medição e nunca chegava ao texto — e o Delete apagava sinal em vez
+    // de letra.
+    const alvo = evento.target;
+    if (alvo && (alvo.tagName === "INPUT" || alvo.tagName === "TEXTAREA"
+                 || alvo.isContentEditable)) {
+      return;
+    }
 
     // Ctrl+Z desfaz a última mudança do que está na tela: sinal tirado, sinal
     // acrescentado, digital escondido. Não desfaz correção de fase — aquilo é

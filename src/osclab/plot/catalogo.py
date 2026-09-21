@@ -137,7 +137,7 @@ class Sinal:
     descricao: str
     #: Para `familia == "calculado"`: de que canal (ou canais) do IED ele saiu.
     origem: str = ""
-    #: Só para `familia == "canal"`: a variável fundamental que o OscLab
+    #: A variável fundamental que o OscLab vinculou ao canal de origem
     #: vinculou a este canal (`IA`), ou `""` quando não reconheceu. É a
     #: conferência do vínculo em que todas as contas se apoiam.
     fundamental: str = ""
@@ -217,6 +217,11 @@ def de_registro(registro: Record, lado: str = "arquivo") -> list[Sinal]:
                 conta=conta,
                 descricao=_O_QUE_E[grandeza],
                 origem=canal.name,
+                # De que canal ele SAIU. `IA RMS` continua sendo o canal 0
+                # visto de outro jeito — e é por este campo que o desenho e a
+                # tabelinha acham a fase, o lado e o nome do arquivo dele.
+                canal=canal.index,
+                grandeza_do_canal=fases.grandeza_da_unidade(unidade),
             ))
 
     nomes_de_canal = {c.index: c.name for c in registro.analog_channels}
@@ -253,23 +258,35 @@ def por_id(registro: Record, lado: str = "arquivo") -> dict[str, Sinal]:
     return {s.id: s for s in de_registro(registro, lado)}
 
 
-def de_texto(texto: str | None) -> dict[str, list[str]]:
-    """Lê `A=c3:rms,q0:1:rms;kV=q1:0:rms` — o que a tela manda na URL.
+def efetivo(identidade: str, medida: str, filtro: bool,
+            disponiveis: dict[str, Sinal]) -> Sinal | None:
+    """O sinal que um canal do IED vira depois dos botões do painel.
 
-    A chave é a unidade DO ARQUIVO do gráfico, que é como os grupos são
-    formados. Tudo que não casar é ignorado em silêncio: a tela manda texto, e
-    o servidor não confia nele.
+    Os dois botões da tela — o filtro de 60 Hz, no cabeçalho, e o
+    instantâneo/RMS de cada painel — não mudam QUAL canal está no gráfico:
+    mudam o que se está olhando dele. `Current IA` com RMS ligado é `IA RMS`,
+    que é um sinal do catálogo com id próprio.
+
+    Fazer essa troca aqui, num lugar só, é o que impede o desenho e a
+    tabelinha do cursor de responderem diferente à mesma combinação de botões.
+
+    Sinal que o usuário escolheu **à mão** não entra nesta conta: ele já disse
+    o que queria, e um botão em outro canto da tela não pode redefinir isso.
     """
-    saida: dict[str, list[str]] = {}
-    for parte in (texto or "").split(";"):
-        unidade, _, lista = parte.partition("=")
-        unidade = unidade.strip()
-        if not unidade:
-            continue
-        ids = [x.strip() for x in lista.split(",") if x.strip()]
-        if ids:
-            saida.setdefault(unidade, []).extend(ids)
-    return saida
+    original = disponiveis.get(identidade)
+    if original is None or original.familia != "canal":
+        return original
+
+    grandeza = sinais.resolver(filtro, medida)
+    if grandeza == "instantaneo":
+        return original
+    # Num registro já filtrado não existe `v:rms` — o eficaz de um ciclo ali JÁ
+    # é o da fundamental, e é ela que responde. Ver `OFERTA_DE_FILTRADO`.
+    for tentativa in (grandeza, "fundamental"):
+        achado = disponiveis.get(f"v{original.canal}:{tentativa}")
+        if achado is not None:
+            return achado
+    return original
 
 
 # ---------------------------------------------------------------------------

@@ -34,6 +34,19 @@
   --calculado-2: #e86aa8;
   --calculado-3: #8aa0a6;
 
+  /* As cores de SOBRA. Entram quando um gráfico tem mais sinais do que as
+     nomeadas acima — e um gráfico nunca repete cor: duas curvas da mesma cor
+     no mesmo eixo não se distinguem, e era exatamente o que acontecia ao pôr
+     `Current IA` e `Voltage A-G` juntos, porque as duas são fase A.
+
+     Escolhidas com `tools/paleta.py`, não a olho: ΔE2000 mínimo de 15 na visão
+     normal e de 9 sob protanopia e deuteranopia, contra TODAS as cores acima,
+     nos DOIS temas — e o mesmo código serve os dois, porque passou no
+     contraste contra os dois fundos. */
+  --traco-1: #50a824;
+  --traco-2: #e65d19;
+  --traco-3: #75783a;
+
   --bom: #2c9b75;
   --atencao: #b8860b;
   --ruim: #d45560;
@@ -71,6 +84,19 @@
   --calculado-1: #6b3fa0;
   --calculado-2: #a8306a;
   --calculado-3: #57696b;
+
+  /* As cores de SOBRA. Entram quando um gráfico tem mais sinais do que as
+     nomeadas acima — e um gráfico nunca repete cor: duas curvas da mesma cor
+     no mesmo eixo não se distinguem, e era exatamente o que acontecia ao pôr
+     `Current IA` e `Voltage A-G` juntos, porque as duas são fase A.
+
+     Escolhidas com `tools/paleta.py`, não a olho: ΔE2000 mínimo de 15 na visão
+     normal e de 9 sob protanopia e deuteranopia, contra TODAS as cores acima,
+     nos DOIS temas — e o mesmo código serve os dois, porque passou no
+     contraste contra os dois fundos. */
+  --traco-1: #50a824;
+  --traco-2: #e65d19;
+  --traco-3: #75783a;
 
   --bom: #157f5c;
   --atencao: #b8860b;
@@ -497,7 +523,10 @@ footer a { color: var(--destaque); }
 }
 
 #graficos.com-cursores .grafico-corpo {
-  grid-template-columns: minmax(0, 1fr) 248px;
+  /* 268 e não 248: a unidade em cada linha (`IA 60Hz RMS (A)`) precisa dos
+     vinte pixels a mais, e tirá-los das colunas de número faria `-116,9`
+     cortar — número cortado numa tabela de laudo é pior que gráfico estreito. */
+  grid-template-columns: minmax(0, 1fr) 268px;
   gap: 14px;
 }
 
@@ -524,9 +553,10 @@ footer a { color: var(--destaque); }
 .mini th:first-child, .mini td:first-child {
   text-align: left;
   padding-left: 0;
-  /* Cabe "Voltage A-G" e "Current IN"; o que passar disso corta com reticências
-     e o nome inteiro aparece no title. Nome de canal não se abrevia sozinho. */
-  width: 35%;
+  /* Cabe "IA 60Hz RMS (A)"; o que passar disso corta o NOME com reticências —
+     nunca a unidade — e o nome inteiro aparece no title. Nome de canal não se
+     abrevia sozinho. */
+  width: 40%;
 }
 
 .mini thead th {
@@ -542,6 +572,24 @@ footer a { color: var(--destaque); }
 .mini .vazio-valor { color: var(--linha); }
 
 .mini .canal { color: var(--suave); font-weight: 400; }
+
+/* A primeira coluna é uma linha de duas peças: o nome, que encolhe e corta com
+   reticências, e a unidade, que NÃO encolhe. A ordem importa — deixando o
+   corte decidir sozinho, `Current IA (A)` virava `Current IA (…` e a unidade,
+   que é justamente o que impede ler 81 kV como 81 V, era a primeira a sumir. */
+.mini tbody th.canal > .rotulo {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mini tbody th.canal > .rotulo > :first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* O nome do canal é botão: clicar faz dele o zero dos ângulos, como no SIGRA. */
 .mini .refere {
@@ -688,7 +736,11 @@ footer a { color: var(--destaque); }
   gap: 10px;
 }
 
-.grafico-titulo .medida {
+/* O mesmo botãozinho discreto em dois lugares: a medida no cabeçalho do
+   gráfico e os «+ gráfico» do fim da lista. Um só desenho porque fazem a mesma
+   figura — um controle que não disputa atenção com o conteúdo. */
+.grafico-titulo .medida,
+.novo-painel .medida {
   font-family: var(--mono);
   font-size: 12px;
   font-weight: 400;
@@ -704,7 +756,8 @@ footer a { color: var(--destaque); }
   cursor: pointer;
 }
 
-.grafico-titulo .medida:hover {
+.grafico-titulo .medida:hover,
+.novo-painel .medida:hover {
   color: var(--tinta);
   border-color: var(--suave);
 }
@@ -721,6 +774,14 @@ footer a { color: var(--destaque); }
    deixaria o usuário procurando um botão que ele viu antes. */
 .lado.travado button.escolhido { opacity: .75; }
 .lado.travado { cursor: help; }
+
+/* O mesmo para a medida de um gráfico sem canal do IED: não há o que medir em
+   eficaz ali. `help` e não `default` porque a explicação está no title, e o
+   cursor é o que convida a ler. */
+.grafico-titulo .medida:disabled {
+  opacity: .45;
+  cursor: help;
+}
 
 
 /* --- tiras digitais ------------------------------------------------------ */
@@ -852,25 +913,6 @@ footer a { color: var(--destaque); }
 
 /* --- sinais acrescentados à mão ------------------------------------------ */
 
-/* A marca tracejada repete, na legenda, o traço do gráfico: o sinal está na
-   escala da DIREITA e a altura dele não se compara com a dos outros. */
-.legenda .marca.tracejada {
-  background-image: repeating-linear-gradient(90deg,
-    rgba(0, 0, 0, 0) 0 3px, var(--fundo) 3px 5px);
-}
-
-.legenda .tirar {
-  border: 0;
-  background: none;
-  color: var(--suave);
-  font-size: 14px;
-  line-height: 1;
-  padding: 0 2px;
-  cursor: pointer;
-}
-
-.legenda .tirar:hover { color: var(--ruim); }
-
 /* Sinal de uma terceira unidade não tem eixo para ir. O aviso fica no título
    do gráfico, onde está o botão que o acrescentou. */
 .grafico-titulo .aviso-extra {
@@ -887,10 +929,15 @@ footer a { color: var(--destaque); }
 /* A unidade de um sinal acrescentado que não é a do gráfico. Discreta, mas
    presente: o rótulo da tabela vale para as outras linhas, e sem este aviso
    72,8 V se leria como 72,8 A. */
-.mini tr.extra .unidade-extra {
+/* A unidade de cada linha. Escopo aberto de propósito: estava preso a
+   `tr.extra`, uma classe que sumiu com os painéis, e a unidade ficava sem
+   estilo nenhum. `flex: none` é o que a mantém inteira quando o nome não cabe:
+   encostada no nome, e não alinhada à direita, porque alinhar roubava do nome
+   toda a folga da coluna e `IA 60Hz RMS` virava `I.`. */
+.mini .unidade-extra {
   color: var(--suave);
   font-size: 10px;
-  margin-left: 4px;
+  flex: none;
 }
 
 /* A divisão entre o que falta e o que já está na tela. Precisa ser uma parede,
@@ -961,6 +1008,55 @@ footer a { color: var(--destaque); }
 .busca .achado .editar-vinculo:focus { opacity: 1; }
 .busca .achado .editar-vinculo:hover { color: var(--destaque); }
 
+/* O quadrinho de cor, na lista do que já está no gráfico. Redondo e pequeno:
+   é uma AMOSTRA da cor, não um botão de ação — quadrado e grande competiria
+   com a caixinha de marcar, que fica ao lado. */
+.busca .achado .cor-do-sinal {
+  width: 11px;
+  height: 11px;
+  flex: none;
+  border: 1px solid var(--linha);
+  border-radius: 50%;
+  padding: 0;
+  cursor: pointer;
+}
+
+.busca .achado .cor-do-sinal:hover,
+.busca .achado .cor-do-sinal:focus-visible { border-color: var(--tinta); }
+
+/* A paleta: as cores em bolinhas, no lugar do quadrinho. Nome de cor não
+   ajuda a escolher cor — "ocre" e "oliva" são a mesma palavra para quem está
+   olhando um gráfico. */
+.busca .achado .paleta {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  padding: 2px 5px;
+  border: 1px solid var(--destaque);
+  border-radius: 999px;
+  background: var(--fundo);
+}
+
+.busca .achado .paleta .cor-opcao {
+  width: 11px;
+  height: 11px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  padding: 0;
+  cursor: pointer;
+}
+
+.busca .achado .paleta .cor-opcao:hover,
+.busca .achado .paleta .cor-opcao:focus-visible {
+  border-color: var(--tinta);
+  outline: none;
+}
+
+/* A que já está valendo: anel em volta, para o olho achar de onde partiu. */
+.busca .achado .paleta .cor-opcao.escolhida {
+  box-shadow: 0 0 0 2px var(--fundo), 0 0 0 3px var(--tinta);
+}
+
 .busca .achado .escolher-fase {
   font-family: var(--mono);
   font-size: 11px;
@@ -983,3 +1079,76 @@ footer a { color: var(--destaque); }
    num gráfico onde oito curvas se sobrepõem. */
 .legenda li.clicavel { cursor: pointer; padding: 1px 4px; }
 .legenda li.clicavel:hover { background: var(--superficie); border-radius: 4px; }
+
+/* --- painéis -------------------------------------------------------------- */
+
+/* O nome do gráfico é o alvo de renomear: o próprio texto, sem lápis nem menu,
+   porque é ali que a mão vai. Discreto até o mouse chegar — renomear é
+   exceção, e um título que parece botão o tempo todo vira ruído. */
+.grafico-titulo .nome-painel {
+  font: inherit;
+  color: inherit;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: none;
+  padding: 1px 5px;
+  margin-left: -5px;
+  cursor: text;
+}
+
+.grafico-titulo .nome-painel:hover { border-color: var(--linha); }
+
+.grafico-titulo .nome-painel-campo {
+  font: inherit;
+  padding: 1px 5px;
+  border: 1px solid var(--destaque);
+  border-radius: 5px;
+  background: var(--fundo);
+  color: var(--tinta);
+  min-width: 12ch;
+}
+
+.grafico-titulo .contagem-painel {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--suave);
+}
+
+/* Subir, descer e tirar. Ficam à DIREITA, longe do nome e dos botões de
+   conteúdo: mexem no arranjo, não no que o gráfico mostra. */
+.grafico-titulo .arranjo {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 2px;
+}
+
+.grafico-titulo .mexer {
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: none;
+  color: var(--suave);
+  font-size: 12px;
+  line-height: 1;
+  padding: 3px 7px;
+  cursor: pointer;
+}
+
+.grafico-titulo .mexer:hover:not(:disabled) {
+  color: var(--tinta);
+  border-color: var(--linha);
+}
+
+.grafico-titulo .mexer:disabled { opacity: .3; cursor: default; }
+.grafico-titulo .fechar-painel:hover:not(:disabled) { color: var(--ruim); }
+
+/* Os botões de criar gráfico, no fim da lista. */
+.novo-painel {
+  display: flex;
+  gap: 8px;
+  padding: 4px 2px 8px;
+}
+
+/* Painel recém-criado, ainda sem sinal: diz o que fazer em vez de ficar uma
+   moldura vazia sem explicação. */
+.grafico .vazio { margin: 4px 0 8px; font-size: 13px; }
