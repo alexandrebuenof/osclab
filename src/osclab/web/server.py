@@ -36,7 +36,7 @@ from osclab import paths, version
 from osclab.formats import registry
 from osclab.formats.base import FormatError
 from osclab.library import acervo
-from osclab.plot import janela, leitura, navegacao
+from osclab.plot import catalogo, janela, leitura, navegacao, sinais
 
 #: Teto do envio. Um `.dat` de SEL-487E tem 4,7 MB; alguém vai arrastar a pasta
 #: inteira de uma vez, e recusar por tamanho no meio disso seria irritante.
@@ -126,6 +126,11 @@ def create_app() -> Flask:
             ate=ate,
             colunas=int(_numero(request.args.get("colunas")) or 900),
             lado=request.args.get("lado", "arquivo"),
+            filtro=request.args.get("filtro") in ("1", "sim", "true"),
+            medidas=sinais.medidas_de_texto(request.args.get("medidas")),
+            digitais_pedidos=_inteiros(request.args.get("digitais")),
+            extras=catalogo.de_texto(request.args.get("extras")),
+            ocultos=_inteiros(request.args.get("ocultos")),
         ))
 
     @app.get("/api/onda/<sha>/leitura")
@@ -150,7 +155,25 @@ def create_app() -> Flask:
             registro, pedidos,
             lado=request.args.get("lado", "arquivo"),
             refere=int(refere) if refere is not None else None,
+            # As MESMAS escolhas do gráfico: a tabelinha mostra o que está
+            # desenhado, nunca outra coisa.
+            filtro=request.args.get("filtro") in ("1", "sim", "true"),
+            medidas=sinais.medidas_de_texto(request.args.get("medidas")),
+            extras=catalogo.de_texto(request.args.get("extras")),
         ))
+
+    @app.post("/api/onda/<sha>/vinculos")
+    def corrigir_vinculos(sha: str):
+        """O usuário corrige a fase que o programa deduziu errado.
+
+        Fica gravado ao lado do registro, e não na tela: quem corrigiu uma fase
+        corrigiu para sempre. Ver `library/acervo.py`.
+        """
+        try:
+            escolhas = acervo.gravar_vinculos(sha, request.get_json(silent=True) or {})
+        except FormatError as exc:
+            return jsonify(erro=str(exc)), 404
+        return jsonify(vinculos={str(k): v for k, v in escolhas.items()})
 
     @app.delete("/api/aguardando")
     def esquecer_aguardando():
@@ -195,6 +218,17 @@ def _antessala_em_json() -> list[dict]:
             sorted(por_extensao.values())}
         for base, por_extensao in sorted(acervo.aguardando().items())
     ]
+
+
+def _inteiros(texto: str | None) -> list[int] | None:
+    """`3,17,42` — quais digitais a tela quer ver. `None` = ainda não escolheu.
+
+    Lista vazia é escolha legítima (o usuário tirou todos da tela) e precisa se
+    distinguir de "não mandou nada", que é quando o servidor decide.
+    """
+    if texto is None:
+        return None
+    return [int(p) for p in texto.split(",") if p.strip().lstrip("-").isdigit()]
 
 
 def _numero(texto: str | None) -> float | None:

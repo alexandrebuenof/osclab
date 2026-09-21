@@ -13,8 +13,16 @@ import pytest
 
 from osclab.dsp import fasor
 from osclab.formats import fases, registry
-from osclab.formats.base import AnalogChannel
-from osclab.plot import escala, janela, leitura, navegacao, serie, unidades
+from osclab.formats.base import AnalogChannel, Filtering
+from osclab.plot import (
+    escala,
+    janela,
+    leitura,
+    navegacao,
+    serie,
+    sinais,
+    unidades,
+)
 from tests.fabrica import PICO, escrever_comtrade
 
 # ---------------------------------------------------------------------------
@@ -256,6 +264,19 @@ def test_sem_certeza_nao_ha_nome_padronizado(nome, unidade, fase):
 
 def _registro(tmp_path, **kw):
     return registry.read(escrever_comtrade(tmp_path, **kw))
+
+
+def _cru(registro):
+    """Declara o registro como BRUTO, para os testes do filtro.
+
+    A senoide da fábrica é pura, e pelo critério do detector isso é um sinal
+    **já filtrado** — com razão: não há harmônico nenhum ali. Só que quem
+    testa o filtro precisa de um registro cru: num já filtrado o servidor se
+    recusa a filtrar de novo, e está certo em recusar
+    (`test_registro_ja_filtrado_nao_e_filtrado_de_novo`).
+    """
+    registro.filtering = Filtering.BRUTO
+    return registro
 
 
 def test_a_janela_tem_tudo_que_a_tela_precisa(tmp_path):
@@ -766,6 +787,289 @@ def test_o_limiar_e_o_proprio_maximo_do_registro(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# A grandeza desenhada: instantâneo, fundamental ou RMS
+# ---------------------------------------------------------------------------
+
+def test_a_curva_de_rms_nao_e_negativa_e_o_eixo_comeca_no_zero(tmp_path):
+    """RMS não tem sinal. Manter a escala simétrica jogaria fora metade do
+    gráfico — e a linha do zero deixaria de significar o que significa."""
+    r = _registro(tmp_path, na=3, n=512, taxa=1200.0)
+    grupo = janela.montar(r, medidas={"A": "rms"})["grupos"][0]
+    assert grupo["minimo"] == 0.0
+    assert grupo["maximo"] > 0.0
+
+    simetrico = janela.montar(r)["grupos"][0]
+    assert simetrico["minimo"] < 0.0        # a onda continua em torno do zero
+
+
+def test_o_primeiro_ciclo_do_registro_fica_sem_curva(tmp_path):
+    """Não há janela antes dele. Desenhar zero ali seria inventar um valor —
+    e um zero num gráfico de corrente lê-se como "não havia corrente"."""
+    r = _registro(tmp_path, na=1, n=512, taxa=1200.0)      # 20 amostras/ciclo
+    serie_rms = janela.montar(r, medidas={"A": "rms"}, colunas=10_000)["grupos"][0]
+    valores = serie_rms["canais"][0]["serie"]
+    assert valores[:19] == [None] * 19
+    assert valores[19] is not None
+
+
+def test_ampliar_no_meio_do_registro_nao_abre_buraco_na_curva(tmp_path):
+    """A curva olha um ciclo para trás, então a janela pedida precisa vir com
+    um ciclo de história junto. Sem isso, o começo do gráfico ficaria em branco
+    a cada gesto — um buraco que aparece e some conforme se arrasta."""
+    r = _registro(tmp_path, na=1, n=512, taxa=1200.0)
+    t0, t1 = navegacao.extensao(r)
+    meio = t0 + (t1 - t0) * 0.5
+    pedaco = janela.montar(r, de=meio, ate=meio + (t1 - t0) * 0.1,
+                           medidas={"A": "rms"}, colunas=10_000)["grupos"][0]
+    assert pedaco["canais"][0]["serie"][0] is not None
+
+
+def test_a_tabelinha_mostra_a_mesma_grandeza_que_o_grafico(tmp_path):
+    """Gráfico em RMS e tabela em instantâneo seria a tela se contradizendo no
+    mesmo instante. A escolha é uma só, e vale para os dois."""
+    r = _cru(_registro(tmp_path, na=1, n=512, taxa=1200.0))
+    alvo = float(r.time[200])
+
+    inst = leitura.em(r, [(alvo, 0, 0.0)])["cursores"][0]["valores"][0]
+    fund = leitura.em(r, [(alvo, 0, 0.0)],
+                      filtro=True, medidas={"A": "rms"})["cursores"][0]["valores"][0]
+    efic = leitura.em(r, [(alvo, 0, 0.0)], medidas={"A": "rms"})["cursores"][0]["valores"][0]
+
+    assert inst["valor"] == inst["instantaneo"]
+    assert fund["valor"] == fund["fundamental"]
+    assert efic["valor"] == efic["rms"]
+    # E o instantâneo continua no pacote nos três: é a impressão digital da
+    # amostra, por onde se confere com o SIGRA se o cursor está no mesmo ponto.
+    for linha in (inst, fund, efic):
+        assert linha["instantaneo"] == pytest.approx(inst["valor"])
+
+
+def test_a_diferenca_entre_cursores_segue_a_grandeza(tmp_path):
+    """A coluna 2−1 subtrai o que está na tela, não sempre o instantâneo."""
+    r = _registro(tmp_path, na=1, n=512, taxa=1200.0)
+    a, b = float(r.time[100]), float(r.time[300])
+    saida = leitura.em(r, [(a, 0, 0.0), (b, 0, 0.0)], medidas={"A": "rms"})
+    c1, c2 = (c["valores"][0]["valor"] for c in saida["cursores"])
+    assert saida["entre"]["valores"][0]["valor"] == pytest.approx(c2 - c1)
+
+
+def test_a_onda_filtrada_e_a_parte_real_do_mesmo_fasor(tmp_path):
+    """O que o cursor lê tem que ser exatamente o ponto que foi desenhado.
+
+    A curva sai de `Re(X)` em `dsp/envoltoria`; a leitura sai de
+    `amplitude · cos(ângulo)` em `plot/leitura`. São a mesma identidade escrita
+    de dois jeitos, e duas escritas da mesma conta é como elas divergem.
+    """
+    r = _cru(_registro(tmp_path, na=1, n=512, taxa=1200.0))
+    pacote = janela.montar(r, filtro=True, colunas=10_000)
+    desenhado = pacote["grupos"][0]["canais"][0]["serie"]
+
+    i = 300
+    lido = leitura.em(r, [(float(r.time[i]), 0, 0.0)],
+                      filtro=True)["cursores"][0]["valores"][0]
+    # A série desenhada começa na primeira amostra da janela, que é a 0.
+    assert lido["valor"] == pytest.approx(desenhado[i], rel=1e-6)
+
+
+def test_a_onda_filtrada_perde_a_componente_dc(tmp_path):
+    """É o que um filtro de 60 Hz faz, e é por isso que a vista existe."""
+    r = _cru(_registro(tmp_path, na=1, n=512, taxa=1200.0))
+    r.analog[0, :] += 30.0                       # offset em todo o registro
+    grupo = janela.montar(r, filtro=True, colunas=10_000)["grupos"][0]
+    # A média é tomada sobre um número INTEIRO de ciclos (24, a 20 amostras por
+    # ciclo). Num pedaço quebrado, a própria senoide deixaria resto e o teste
+    # acusaria uma DC que não existe.
+    valores = grupo["canais"][0]["serie"][20:500]
+    assert abs(sum(valores) / len(valores)) < 0.5      # a DC sumiu
+
+    crua = janela.montar(r, colunas=10_000)["grupos"][0]["canais"][0]["serie"][20:500]
+    assert sum(crua) / len(crua) == pytest.approx(30.0, abs=0.5)   # e estava lá
+
+
+# ---------------------------------------------------------------------------
+# Registro com mais de uma taxa de amostragem
+# ---------------------------------------------------------------------------
+
+def _duas_taxas(tmp_path):
+    """Metade a 960 Hz (16/ciclo), metade a 5760 Hz (96/ciclo).
+
+    É o que um relé faz de verdade: grava a falta fino e o resto grosso, para o
+    arquivo não ficar gigante. A fábrica escreve os carimbos de tempo coerentes
+    com as taxas declaradas, senão o arquivo mentiria sobre si mesmo.
+    """
+    cfg = escrever_comtrade(tmp_path, na=3, n=600, taxa=960.0,
+                            taxas=[(960.0, 240), (5760.0, 600)])
+    return registry.read(cfg)
+
+
+def test_o_registro_conhece_os_seus_trechos_de_taxa(tmp_path):
+    r = _duas_taxas(tmp_path)
+    assert [(t.inicio, t.fim, t.taxa_hz) for t in r.trechos] == [
+        (0, 240, 960.0), (240, 600, 5760.0)]
+    assert r.taxa_variavel is True
+
+
+def test_a_curva_usa_a_taxa_DAQUELE_trecho(tmp_path):
+    """O bug que este trecho inteiro existe para impedir.
+
+    Antes, a janela de um ciclo saía da taxa do PRIMEIRO trecho e valia para o
+    registro todo. No segundo trecho, "um ciclo" tinha 16 amostras onde deviam
+    ser 96 — a curva saía errada, confiante, e nada na tela denunciava.
+    """
+    r = _duas_taxas(tmp_path)
+    grupo = janela.montar(r, filtro=True, medidas={"A": "rms"}, colunas=10_000)["grupos"][0]
+    valores = grupo["canais"][0]["serie"]
+
+    # A fábrica gera senoide de PICO conhecido em todo o registro; o eficaz da
+    # fundamental tem que dar o mesmo nos dois trechos, cada um com a sua janela.
+    assert valores[239] == pytest.approx(PICO / 2**0.5, rel=0.02)
+    assert valores[-1] == pytest.approx(PICO / 2**0.5, rel=0.02)
+
+
+def test_o_primeiro_ciclo_de_CADA_trecho_fica_sem_curva(tmp_path):
+    """Uma janela com metade das amostras de um lado e metade do outro não é um
+    ciclo de coisa nenhuma."""
+    r = _duas_taxas(tmp_path)
+    valores = janela.montar(r, medidas={"A": "rms"},
+                            colunas=10_000)["grupos"][0]["canais"][0]["serie"]
+    assert valores[:15] == [None] * 15            # 16 amostras/ciclo no 1o trecho
+    assert valores[15] is not None
+    assert valores[240:335] == [None] * 95        # 96 amostras/ciclo no 2o
+    assert valores[335] is not None
+
+
+def test_a_tela_e_avisada_da_taxa_variavel(tmp_path):
+    """Não é erro, mas muda como se lê o gráfico — então aparece."""
+    pacote = janela.montar(_duas_taxas(tmp_path))
+    assert pacote["taxa_variavel"] is True
+    assert [t["taxa_hz"] for t in pacote["trechos"]] == [960.0, 5760.0]
+
+    simples = janela.montar(_registro(tmp_path, na=1, n=128))
+    assert simples["taxa_variavel"] is False
+
+
+def test_andar_um_ciclo_respeita_a_taxa_de_onde_o_cursor_esta(tmp_path):
+    """Shift+seta anda UM CICLO. Num registro de taxa variável isso são 16
+    amostras num trecho e 96 no outro — a tecla é a mesma, a conta não."""
+    r = _duas_taxas(tmp_path)
+    no_grosso = leitura.em(r, [(float(r.time[100]), 0, 1.0)])
+    assert no_grosso["cursores"][0]["amostra"] == 116        # 16 por ciclo
+
+    no_fino = leitura.em(r, [(float(r.time[400]), 0, 1.0)])
+    assert no_fino["cursores"][0]["amostra"] == 496          # 96 por ciclo
+
+
+def test_o_cursor_nao_le_fasor_atravessando_a_fronteira(tmp_path):
+    """Logo depois da troca de taxa não há um ciclo inteiro do mesmo lado.
+    Melhor traço que um número plausível e errado."""
+    r = _duas_taxas(tmp_path)
+    colado = leitura.em(r, [(float(r.time[250]), 0, 0.0)])["cursores"][0]
+    assert colado["valores"][0]["fundamental"] is None
+    assert colado["valores"][0]["valor"] is not None          # o instantâneo fica
+
+    adiante = leitura.em(r, [(float(r.time[400]), 0, 0.0)])["cursores"][0]
+    assert adiante["valores"][0]["fundamental"] == pytest.approx(
+        PICO / 2**0.5, rel=0.02)
+
+
+def test_medida_desconhecida_cai_no_instantaneo(tmp_path):
+    """A tela manda uma palavra; o servidor não confia nela."""
+    r = _registro(tmp_path, na=1, n=128)
+    lixo = {"A": "nada"}
+    assert janela.montar(r, medidas=lixo)["grupos"][0]["grandeza"] == "instantaneo"
+    lido = leitura.em(r, [(float(r.time[50]), 0, 0.0)], medidas=lixo)
+    assert lido["cursores"][0]["valores"][0]["grandeza"] == "instantaneo"
+
+
+def test_cada_grupo_escolhe_a_sua_medida(tmp_path):
+    """Corrente em RMS e tensão em instantâneo ao mesmo tempo — leitura comum
+    numa falta, e para onde vão os sinais manipulados separadamente."""
+    cfg = escrever_comtrade(tmp_path, na=4, n=512, taxa=1200.0)
+    texto = cfg.read_text(encoding="utf-8")
+    texto = texto.replace("4,CH4,A,,A,", "4,CH4,A,,V,")     # o canal 4 vira tensão
+    cfg.write_text(texto, encoding="utf-8")
+    r = _cru(registry.read(cfg))
+
+    pacote = janela.montar(r, medidas={"A": "rms"})
+    por_unidade = {g["unidade_do_arquivo"]: g for g in pacote["grupos"]}
+    assert por_unidade["A"]["grandeza"] == "rms"
+    assert por_unidade["V"]["grandeza"] == "instantaneo"
+    # E com o filtro ligado, cada um vira a sua versão filtrada.
+    com_filtro = janela.montar(r, filtro=True, medidas={"A": "rms"})
+    por_unidade = {g["unidade_do_arquivo"]: g for g in com_filtro["grupos"]}
+    assert por_unidade["A"]["grandeza"] == "fundamental"
+    assert por_unidade["V"]["grandeza"] == "filtrado"
+
+
+def test_registro_ja_filtrado_nao_e_filtrado_de_novo(tmp_path):
+    """O erro que este teste impede custa UM CICLO em tudo que se lê.
+
+    Quando o relé filtrou antes de gravar, a tela mostra o botão do filtro
+    aceso e preso — é o estado do sinal. Se esse botão aceso virasse um pedido
+    de filtro ao servidor, o registro sairia filtrado duas vezes: a falta
+    apareceria dois ciclos depois de ter acontecido e o cursor leria o valor de
+    dois ciclos atrás, tudo isso sem nenhum aviso na tela.
+    """
+    r = _registro(tmp_path, na=3, n=512, taxa=1200.0)
+    r.filtering = Filtering.FILTRADO
+
+    # O pedido chega, e o servidor o recusa: as amostras JÁ são a componente
+    # de 60 Hz, e o nome do sinal não ganha sufixo de uma conta que não houve.
+    pacote = janela.montar(r, filtro=True, colunas=10_000)
+    assert pacote["filtro"] is False
+    assert pacote["grupos"][0]["grandeza"] == "instantaneo"
+    assert pacote["grupos"][0]["canais"][0]["sinal"] == "IA"
+
+    # E o mesmo vale para a tabelinha dos cursores, que é lida em laudo.
+    lido = leitura.em(r, [(0.05, 0, 0.0), (None, 0, 0.0)], filtro=True)
+    assert lido["filtro"] is False
+
+    # A regra sozinha, sem registro nenhum: é ela que os dois consultam.
+    assert sinais.aplicavel(True, "cru") is True
+    assert sinais.aplicavel(True, "filtrado") is False
+    assert sinais.aplicavel(False, "cru") is False
+
+
+def test_o_nome_do_sinal_diz_o_que_foi_feito_com_o_canal(tmp_path):
+    """`IA` e `IA RMS` são sinais diferentes, e vão ser manipulados separados.
+    O nome nasce no Python porque é identidade, não rótulo de tela."""
+    r = _cru(_registro(tmp_path, na=3, n=512, taxa=1200.0))
+    def nomes(**kw):
+        return [c["sinal"] for c in janela.montar(r, **kw)["grupos"][0]["canais"]]
+
+    assert nomes()[0] == "IA"
+    assert nomes(medidas={"A": "rms"})[0] == "IA RMS"
+    assert nomes(filtro=True)[0] == "IA 60Hz"
+    assert nomes(filtro=True, medidas={"A": "rms"})[0] == "IA 60Hz RMS"
+
+    # Canal que não se conseguiu identificar não ganha nome nosso — nem com
+    # sufixo. Um " RMS" solto seria pior que nada.
+    assert sinais.nome("", "rms") == ""
+
+
+def test_num_rele_de_trafo_o_nome_diz_de_que_lado_o_canal_e(tmp_path):
+    """Sem o apelido do conjunto, dois canais diferentes se chamariam `IA` e a
+    tela não diria qual é qual. Era um defeito de verdade, não só futuro."""
+    cfg = escrever_comtrade(tmp_path, na=6, n=512, taxa=1200.0)
+    texto = cfg.read_text(encoding="utf-8")
+    for k in range(1, 7):
+        nivel = "138kV" if k <= 3 else "13.8kV"
+        fase = "ABC"[(k - 1) % 3]
+        # name, ph, ccbm, unidade — o `ph` fica vazio de propósito, para a
+        # fase sair da dedução pelo nome, como nos arquivos da Siemens.
+        texto = texto.replace(f"{k},CH{k},{fase},,A,",
+                              f"{k},TC {nivel}:I {fase},,,A,")
+    cfg.write_text(texto, encoding="utf-8")
+
+    canais = janela.montar(registry.read(cfg),
+                           medidas={"A": "rms"})["grupos"][0]["canais"]
+    assert [c["sinal"] for c in canais] == [
+        "IA RMS AT", "IB RMS AT", "IC RMS AT",
+        "IA RMS BT", "IB RMS BT", "IC RMS BT",
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Fasores na leitura do cursor
 # ---------------------------------------------------------------------------
 
@@ -799,6 +1103,34 @@ def test_o_nome_padronizado_chega_na_janela_e_na_leitura(tmp_path):
     # sublinha um canal, e quem confere contra o SIGRA precisa saber qual.
     assert medida["referencia"]["padrao"] == \
         fases.padrao(r.analog_channels[medida["referencia"]["indice"]])
+
+
+def test_a_dc_em_unidade_acompanha_o_percentual(tmp_path):
+    """A coluna mostra percentual; o hover mostra a mesma DC em ampères.
+
+    São a mesma grandeza vista de dois jeitos, e a de unidade existe sempre —
+    é ela que sobra para mostrar quando o percentual não pode existir.
+    """
+    r = _registro(tmp_path, na=1, n=512, taxa=1200.0)
+    medida = leitura.em(r, [(float(r.time[200]), 0, 0.0)])
+    canal = medida["cursores"][0]["valores"][0]
+    assert canal["dc_valor"] is not None
+    assert canal["casas_dc"] == leitura.casas(canal["dc_valor"])
+
+
+def test_canal_sem_fundamental_nao_manda_percentual_para_a_tela(tmp_path):
+    """O caso do registro real: depois de o disjuntor abrir, o canal fica só
+    com o offset do conversor A/D e a tela mostrava `DC 5.484,9 %`."""
+    r = _registro(tmp_path, na=1, n=512, taxa=1200.0)
+    # Zera o canal e deixa só um offset parado, como um canal morto de verdade.
+    r.analog[0, :] = 0.1536
+    medida = leitura.em(r, [(float(r.time[200]), 0, 0.0)])
+    canal = medida["cursores"][0]["valores"][0]
+
+    assert canal["dc"] is None                  # percentual: não existe
+    assert canal["distorcao"] is None
+    assert canal["dc_valor"] == pytest.approx(0.1536, rel=1e-6)   # medida: existe
+    assert canal["rms"] == pytest.approx(0.1536, rel=1e-6)
 
 
 def test_o_rms_tem_casas_decimais_proprias(tmp_path):

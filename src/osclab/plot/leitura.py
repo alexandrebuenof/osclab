@@ -38,9 +38,9 @@ import math
 import numpy as np
 
 from osclab.dsp import fasor
-from osclab.formats import fases
+from osclab.formats import conjuntos, fases
 from osclab.formats.base import Record
-from osclab.plot import conversao, unidades
+from osclab.plot import catalogo, conversao, sinais, unidades
 from osclab.plot.conversao import LADOS
 
 
@@ -154,7 +154,11 @@ def canal_de_referencia(registro: Record, pedido: int | None = None) -> int | No
 
 
 def _em_uma_amostra(registro: Record, i: int, lado: str, escalas: dict,
-                    por_ciclo: int, referencia: int | None) -> dict:
+                    por_ciclo: int, referencia: int | None,
+                    filtro: bool = False,
+                    medidas: dict[str, str] | None = None,
+                    rotulos: dict[int, str] | None = None,
+                    acrescentados: list | None = None) -> dict:
     """Tudo que a tela mostra de um cursor parado na amostra `i`.
 
     `escalas` vem de `unidades.por_unidade` — a MESMA que o desenho usou. Se
@@ -182,6 +186,10 @@ def _em_uma_amostra(registro: Record, i: int, lado: str, escalas: dict,
 
         linha = {
             "nome": canal.name,
+            # Qual grandeza a coluna mostra é decisão do botão do cabeçalho, e
+            # ela vale para o gráfico e para a tabelinha ao mesmo tempo. Ler
+            # "RMS" no gráfico e instantâneo na tabela seria a tela se
+            # contradizendo no mesmo instante.
             # O nome do ARQUIVO acima; o nosso aqui. A tabelinha e a legenda
             # mostram os dois, para nunca haver dúvida de qual é qual.
             "padrao": fases.padrao(canal),
@@ -194,6 +202,27 @@ def _em_uma_amostra(registro: Record, i: int, lado: str, escalas: dict,
         }
         linha.update(_fasor_do_canal(registro, canal, i, lado, divisor,
                                      por_ciclo, angulo_zero))
+
+        # `valor` é o que a coluna mostra — e é dele que sai a diferença 2−1.
+        # O instantâneo continua no pacote em campo próprio: ele é a impressão
+        # digital da amostra, e é por ele que se confere, contra o SIGRA, se os
+        # dois programas estão olhando o mesmo ponto do arquivo.
+        linha["instantaneo"] = valor
+        linha["casas_instantaneo"] = linha["casas"]
+
+        # Cada gráfico escolhe a sua medida, então a grandeza sai da UNIDADE do
+        # canal — é ela que diz a que gráfico ele pertence.
+        grandeza = sinais.por_grupo(canal.unit.strip(), filtro, medidas)
+        linha["grandeza"] = grandeza
+        linha["sinal"] = sinais.nome(linha["padrao"], grandeza,
+                                     (rotulos or {}).get(canal.index, ""))
+        if grandeza == "fundamental":
+            linha["valor"], linha["casas"] = linha["fundamental"], linha["casas_fasor"]
+        elif grandeza == "rms":
+            linha["valor"], linha["casas"] = linha["rms"], linha["casas_rms"]
+        elif grandeza == "filtrado":
+            linha["valor"], linha["casas"] = linha["filtrado"], linha["casas_filtrado"]
+
         valores.append(linha)
 
     desde_o_disparo = t - disparo
@@ -203,7 +232,78 @@ def _em_uma_amostra(registro: Record, i: int, lado: str, escalas: dict,
         "ms": round(desde_o_disparo * 1000.0, 6),
         "ciclos": round(desde_o_disparo * frequencia, 4) if frequencia > 0 else None,
         "valores": valores,
+        # Os sinais acrescentados à mão vêm à parte, casados pelo `id`. Os
+        # canais continuam casando por POSIÇÃO, que é o que a tela já faz — e
+        # misturar os dois numa lista só quebraria esse casamento.
+        "extras": {x["id"]: x for x in _extras_em_uma_amostra(
+            registro, i, lado, escalas, por_ciclo, angulo_zero,
+            acrescentados)},
     }
+
+
+def _extras_em_uma_amostra(registro: Record, i: int, lado: str, escalas: dict,
+                           por_ciclo: int, angulo_zero: float | None,
+                           acrescentados: list | None) -> list[dict]:
+    """A leitura dos sinais que o usuário acrescentou aos gráficos.
+
+    O sinal acrescentado carrega a PRÓPRIA grandeza: quem pôs `IA RMS` num
+    gráfico que está em instantâneo quer ver o eficaz ali, e nem o botão do
+    gráfico nem o do filtro mandam nele. É o que permite `Current IA` e
+    `IA 60Hz RMS` na mesma tela — a comparação que mostra o atraso de um ciclo
+    do filtro.
+    """
+    canais = {c.index: c for c in registro.analog_channels}
+    saida = []
+    for sinal in (acrescentados or []):
+        divisor, mostrada = escalas.get(sinal.unidade, (1.0, sinal.unidade))
+        # A CONTA do sinal, não a grandeza que o nomeia: num registro já
+        # filtrado `IA 60Hz` é o próprio canal. Ver `plot/catalogo.py`.
+        grandeza = sinal.conta
+        linha = {"id": sinal.id, "nome": sinal.nome, "sinal": sinal.nome,
+                 "unidade": mostrada, "familia": sinal.familia,
+                 "grandeza": sinal.grandeza, "fase": ""}
+
+        if sinal.id[0] in ("c", "v"):
+            canal = canais.get(int(sinal.id[1:].split(":")[0]))
+            if canal is None:
+                continue
+            bruto = np.array([registro.analog[canal.index, i]], dtype=np.float64)
+            convertido, _, _ = conversao.converter(bruto, canal, lado)
+            instantaneo = _num(convertido[0] / divisor)
+            linha.update(_fasor_do_canal(registro, canal, i, lado, divisor,
+                                         por_ciclo, angulo_zero))
+            linha["instantaneo"] = instantaneo
+            linha["casas_instantaneo"] = casas(instantaneo)
+            linha["valor"], linha["casas"] = instantaneo, casas(instantaneo)
+            if grandeza == "rms":
+                linha["valor"], linha["casas"] = linha["rms"], linha["casas_rms"]
+            elif grandeza == "fundamental":
+                linha["valor"], linha["casas"] = (linha["fundamental"],
+                                                  linha["casas_fasor"])
+            elif grandeza == "filtrado":
+                linha["valor"], linha["casas"] = (linha["filtrado"],
+                                                  linha["casas_filtrado"])
+            saida.append(linha)
+            continue
+
+        # Componente simétrica: módulo e ângulo saem da transformação de
+        # Fortescue sobre os três fasores de fase. Não há instantâneo nem RMS
+        # verdadeiro aqui — ver `plot/catalogo.py`.
+        medido = catalogo.fasor_de_componente(registro, sinal, i, por_ciclo,
+                                              lado, divisor)
+        modulo, angulo = medido if medido else (None, None)
+        linha.update({
+            "valor": _num(modulo) if modulo is not None else None,
+            "casas": casas(modulo),
+            "fundamental": _num(modulo) if modulo is not None else None,
+            "casas_fasor": casas(modulo),
+            "angulo": (round(fasor.em_relacao_a(angulo, angulo_zero), 2)
+                       if angulo is not None else None),
+            "rms": None, "dc": None, "dc_valor": None, "distorcao": None,
+            "filtrado": None, "instantaneo": None,
+        })
+        saida.append(linha)
+    return saida
 
 
 def _fasor_do_canal(registro: Record, canal, i: int, lado: str, divisor: float,
@@ -217,8 +317,9 @@ def _fasor_do_canal(registro: Record, canal, i: int, lado: str, divisor: float,
     f = fasor.no_instante(registro.analog[canal.index], i, por_ciclo)
     if f is None:
         return {"fundamental": None, "angulo": None, "rms": None,
-                "dc": None, "distorcao": None,
-                "casas_fasor": 1, "casas_rms": 1}
+                "dc": None, "dc_valor": None, "distorcao": None, "filtrado": None,
+                "casas_fasor": 1, "casas_rms": 1, "casas_dc": 1,
+                "casas_filtrado": 1}
 
     razao = conversao.relacao(canal)
     lado_do_canal = "primario" if canal.is_primary else "secundario"
@@ -229,15 +330,34 @@ def _fasor_do_canal(registro: Record, canal, i: int, lado: str, divisor: float,
 
     fundamental = _num(f.fundamental * fator)
     rms = _num(f.rms * fator)
+
+    # O valor da onda FILTRADA neste instante: a senoide de 60 Hz vale
+    # `amplitude · cos(ângulo)`, com o ângulo ABSOLUTO — o referido ao cursor,
+    # antes de qualquer referência de tela. Trocar a referência gira o fasor na
+    # tabela e não pode mexer na onda desenhada.
+    filtrado = _num(f.fundamental * math.sqrt(2.0) * math.cos(math.radians(f.angulo))
+                    * fator)
+
+    # O percentual pode não existir (ver `fasor.MINIMO_FUNDAMENTAL`); a DC em
+    # unidade de engenharia existe sempre, porque média não tem denominador.
+    # É ela que vai para o hover quando a coluna mostra traço.
+    dc_valor = _num(f.dc * fator)
+    # O `or 0.0` mata o zero negativo: `-0.0` chega no navegador como "-0,0", e
+    # um sinal de menos onde não há grandeza faz o leitor parar para entender
+    # uma coisa que não existe. `None` atravessa intocado.
+    percentual = None if f.dc_percentual is None else round(f.dc_percentual, 1) or 0.0
+    distorcao = None if f.distorcao is None else round(f.distorcao, 1) or 0.0
+
     return {
         "fundamental": fundamental,
         "angulo": round(fasor.em_relacao_a(f.angulo, angulo_zero), 2),
         "rms": rms,
-        # O `or 0.0` mata o zero negativo: `-0.0` chega no navegador como
-        # "-0,0", e um sinal de menos onde não há grandeza faz o leitor parar
-        # para entender uma coisa que não existe.
-        "dc": round(f.dc_percentual, 1) or 0.0,
-        "distorcao": round(f.distorcao, 1) or 0.0,
+        "filtrado": filtrado,
+        "casas_filtrado": casas(filtrado),
+        "dc": percentual,
+        "dc_valor": dc_valor,
+        "distorcao": distorcao,
+        "casas_dc": casas(dc_valor),
         "casas_fasor": casas(fundamental),
         # O RMS verdadeiro pode cair noutra ordem de grandeza que a
         # fundamental — num transitório com DC forte a diferença passa de 40 %.
@@ -245,6 +365,14 @@ def _fasor_do_canal(registro: Record, canal, i: int, lado: str, divisor: float,
         # essa diferença.
         "casas_rms": casas(rms),
     }
+
+
+def _trecho_de(trechos, i: int):
+    """O trecho de taxa constante que contém a amostra `i`, ou `None`."""
+    for trecho in trechos:
+        if trecho.inicio <= i < trecho.fim:
+            return trecho
+    return trechos[-1] if trechos else None
 
 
 def _instante_do_disparo(registro: Record) -> float:
@@ -273,16 +401,30 @@ def entre(registro: Record, a: dict, b: dict) -> dict:
         diferencas.append({"nome": va["nome"], "unidade": va["unidade"],
                            "valor": d, "casas": casas(d)})
 
+    extras = {}
+    for id_do_sinal, va in (a.get("extras") or {}).items():
+        vb = (b.get("extras") or {}).get(id_do_sinal)
+        if vb is None or va["valor"] is None or vb["valor"] is None:
+            extras[id_do_sinal] = {"nome": va["nome"], "unidade": va["unidade"],
+                                   "valor": None, "casas": 1}
+            continue
+        d = vb["valor"] - va["valor"]
+        extras[id_do_sinal] = {"nome": va["nome"], "unidade": va["unidade"],
+                               "valor": d, "casas": casas(d)}
+
     return {
         "segundos": round(segundos, 9),
         "ms": round(segundos * 1000.0, 6),
         "ciclos": round(segundos * frequencia, 4) if frequencia > 0 else None,
         "valores": diferencas,
+        "extras": extras,
     }
 
 
 def em(registro: Record, pedidos: list[tuple[float | None, int, float]],
-       lado: str = "arquivo", refere: int | None = None) -> dict:
+       lado: str = "arquivo", refere: int | None = None,
+       filtro: bool = False, medidas: dict[str, str] | None = None,
+       extras: dict[str, list[str]] | None = None) -> dict:
     """A leitura dos cursores.
 
     Cada pedido é `(instante_em_segundos, passo_em_amostras, passo_em_ciclos)`.
@@ -296,26 +438,54 @@ def em(registro: Record, pedidos: list[tuple[float | None, int, float]],
         lado = "arquivo"
     if lado == "arquivo":
         lado = conversao.lado_natural(registro)
+    filtro = sinais.aplicavel(filtro, registro.filtering)
 
     n = registro.n_samples
-    por_ciclo = float(registro.samples_per_cycle or 0.0)
     escalas = unidades.por_unidade(registro, lado)
-
-    janela = fasor.amostras_por_ciclo(registro.base_rate_hz,
-                                      registro.line_frequency)
+    rotulos = conjuntos.rotulos_por_canal(registro)
+    trechos = registro.trechos
     referencia = canal_de_referencia(registro, refere)
+
+    # Os sinais acrescentados a qualquer gráfico, achatados: a leitura não tem
+    # grupos, e a tela casa cada um pelo `id`.
+    por_id = catalogo.por_id(registro, lado)
+    acrescentados = [por_id[i] for lista in (extras or {}).values()
+                     for i in lista if i in por_id]
 
     cursores = []
     for instante, passo, ciclos in pedidos:
         if instante is None or n == 0:
             cursores.append(None)
             continue
+        # Quantas amostras cabem num ciclo depende de ONDE o cursor está: num
+        # registro de taxa variável, "andar um ciclo" são 96 amostras na falta
+        # e 16 no pós-falta. A tecla é a mesma; a conta não.
+        aqui = indice(registro, instante)
+        trecho = _trecho_de(trechos, aqui)
+        amostras = fasor.amostras_por_ciclo(trecho.taxa_hz if trecho else 0.0,
+                                            registro.line_frequency)
         andar = int(passo)
-        if ciclos and por_ciclo > 0:
-            andar += int(round(float(ciclos) * por_ciclo))
-        i = int(np.clip(indice(registro, instante) + andar, 0, n - 1))
+        if ciclos and amostras > 0:
+            andar += int(round(float(ciclos) * amostras))
+        i = int(np.clip(aqui + andar, 0, n - 1))
+
+        # Depois de andar, o cursor pode ter mudado de trecho.
+        trecho = _trecho_de(trechos, i)
+        amostras = fasor.amostras_por_ciclo(trecho.taxa_hz if trecho else 0.0,
+                                            registro.line_frequency)
+        # Uma janela que atravessa a fronteira não é um ciclo de coisa nenhuma.
+        if trecho is not None and i - amostras + 1 < trecho.inicio:
+            amostras = 0
         cursores.append(_em_uma_amostra(registro, i, lado, escalas,
-                                        janela, referencia))
+                                        amostras, referencia, filtro,
+                                        medidas, rotulos, acrescentados))
+
+    primeiro = cursores[0] or (cursores[1] if len(cursores) > 1 else None)
+    do_cursor = _trecho_de(trechos, primeiro["amostra"]) if primeiro else None
+    por_ciclo = ((do_cursor.taxa_hz / registro.line_frequency)
+                 if do_cursor and registro.line_frequency > 0 else 0.0)
+    amostras = fasor.amostras_por_ciclo(do_cursor.taxa_hz if do_cursor else 0.0,
+                                        registro.line_frequency)
 
     casas_ms, casas_ciclos = _resolucoes(registro)
     presentes = [c for c in cursores if c is not None]
@@ -327,7 +497,8 @@ def em(registro: Record, pedidos: list[tuple[float | None, int, float]],
             "padrao": fases.padrao(canais[referencia])
             if referencia is not None else None,
         },
-        "amostras_da_janela": janela,
+        "amostras_da_janela": amostras,
+        "filtro": filtro,
         "cursores": cursores,
         "entre": entre(registro, presentes[0], presentes[1])
         if len(presentes) == 2 else None,

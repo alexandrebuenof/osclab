@@ -58,7 +58,7 @@ import hashlib
 import json
 import shutil
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -377,7 +377,88 @@ def ler(sha: str) -> Record:
     caminho = caminho_principal(sha)
     if caminho is None:
         raise FormatError("Este registro nao esta' no acervo.")
-    return registry.read(caminho)
+    return _com_vinculos(registry.read(caminho), sha)
+
+
+# ---------------------------------------------------------------------------
+# Os vinculos: canal do IED -> fase, corrigidos pelo usuario
+# ---------------------------------------------------------------------------
+#
+# O vinculo canal -> fase e' deduzido do NOME do canal, e cada fabricante
+# escreve esse nome como quer. Quando a deducao erra, tudo que vem depois erra
+# junto -- conjunto trifasico, 3I0, V1, localizacao de falta -- e sai um numero
+# na unidade certa, na ordem de grandeza certa, que ninguem contesta.
+#
+# Por isso a correcao do usuario e' GRAVADA ao lado do registro, e nao guardada
+# na tela: quem corrigiu uma fase corrigiu para sempre, nao ate' fechar o
+# navegador. Fica num arquivo separado, e nao no `meta.json`, porque `meta.json`
+# e' cache -- pode ser refeito a qualquer momento -- e isto e' decisao humana.
+
+VINCULOS = "vinculos.json"
+
+
+def vinculos(sha: str) -> dict[int, str]:
+    """As fases que o usuario corrigiu neste registro. Vazio e' o normal."""
+    arquivo = _raiz() / sha / VINCULOS
+    if not arquivo.is_file():
+        return {}
+    try:
+        cru = json.loads(arquivo.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    saida: dict[int, str] = {}
+    for chave, valor in (cru or {}).items():
+        try:
+            indice = int(chave)
+        except (TypeError, ValueError):
+            continue
+        texto = str(valor or "").strip().upper()
+        if texto in ("A", "B", "C", "N", "-"):
+            saida[indice] = texto
+    return saida
+
+
+def gravar_vinculos(sha: str, escolhas: dict) -> dict[int, str]:
+    """Grava as correcoes de fase. Devolve o que ficou gravado.
+
+    Escolha vazia TIRA o vinculo (volta a valer a deducao); `"-"` e' a escolha
+    explicita de "este canal nao e' fase nenhuma". Os dois sao coisas
+    diferentes e a tela precisa poder dizer as duas.
+    """
+    if obter(sha) is None:
+        raise FormatError("Este registro nao esta' no acervo.")
+    atuais = vinculos(sha)
+    for chave, valor in (escolhas or {}).items():
+        try:
+            indice = int(chave)
+        except (TypeError, ValueError):
+            continue
+        texto = str(valor or "").strip().upper()
+        if texto in ("A", "B", "C", "N", "-"):
+            atuais[indice] = texto
+        else:
+            atuais.pop(indice, None)
+
+    arquivo = _raiz() / sha / VINCULOS
+    if atuais:
+        arquivo.write_text(json.dumps({str(k): v for k, v in sorted(atuais.items())},
+                                      ensure_ascii=False, indent=2),
+                           encoding="utf-8")
+    elif arquivo.is_file():
+        arquivo.unlink()
+    return atuais
+
+
+def _com_vinculos(registro: Record, sha: str) -> Record:
+    """Aplica as correcoes do usuario aos canais do registro."""
+    escolhas = vinculos(sha)
+    if not escolhas:
+        return registro
+    registro.analog_channels = tuple(
+        replace(c, phase_escolhida=escolhas[c.index]) if c.index in escolhas else c
+        for c in registro.analog_channels
+    )
+    return registro
 
 
 def remover(sha: str) -> bool:

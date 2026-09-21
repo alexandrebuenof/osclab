@@ -21,6 +21,7 @@ from osclab.formats.base import AnalogChannel, StatusChannel
 
 
 class OrigemDaFase(StrEnum):
+    ESCOLHIDA = "escolhida"   # o usuário corrigiu o que o programa deduziu
     DECLARADA = "declarada"   # o campo `ph` do arquivo veio preenchido
     DEDUZIDA = "deduzida"     # tirada do nome do canal
     DESCONHECIDA = "desconhecida"
@@ -38,6 +39,11 @@ _GRANDEZA = re.compile(r"(?:^|[^A-Z0-9])[IVU]([ABC])[A-Z0-9]?(?:[^A-Z0-9]|$)",
 
 #: `Voltage A-G`, `...fase B` — a letra da fase sozinha, cercada de não-letras.
 _FIM = re.compile(r"(?:^|[^A-Z0-9])([ABC])(?:[^A-Z0-9]|$)", re.IGNORECASE)
+
+#: `Voltage N-G` — a letra do neutro sozinha. Só vale como último recurso: ver
+#: a ordem em `deduzir`.
+_NEUTRO_SOZINHO = re.compile(r"(?:^|[^A-Z0-9])([NGE])(?:[^A-Z0-9]|$)",
+                             re.IGNORECASE)
 
 #: `3I0`, `3V0`, `IN`, `VNG`, `Ix`, `IG` — residual ou neutro.
 #: O `{1,2}` é por causa do `VNG`: neutro-terra escrito com as duas letras.
@@ -84,6 +90,14 @@ def deduzir(nome: str) -> str:
     if len(achados) == 1:
         return achados[0].upper()
 
+    # Último recurso, e só depois de A/B/C terem falhado: a letra do neutro
+    # sozinha. `Voltage N-G` não casa com `_RESIDUAL` (que espera o `V` colado,
+    # como em `VNG`) e ficava sem fase nenhuma — um canal de tensão residual
+    # fora de toda conta. `Voltage A-G` não chega aqui: o `A` já foi achado
+    # acima, que é por isso que esta regra vem por último.
+    if _NEUTRO_SOZINHO.search(pedaco):
+        return "N"
+
     return ""
 
 
@@ -94,6 +108,15 @@ _GRANDEZAS = {
     "A": "I", "KA": "I", "MA": "I",
     "V": "V", "KV": "V", "MV": "V",
 }
+
+
+def grandeza_da_unidade(unidade: str) -> str:
+    """`A`/`kA` → `I`; `V`/`kV` → `V`; o resto → `""`.
+
+    A grandeza NÃO é palpite: vem da unidade que o arquivo declara. É a fase
+    que se deduz do nome — e é só ela que o usuário precisa poder corrigir.
+    """
+    return _GRANDEZAS.get((unidade or "").strip().upper(), "")
 
 
 def padrao(canal: AnalogChannel | StatusChannel) -> str:
@@ -124,7 +147,21 @@ def padrao(canal: AnalogChannel | StatusChannel) -> str:
 
 
 def da_canal(canal: AnalogChannel | StatusChannel) -> tuple[str, OrigemDaFase]:
-    """A fase do canal e de onde ela veio."""
+    """A fase do canal e de onde ela veio.
+
+    A ordem é a da confiança: o que o USUÁRIO escolheu vence tudo. Ele olhou o
+    arquivo e o unifilar; a nossa expressão regular olhou um nome que cada
+    fabricante escreve como quer. `"-"` é a escolha explícita de "este canal
+    não é fase nenhuma", e por isso não cai na dedução.
+    """
+    escolhida = getattr(canal, "phase_escolhida", "") or ""
+    if escolhida == "-":
+        return "", OrigemDaFase.ESCOLHIDA
+    if escolhida:
+        normalizada = _normalizar(escolhida)
+        if normalizada:
+            return normalizada, OrigemDaFase.ESCOLHIDA
+
     declarada = _normalizar(getattr(canal, "phase", ""))
     if declarada:
         return declarada, OrigemDaFase.DECLARADA

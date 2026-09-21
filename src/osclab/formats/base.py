@@ -74,6 +74,11 @@ class AnalogChannel:
     name: str
     unit: str                      # "A", "kV", "V", ...
     phase: str = ""                # "A", "B", "C", "N" — vazio quando não se sabe
+    #: A fase que o USUÁRIO escolheu para este canal, quando corrigiu o que o
+    #: programa deduziu. Vence `phase` e a dedução pelo nome: o engenheiro que
+    #: olhou o arquivo sabe mais que a nossa expressão regular. `"-"` é a
+    #: escolha explícita de "nenhuma" — diferente de `""`, que é "não mexeram".
+    phase_escolhida: str = ""
     component: str = ""            # equipamento monitorado, como o arquivo nomeia
     primary: float = 1.0           # relação do primário (TC/TP), quando declarada
     secondary: float = 1.0         # relação do secundário
@@ -106,6 +111,28 @@ class SampleRate:
 
     rate_hz: float
     last_sample: int               # índice da última amostra nesta taxa
+
+
+@dataclass(frozen=True)
+class Trecho:
+    """Um pedaço do registro com taxa de amostragem constante, já resolvido.
+
+    `SampleRate` é o que o arquivo declara — e declara em índice de 1, contando
+    a ÚLTIMA amostra de cada trecho. Isto aqui é o que o resto do programa usa:
+    início e fim em índice de 0, com o fim exclusivo, como toda fatia de Python.
+
+    A tradução mora num lugar só de propósito. Errar o `+1` de um índice de 1
+    para um de 0 desloca a janela do fasor em uma amostra — 18° a 20 amostras
+    por ciclo — e nada na tela denuncia.
+    """
+
+    inicio: int
+    fim: int                       # exclusivo
+    taxa_hz: float
+
+    @property
+    def n_amostras(self) -> int:
+        return max(self.fim - self.inicio, 0)
 
 
 @dataclass
@@ -157,21 +184,63 @@ class Record:
         return float(self.time[-1] - self.time[0]) if self.n_samples > 1 else 0.0
 
     @property
-    def base_rate_hz(self) -> float:
-        """Taxa de amostragem do primeiro trecho, em Hz.
+    def trechos(self) -> tuple[Trecho, ...]:
+        """Os pedaços de taxa constante, em índices de 0 e fim exclusivo.
 
-        A taxa declarada no arquivo tem prioridade, mas ela pode ser ZERO: é
-        assim que o COMTRADE diz "a taxa varia, use o carimbo de cada amostra"
-        (`nrates = 0`), e é o que um GE 850 gera. Nesse caso a taxa sai do
-        próprio vetor de tempo — senão `samples_per_cycle` responderia 0 e todo
-        o diagnóstico de bruto × filtrado iria por água abaixo.
+        **A norma permite mais de um, e isso não é exótico**: é comum o relé
+        gravar a 96 amostras por ciclo durante a falta e a 16 no pré e no
+        pós-falta, para o arquivo não ficar gigante.
+
+        Quem calcula fasor, envoltória ou componente simétrica precisa desta
+        lista, e não de um número só. Uma janela de "um ciclo" tem um tamanho
+        em cada trecho, e uma janela que atravessa a fronteira não é um ciclo
+        de coisa nenhuma — o resultado sairia confiante e errado.
+
+        Quando o arquivo não declara taxa (`nrates = 0`, que é o que um GE 850
+        gera), ela sai do próprio vetor de tempo e vale para o registro inteiro.
         """
-        if self.sample_rates and self.sample_rates[0].rate_hz > 0:
-            return self.sample_rates[0].rate_hz
-        if self.n_samples > 1:
-            dt = float(self.time[1] - self.time[0])
-            return 1.0 / dt if dt > 0 else 0.0
-        return 0.0
+        n = self.n_samples
+        if n == 0:
+            return ()
+
+        declarados = [r for r in self.sample_rates if r.rate_hz > 0]
+        if not declarados:
+            dt = float(self.time[1] - self.time[0]) if n > 1 else 0.0
+            return (Trecho(0, n, 1.0 / dt if dt > 0 else 0.0),)
+
+        saida: list[Trecho] = []
+        inicio = 0
+        for taxa in declarados:
+            # `last_sample` conta em base 1 e é inclusivo; aqui o fim é
+            # exclusivo em base 0 — os dois acabam com o mesmo número.
+            fim = min(max(int(taxa.last_sample), inicio), n)
+            if fim > inicio:
+                saida.append(Trecho(inicio, fim, float(taxa.rate_hz)))
+            inicio = fim
+
+        if not saida:
+            return (Trecho(0, n, float(declarados[0].rate_hz)),)
+        if saida[-1].fim < n:
+            # Arquivo que declara menos amostras do que gravou: o último trecho
+            # cobre o resto, em vez de deixar um pedaço sem taxa nenhuma.
+            ultimo = saida[-1]
+            saida[-1] = Trecho(ultimo.inicio, n, ultimo.taxa_hz)
+        return tuple(saida)
+
+    @property
+    def taxa_variavel(self) -> bool:
+        """Há mais de uma taxa neste registro? A tela precisa avisar."""
+        return len({t.taxa_hz for t in self.trechos}) > 1
+
+    @property
+    def base_rate_hz(self) -> float:
+        """Taxa do PRIMEIRO trecho, em Hz.
+
+        Serve para identificar o registro (a tira, o acervo, o diagnóstico de
+        bruto × filtrado). **Não serve para calcular fasor** num registro de
+        taxa variável — para isso existe `trechos`.
+        """
+        return self.trechos[0].taxa_hz if self.trechos else 0.0
 
     @property
     def samples_per_cycle(self) -> float:

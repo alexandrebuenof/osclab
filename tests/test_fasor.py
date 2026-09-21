@@ -189,8 +189,67 @@ def test_janela_com_buraco_nao_vira_fasor():
 def test_sinal_zerado_nao_divide_por_zero():
     f = fasor.de_janela(np.zeros(20))
     assert f.fundamental == 0.0
-    assert f.dc_percentual == 0.0
-    assert f.distorcao == 0.0
+    # Sem sinal não há de que ser percentual: traço, não zero. Zero afirmaria
+    # "medi, e a DC é nula"; o traço diz "não há como medir isto aqui".
+    assert f.dc_percentual is None
+    assert f.distorcao is None
+
+
+# ---------------------------------------------------------------------------
+# Percentual de coisa nenhuma
+# ---------------------------------------------------------------------------
+
+def test_sem_fundamental_nao_ha_percentual():
+    """O caso real que motivou a guarda.
+
+    Canal de corrente depois de o disjuntor abrir: 0,15 A de offset parado do
+    conversor A/D e nada de 60 Hz. A tela mostrava `DC 5.484,9 %` — conta certa,
+    informação lixo. Quem lesse aquilo procuraria um defeito que não existe.
+    """
+    quase_nada = np.full(20, 0.1536) + 0.0028 * np.cos(2 * np.pi * np.arange(20) / 20)
+    f = fasor.de_janela(quase_nada)
+
+    # As MEDIDAS continuam valendo: têm unidade e não dependem de denominador.
+    assert f.dc == pytest.approx(0.1536, rel=1e-6)
+    assert f.rms == pytest.approx(0.1536, abs=0.001)
+    # Os PERCENTUAIS, não.
+    assert f.serve_de_referencia is False
+    assert f.dc_percentual is None
+    assert f.distorcao is None
+
+
+def test_falta_assimetrica_de_verdade_continua_mostrando():
+    """A guarda não pode comer o número que interessa.
+
+    Uma falta com 60 % de DC é assimetria de livro — é exatamente o que satura
+    TC e atrasa o relé, e tem que aparecer.
+    """
+    eficaz = 100.0
+    sinal = senoide(eficaz * math.sqrt(2), 0.0, dc=0.60 * eficaz)
+    f = fasor.no_instante(sinal, i=59, por_ciclo=20)
+
+    assert f.serve_de_referencia is True
+    assert f.dc_percentual == pytest.approx(60.0, abs=0.1)
+
+
+@pytest.mark.parametrize("fracao,esperado", [
+    (0.90, True),    # senoide quase limpa
+    (0.50, True),    # bem distorcida, mas ainda é um sinal de 60 Hz
+    (0.10, False),   # o que não é fundamental supera a fundamental em 10x
+    (0.02, False),   # ruído
+])
+def test_o_limite_e_a_fundamental_sobre_o_rms_da_janela(fracao, esperado):
+    """A regra olha a própria janela: que fração dela é 60 Hz.
+
+    Monta-se uma janela com a fundamental valendo `fracao` do RMS total, o
+    resto em harmônico. É o critério inteiro, num teste só.
+    """
+    n = 20
+    t = np.arange(n) / n
+    resto = math.sqrt(max(1.0 - fracao**2, 0.0))
+    janela = (fracao * np.cos(2 * np.pi * t)
+              + resto * np.cos(2 * np.pi * 7 * t))
+    assert fasor.de_janela(janela).serve_de_referencia is esperado
 
 
 @pytest.mark.parametrize("bruto,referencia,esperado", [

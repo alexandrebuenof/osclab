@@ -18,6 +18,7 @@ from osclab.formats.base import (
     Record,
     SampleRate,
     StatusChannel,
+    Trecho,
 )
 
 # --- leitores registrados ---------------------------------------------------
@@ -34,6 +35,7 @@ __all__ = [
     "Reader",
     "Record",
     "SampleRate",
+    "Trecho",
     "StatusChannel",
     "registry",
 ]

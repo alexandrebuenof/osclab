@@ -17,6 +17,7 @@
       </p>
     </div>
     <div class="acoes">
+      <button type="button" class="chave" id="filtro" aria-pressed="false">60 Hz</button>
       <div class="lado" id="lado" role="group" aria-label="Lado dos valores">
         <button type="button" data-lado="secundario">secundário</button>
         <button type="button" data-lado="primario">primário</button>
@@ -32,6 +33,8 @@
     <span><b>{{ item.n_analogicos }}</b> analógicos · <b>{{ item.n_digitais }}</b> digitais</span>
     <span>{{ item.formato }}</span>
     {% if item.disparo %}<span>disparo {{ item.disparo }}</span>{% endif %}
+    <span id="taxa-variavel" class="atencao" hidden></span>
+    <span id="filtragem" hidden></span>
   </section>
 
   <main id="graficos">
@@ -47,10 +50,14 @@
       <li><b>1</b> e <b>2</b> põem e tiram os cursores no ponto do mouse</li>
       <li><b>← →</b> andam uma amostra · com <b>Shift</b>, um ciclo</li>
       <li><b>Esc</b> tira os dois cursores</li>
+      <li><b>clique</b> num traço, numa tira ou no nome da legenda destaca o
+        sinal · com <b>Ctrl</b>, destaca vários</li>
+      <li><b>Delete</b> tira da tela os sinais destacados · <b>Ctrl+Z</b>
+        desfaz</li>
       <li><b>t (ms)</b> na tabela alterna entre milissegundos e ciclos</li>
       <li><b>primário/secundário</b> no cabeçalho converte pela relação de TC/TP</li>
-      <li>o canto da tabela alterna entre <b>valor</b> (instantâneo),
-          <b>fasor</b> (módulo e ângulo do ciclo) e <b>rms</b> (eficaz verdadeiro e DC)</li>
+      <li><b>60 Hz</b> no cabeçalho filtra tudo; <b>instantâneo/RMS</b> no topo de cada gráfico vale só para ele</li>
+      <li><b>passe o mouse</b> num valor da tabela para ver ângulo, DC e distorção</li>
       <li><b>nome do canal</b> vira a referência de 0° dos ângulos</li>
     </ul>
     <span id="rodape"></span> ·

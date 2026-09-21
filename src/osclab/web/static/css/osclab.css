@@ -22,6 +22,18 @@
   --destaque: #58c6d6;
   --destaque-fraco: #123036;
 
+  /* O azul das tiras digitais. Mais escuro que o --destaque de propósito: uma
+     tela com duas dúzias de tiras acesas no azul dos botões virava um bloco
+     luminoso, e as ondas — que são o assunto — ficavam em segundo plano. */
+  --digital: #2f8da1;
+
+  /* Os sinais CALCULADOS (3I0, I1, I2...). Ficam fora da paleta de fases de
+     propósito: pintar 3I0 com a cor da fase A o faria passar por IA no
+     gráfico de correntes, e ninguém olharia duas vezes. */
+  --calculado-1: #b07ae0;
+  --calculado-2: #e86aa8;
+  --calculado-3: #8aa0a6;
+
   --bom: #2c9b75;
   --atencao: #b8860b;
   --ruim: #d45560;
@@ -55,6 +67,10 @@
   --linha: #c6d2d3;
   --destaque: #0e6e7a;
   --destaque-fraco: #dfeff1;
+  --digital: #0a4b54;
+  --calculado-1: #6b3fa0;
+  --calculado-2: #a8306a;
+  --calculado-3: #57696b;
 
   --bom: #157f5c;
   --atencao: #b8860b;
@@ -306,6 +322,15 @@ footer a { color: var(--destaque); }
 
 .tira b { color: var(--tinta); font-weight: 600; }
 
+/* Taxa de amostragem que muda no meio do registro. Não é erro, mas muda como
+   se lê o gráfico — então destaca-se do resto da tira, que é só informação. */
+.tira .atencao { color: var(--atencao); cursor: help; }
+
+/* Rodapé que virou recado de falha: o gráfico continua de pé, só o aviso muda
+   de cor. Apagar o desenho por causa de um pedido que falhou custaria ao
+   usuário o zoom, os cursores e o lugar onde ele estava. */
+#rodape.atencao { color: var(--atencao); }
+
 /* --- gráficos ------------------------------------------------------------ */
 
 #graficos {
@@ -373,8 +398,13 @@ footer a { color: var(--destaque); }
   letter-spacing: .04em;
   border: 1px solid currentColor;
   border-radius: 3px;
-  padding: 0 3px;
+  padding: 0 3px 0 4px;    /* o itálico inclina para a direita e encosta na borda */
   opacity: .85;
+  /* O itálico é a segunda marca, junto com a moldura. Uma regra só para
+     decorar a tela inteira: reto é do relé, inclinado é nosso. Vale para o
+     nome do canal aqui e vai valer para 3I0, V1 e V2 no marco 0.4b, que não
+     existem em canal nenhum do arquivo. */
+  font-style: italic;
 }
 
 /* Canal que o arquivo não deixou converter: avisa, não bloqueia. */
@@ -389,7 +419,12 @@ footer a { color: var(--destaque); }
 .tela canvas { display: block; width: 100%; }
 
 /* O cursor é a única pista de que o gráfico responde ao mouse. */
-#graficos { cursor: grab; }
+/* A mãozinha só onde se arrasta de verdade: dentro da moldura do desenho. Na
+   margem dos rótulos, na legenda e na tabelinha o cursor é o de sempre — um
+   cursor de arrastar sobre um lugar que não arrasta é promessa que a tela não
+   cumpre. Quem liga e desliga a classe é o `pointermove`, com a mesma conta
+   que decide a roda do mouse (`noDesenho`). */
+#graficos.sobre-desenho { cursor: grab; }
 #graficos.arrastando { cursor: grabbing; }
 #graficos.selecionando { cursor: col-resize; }
 
@@ -466,14 +501,6 @@ footer a { color: var(--destaque); }
   gap: 14px;
 }
 
-/* Os modos "fasor" e "rms" têm duas colunas a mais (duas por cursor), então a
-   tabelinha precisa de mais espaço — e só enquanto estiver num deles. */
-#graficos.com-cursores .grafico-corpo:has(.mini-duplo) {
-  grid-template-columns: minmax(0, 1fr) 340px;
-}
-
-.mini-duplo th:first-child, .mini-duplo td:first-child { width: 30%; }
-
 .mini { display: none; }
 #graficos.com-cursores .mini { display: table; }
 
@@ -539,9 +566,9 @@ footer a { color: var(--destaque); }
   text-underline-offset: 3px;
 }
 
-/* A segunda coluna de cada par (ângulo, DC %) acompanha um número; fica
-   apagada para o olho achar primeiro o que ela acompanha. */
-.mini .acessorio { color: var(--suave); }
+/* O canto da tabelinha diz que grandeza está nela. Não é botão: quem manda é
+   o cabeçalho da página. */
+.mini thead .unidade { cursor: help; }
 .mini .fase-A { color: var(--fase-a); }
 .mini .fase-B { color: var(--fase-b); }
 .mini .fase-C { color: var(--fase-c); }
@@ -626,3 +653,333 @@ footer a { color: var(--destaque); }
 /* Sem relação de TC/TP declarada não há o que converter: o botão some do
    caminho em vez de prometer uma conversão que não vai acontecer. */
 .lado button:disabled { opacity: .4; cursor: default; }
+
+/* Chave de um estado só: acesa ou apagada. Mais honesta que dois botões que se
+   alternam — filtro é coisa que está ligada ou não. */
+.chave {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 5px 12px;
+  border: 1px solid var(--linha);
+  border-radius: 6px;
+  background: none;
+  color: var(--suave);
+  cursor: pointer;
+}
+
+.chave:hover:not(:disabled) { color: var(--tinta); }
+
+.chave.escolhido {
+  background: var(--destaque-fraco);
+  border-color: var(--destaque);
+  color: var(--destaque);
+}
+
+/* Travado pelo ARQUIVO, não pela tela: o relé já filtrou e não há como
+   desfiltrar. Fica visível e inerte — esconder deixaria o usuário procurando
+   um botão que ele viu antes. */
+.chave:disabled { cursor: help; opacity: .75; }
+
+/* A medida de cada gráfico, no topo dele. Discreta de propósito: é escolha de
+   vista, não um dado do registro — não pode competir com o título. */
+.grafico-titulo {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.grafico-titulo .medida {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  padding: 1px 6px;
+  border: 1px solid var(--linha);
+  border-radius: 4px;
+  background: none;
+  /* `--suave`, e não `--linha`: o estado PADRÃO é o que mais se vê, e era
+     justamente ele que estava ilegível. Discreto é não competir com o título;
+     não é sumir. */
+  color: var(--suave);
+  cursor: pointer;
+}
+
+.grafico-titulo .medida:hover {
+  color: var(--tinta);
+  border-color: var(--suave);
+}
+
+/* RMS é escolha deliberada, fora do padrão — então se destaca de propósito. */
+.grafico-titulo .medida.escolhido {
+  color: var(--destaque);
+  border-color: var(--destaque);
+  background: var(--destaque-fraco);
+}
+
+/* Botão travado pelo arquivo, não pela tela: o relé já filtrou e não há como
+   desfiltrar. Fica visível e inerte, com a explicação no title — esconder
+   deixaria o usuário procurando um botão que ele viu antes. */
+.lado.travado button.escolhido { opacity: .75; }
+.lado.travado { cursor: help; }
+
+
+/* --- tiras digitais ------------------------------------------------------ */
+
+/* A coluna vazia ao lado das tiras: existe para elas ficarem alinhadas com as
+   ondas quando a tabelinha dos cursores está aberta. */
+.sem-tabela { min-width: 0; }
+
+/* --- busca de sinais ----------------------------------------------------- */
+
+.busca {
+  width: min(520px, 92vw);
+  max-height: 72vh;
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+  background: var(--superficie);
+  color: var(--tinta);
+  padding: 16px;
+}
+
+.busca::backdrop { background: rgba(0, 0, 0, .45); }
+
+.busca .cabeca { display: flex; gap: 12px; align-items: center; }
+.busca h3 { margin: 0; font-size: 14px; white-space: nowrap; }
+
+/* O X. Discreto até o mouse chegar: quem está procurando um sinal não pode
+   ter o botão de desistir como a coisa mais visível da janela. */
+.busca .fechar {
+  border: 0;
+  background: none;
+  color: var(--suave);
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+}
+
+.busca .fechar:hover { color: var(--tinta); }
+
+.busca input[type="search"] {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--linha);
+  border-radius: 6px;
+  background: var(--fundo);
+  color: var(--tinta);
+}
+
+/* ALTURA FIXA, não `max-height`: com altura elástica a janela pulava de
+   tamanho a cada letra digitada e a cada troca de aba, e o botão de aplicar
+   fugia de debaixo do mouse. Lista curta sobra espaço; é o preço certo. */
+.busca .achados {
+  margin: 12px 0;
+  height: 46vh;
+  overflow-y: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.busca .achado {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--suave);
+}
+
+.busca .achado:hover { background: var(--fundo); }
+
+/* Quem mudou durante o registro se destaca: é o que conta a história do
+   evento, e o resto está ali por completude. */
+.busca .achado.mudou { color: var(--tinta); }
+.busca .achado .nome { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.busca .achado .quando { color: var(--destaque); font-size: 11px; }
+
+.busca .aceitar {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 6px 14px;
+  border: 1px solid var(--destaque);
+  border-radius: 6px;
+  background: var(--destaque-fraco);
+  color: var(--destaque);
+  cursor: pointer;
+}
+
+
+/* --- catálogo de sinais --------------------------------------------------- */
+
+/* As duas abas. São duas coisas diferentes — o que o relé gravou e o que nós
+   calculamos — e a tela não pode deixar dúvida sobre qual é qual. */
+.busca .abas {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+  border-bottom: 1px solid var(--linha);
+}
+
+.busca .aba {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 6px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--suave);
+  cursor: pointer;
+}
+
+.busca .aba.escolhido { color: var(--destaque); border-bottom-color: var(--destaque); }
+
+/* O nome do arquivo ao lado do nome do OscLab, em letra miúda: um é o que o
+   engenheiro reconhece, o outro é o que o programa usa. */
+.busca .achado .origem {
+  color: var(--suave);
+  font-size: 11px;
+  opacity: .8;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.busca .vazio { color: var(--suave); font-size: 12.5px; padding: 12px 4px; }
+
+/* --- sinais acrescentados à mão ------------------------------------------ */
+
+/* A marca tracejada repete, na legenda, o traço do gráfico: o sinal está na
+   escala da DIREITA e a altura dele não se compara com a dos outros. */
+.legenda .marca.tracejada {
+  background-image: repeating-linear-gradient(90deg,
+    rgba(0, 0, 0, 0) 0 3px, var(--fundo) 3px 5px);
+}
+
+.legenda .tirar {
+  border: 0;
+  background: none;
+  color: var(--suave);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+
+.legenda .tirar:hover { color: var(--ruim); }
+
+/* Sinal de uma terceira unidade não tem eixo para ir. O aviso fica no título
+   do gráfico, onde está o botão que o acrescentou. */
+.grafico-titulo .aviso-extra {
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--atencao);
+}
+
+/* A linha da tabelinha de um sinal calculado não tem nome de arquivo nem botão
+   de referência: não há canal por trás dela. */
+.mini tr.extra th.canal { padding-left: 2px; }
+
+/* A unidade de um sinal acrescentado que não é a do gráfico. Discreta, mas
+   presente: o rótulo da tabela vale para as outras linhas, e sem este aviso
+   72,8 V se leria como 72,8 A. */
+.mini tr.extra .unidade-extra {
+  color: var(--suave);
+  font-size: 10px;
+  margin-left: 4px;
+}
+
+/* A divisão entre o que falta e o que já está na tela. Precisa ser uma parede,
+   não um espacinho: são duas listas com significados opostos. */
+.busca .divisor {
+  margin: 14px 0 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--linha);
+  color: var(--suave);
+  font-family: var(--sans);
+  font-size: 11.5px;
+}
+
+/* O vínculo canal → variável fundamental, na lista do IED. Em itálico e com
+   moldura, como todo nome que é NOSSO e não do arquivo. */
+.busca .achado .vinculo {
+  font-style: italic;
+  font-size: 11px;
+  padding: 1px 6px;
+  border: 1px solid var(--linha);
+  border-radius: 4px;
+  color: var(--destaque);
+  white-space: nowrap;
+}
+
+/* Canal que o programa não soube identificar. Não é erro — o canal continua
+   desenhável — mas precisa saltar aos olhos: ele não entra em componente
+   simétrica nem em localização de falta. */
+.busca .achado .vinculo.nenhum {
+  font-style: normal;
+  color: var(--atencao);
+  border-color: transparent;
+}
+
+/* Vínculo DEDUZIDO do nome: é palpite bom, e palpite. A moldura pontilhada diz
+   isso sem uma palavra a mais. O declarado pelo arquivo e o corrigido pelo
+   usuário ficam com moldura cheia — os dois são afirmação de alguém. */
+.busca .achado .vinculo.deduzida { border-style: dashed; }
+.busca .achado .vinculo.escolhida { border-color: var(--destaque); }
+
+/* Correção ainda não gravada. */
+.busca .achado .vinculo.pendente {
+  color: var(--atencao);
+  border-color: var(--atencao);
+}
+
+.busca .achado .vinculo-caixa {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+/* O lápis. Some até o mouse chegar na linha: corrigir vínculo é exceção, e uma
+   fileira de lápis acesos competiria com o que a lista tem a dizer. */
+.busca .achado .editar-vinculo {
+  border: 0;
+  background: none;
+  color: var(--suave);
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.busca .achado:hover .editar-vinculo,
+.busca .achado .editar-vinculo:focus { opacity: 1; }
+.busca .achado .editar-vinculo:hover { color: var(--destaque); }
+
+.busca .achado .escolher-fase {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 2px 4px;
+  border: 1px solid var(--destaque);
+  border-radius: 4px;
+  background: var(--fundo);
+  color: var(--tinta);
+}
+
+/* O sinal escolhido no gráfico, aceso também na legenda: os dois lugares
+   falam do mesmo traço, e quem clicou precisa achar o nome dele sem procurar. */
+.legenda li.escolhido {
+  background: var(--destaque-fraco);
+  border-radius: 4px;
+  outline: 1px solid var(--destaque);
+}
+
+/* O nome na legenda é alvo de clique: é o jeito certeiro de escolher um sinal
+   num gráfico onde oito curvas se sobrepõem. */
+.legenda li.clicavel { cursor: pointer; padding: 1px 4px; }
+.legenda li.clicavel:hover { background: var(--superficie); border-radius: 4px; }

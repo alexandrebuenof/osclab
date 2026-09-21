@@ -55,6 +55,25 @@ import numpy as np
 #: que fabricante nenhum grava; menos que isso é arquivo estranho.
 MINIMO_POR_CICLO = 4
 
+#: Quanto da janela precisa ser fundamental para que um PERCENTUAL DELA
+#: signifique alguma coisa.
+#:
+#: `DC %` e `THD` são os dois percentuais **da fundamental**. Quando a
+#: fundamental some, o denominador some junto e o percentual estoura: num
+#: registro real, um canal de corrente depois de o disjuntor abrir mostrou
+#: `DC 5.484,9 %` — 0,15 A de offset do conversor A/D divididos por 0,0028 A de
+#: fundamental. A conta estava certa e a informação era lixo.
+#:
+#: O critério olha a própria janela: a fundamental tem que ser pelo menos um
+#: quarto do RMS dela. Abaixo disso o que está ali dentro não é um sinal de
+#: 60 Hz — é ruído, offset parado ou transitório puro, e o resto da janela já
+#: supera a fundamental em quase quatro vezes. Percentual de coisa nenhuma não
+#: se mostra: mostra-se traço.
+#:
+#: O limite NÃO afeta `fundamental`, `rms`, `dc` nem `angulo`. Esses continuam
+#: sendo medidas honestas, com unidade, em qualquer janela.
+MINIMO_FUNDAMENTAL = 0.25
+
 
 @dataclass(frozen=True)
 class Fasor:
@@ -74,12 +93,29 @@ class Fasor:
     maximo: float
 
     @property
-    def dc_percentual(self) -> float:
-        """A DC como percentual da fundamental — a convenção do SIGRA."""
-        return 100.0 * self.dc / self.fundamental if self.fundamental > 0 else 0.0
+    def serve_de_referencia(self) -> bool:
+        """Há fundamental suficiente para um percentual dela significar algo?
+
+        Ver `MINIMO_FUNDAMENTAL`. Quando é `False`, `dc_percentual` e
+        `distorcao` devolvem `None` — a tela mostra traço em vez de um número
+        de quatro dígitos que parece defeito do programa.
+        """
+        return self.rms > 0 and self.fundamental >= MINIMO_FUNDAMENTAL * self.rms
 
     @property
-    def distorcao(self) -> float:
+    def dc_percentual(self) -> float | None:
+        """A DC como percentual da fundamental — a convenção do SIGRA.
+
+        `None` quando não há fundamental que sirva de denominador. A DC em si
+        (`dc`, na unidade do canal) continua valendo: é a média da janela, e
+        média não depende de denominador nenhum.
+        """
+        if not self.serve_de_referencia:
+            return None
+        return 100.0 * self.dc / self.fundamental
+
+    @property
+    def distorcao(self) -> float | None:
         """Tudo que não é fundamental, em percentual DA FUNDAMENTAL (THD).
 
         Zero numa senoide pura. Alto em energização de trafo (harmônicos) e no
@@ -90,9 +126,12 @@ class Fasor:
         e a do SIGRA: "30 % de terceiro harmônico" quer dizer 30 % **da
         fundamental**. Pelo RMS total o mesmo sinal daria 28,7 %, e o número da
         tela discordaria do que está escrito no relatório de qualidade.
+
+        `None` pela mesma razão do `dc_percentual`: sem fundamental não há de
+        que ser percentual.
         """
-        if self.fundamental <= 0:
-            return 0.0
+        if not self.serve_de_referencia:
+            return None
         sobra = max(self.rms**2 - self.fundamental**2, 0.0)
         return 100.0 * math.sqrt(sobra) / self.fundamental
 

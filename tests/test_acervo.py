@@ -280,3 +280,33 @@ def test_varios_esperando_ao_mesmo_tempo(tmp_path):
     acervo.guardar([_par(tmp_path / "a", nome="UM", n=32)[0]])
     acervo.guardar([_par(tmp_path / "b", nome="DOIS", n=32)[0]])
     assert set(acervo.aguardando()) == {"um", "dois"}
+
+
+# ---------------------------------------------------------------------------
+# Vínculos: a correção de fase feita pelo usuário
+# ---------------------------------------------------------------------------
+
+def test_o_vinculo_corrigido_sobrevive_a_fechar_o_programa(tmp_path):
+    """Quem corrigiu uma fase corrigiu para sempre, não até fechar o navegador.
+    Guardar isso na tela faria a correção sumir no meio de uma análise."""
+    sha = acervo.guardar(_par(tmp_path, n=64)).aceitos[0].sha
+    acervo.gravar_vinculos(sha, {"0": "C"})
+    # Reler do zero é o que um programa reaberto faz.
+    assert acervo.vinculos(sha) == {0: "C"}
+    assert acervo.ler(sha).analog_channels[0].phase_escolhida == "C"
+
+
+def test_escolha_vazia_tira_o_vinculo(tmp_path):
+    """Voltar atrás tem que ser possível: o usuário pode ter corrigido errado."""
+    sha = acervo.guardar(_par(tmp_path, n=64)).aceitos[0].sha
+    acervo.gravar_vinculos(sha, {"0": "C"})
+    acervo.gravar_vinculos(sha, {"0": ""})
+    assert acervo.vinculos(sha) == {}
+    assert not (acervo._raiz() / sha / acervo.VINCULOS).exists()
+
+
+def test_vinculo_com_lixo_e_ignorado(tmp_path):
+    """A tela manda texto, e o servidor não confia nele."""
+    sha = acervo.guardar(_par(tmp_path, n=64)).aceitos[0].sha
+    acervo.gravar_vinculos(sha, {"0": "Z", "nao_e_numero": "A", "1": "b"})
+    assert acervo.vinculos(sha) == {1: "B"}

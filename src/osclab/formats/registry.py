@@ -66,5 +66,14 @@ def reader_for(path: Path) -> Reader:
 
 
 def read(path: Path) -> Record:
-    """Abre o arquivo com o leitor certo e devolve o registro."""
-    return reader_for(path).read(Path(path))
+    """Abre o arquivo com o leitor certo e devolve o registro.
+
+    O diagnóstico de bruto × filtrado é aplicado AQUI, e não dentro de cada
+    leitor: ele se deduz das amostras, não do formato. Todo leitor novo o herda
+    sem precisar saber que ele existe — e nenhum leitor pode esquecer dele.
+    """
+    # Import adiado: `analysis` conversa com `formats`, e importá-lo no topo
+    # fecharia um ciclo.
+    from osclab.analysis import filtragem
+
+    return filtragem.aplicar(reader_for(path).read(Path(path)))
