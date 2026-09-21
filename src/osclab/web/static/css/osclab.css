@@ -728,6 +728,86 @@ footer a { color: var(--destaque); }
    um botão que ele viu antes. */
 .chave:disabled { cursor: help; opacity: .75; }
 
+/* O ímã é ícone, não palavra: ao lado de «60 Hz», «secundário» e «primário»,
+   mais um texto viraria uma frase. O quadrado mantém o desenho centrado e a
+   altura igual à dos vizinhos, que é o que impede a fileira de ficar torta. */
+.chave.ima {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  line-height: 0;
+}
+
+/* O ímã e a setinha são dois botões colados: são a mesma coisa da tela, e um
+   vão entre eles os faria parecer controles de assuntos diferentes. O grupo é
+   `relative` porque é dele que o menu pende. */
+.grupo-ima {
+  position: relative;
+  display: inline-flex;
+}
+
+.grupo-ima .chave.ima {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.chave.seta-ima {
+  padding: 5px 6px;
+  border-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* O menu pende do grupo, alinhado à esquerda dele. Fica ACIMA de tudo porque
+   o cabeçalho é a primeira coisa da página e o menu cobre o gráfico. */
+.menu-ima {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  min-width: 230px;
+  padding: 8px 4px 6px;
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  background: var(--superficie);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+  text-align: left;
+}
+
+.menu-ima .cabeca-menu {
+  margin: 0 0 6px;
+  padding: 0 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--suave);
+}
+
+.menu-ima .opcao-ima {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--tinta);
+  cursor: pointer;
+  /* Rótulo que quebra em duas linhas vira duas opções aos olhos de quem
+     corre a lista. */
+  white-space: nowrap;
+}
+
+.menu-ima .opcao-ima:hover { background: var(--destaque-fraco); }
+.menu-ima .opcao-ima input { cursor: pointer; }
+
+/* A última ligada fica travada: o ímã precisa grudar em alguma coisa. Fica
+   visível e inerte, com a explicação no title — a mesma regra do botão do
+   filtro num registro que o relé já filtrou. */
+.menu-ima .opcao-ima:has(input:disabled) { cursor: help; opacity: .65; }
+.menu-ima .opcao-ima input:disabled { cursor: help; }
+
 /* A medida de cada gráfico, no topo dele. Discreta de propósito: é escolha de
    vista, não um dado do registro — não pode competir com o título. */
 .grafico-titulo {

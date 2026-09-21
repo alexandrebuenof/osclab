@@ -63,7 +63,7 @@
   //: navegador recarrega o `.js` sozinho: quem troca de versão sem reiniciar
   //: fica com tela nova e servidor velho, e o resultado é uma tela que mostra
   //: coisas que não fazem sentido sem dar erro nenhum. Já custou três rodadas.
-  const CONTRATO = 5;
+  const CONTRATO = 8;
 
   //: A margem de cima abriga a etiqueta numerada dos cursores, que fica FORA da
   //: área de desenho: por dentro ela tapa o pico da onda — e o pico é
@@ -137,6 +137,11 @@
   //: O instante sob o mouse, para as teclas 1 e 2 saberem onde pôr o cursor.
   let sobreOMouse = null;
 
+  //: A geometria do gráfico onde o mouse estava na última vez. As teclas 1 e 2
+  //: precisam dela para converter o raio do ímã, que é em PIXELS, no tempo que
+  //: aqueles pixels valem — e isso muda a cada zoom.
+  let geometriaDoMouse = null;
+
   //: Uma leitura de cada vez: durante o arrasto o último pedido vence.
   let lendo = false;
   let pedidoDeLeitura = null;
@@ -164,6 +169,64 @@
   //: **medida** é de cada gráfico — corrente em RMS e tensão em instantâneo ao
   //: mesmo tempo é leitura comum numa falta.
   let filtro = lerGuardado("osclab:filtro", ["0", "1"], "0") === "1";
+
+  //: O ÍMÃ: com ele aceso, o cursor gruda no ponto notável mais próximo em vez
+  //: de cair onde a mão soltou. Do registro inteiro, como o filtro — um cursor
+  //: que gruda num gráfico e não gruda no de baixo seria armadilha, porque é o
+  //: MESMO cursor atravessando os dois. Ver `plot/imas.py`.
+  let magnetico = lerGuardado("osclab:imã", ["0", "1"], "0") === "1";
+
+  //: No que cada cursor grudou da última vez, ou `null`. Serve para a tela
+  //: DIZER no que grudou: com um pico e uma transição a três pixels um do
+  //: outro, o cursor pega um dos dois e sem etiqueta ninguém sabe qual — e o
+  //: número que sair dali vai para o laudo.
+  const presos = [null, null];
+
+  //: O raio do ímã, em pixels. Largo o bastante para a mão, estreito o
+  //: bastante para o cursor não saltar para um ponto que o usuário não estava
+  //: mirando. Fora dele o ímã não age, e o cursor cai onde foi posto.
+  const RAIO_DO_IMA = 14;
+
+  //: A ordem de preferência quando dois pontos estão à MESMA distância do
+  //: mouse. Primeiro o mais exato: a transição de um digital é uma amostra sem
+  //: nenhuma dúvida; o início da perturbação é um palpite calibrado; o extremo
+  //: de uma onda amostrada cai entre duas amostras e a gente entrega a mais
+  //: próxima. Empate é raro, mas quando acontece tem que ser sempre igual.
+  const PRECEDENCIA = { transicao: 0, inicio: 1, zero: 2, pico: 3 };
+
+  //: O que o ímã PODE procurar, na ordem em que aparece no menu. Só `transicao`
+  //: vem ligado: é o ponto que serve à medida mais comum do ofício (trip,
+  //: abertura, religamento) e o único que nunca é ambíguo. O resto o usuário
+  //: liga quando precisa — tela que já vem com tudo ligado é tela em que o
+  //: cursor gruda onde ninguém pediu.
+  const ATRACOES = [
+    ["transicao", "transições de digital"],
+    ["inicio", "início da falta"],
+    ["pico", "picos de analógico"],
+    ["zero", "passagens por zero"],
+  ];
+
+  //: Quais delas estão ligadas. Mora na tela e fica guardado: quem analisa com
+  //: os picos ligados costuma querer o mesmo na próxima oscilografia.
+  let atracoes = lerAtracoesGuardadas();
+
+  function lerAtracoesGuardadas() {
+    const validas = new Set(ATRACOES.map(([chave]) => chave));
+    try {
+      const cru = JSON.parse(localStorage.getItem("osclab:imã:atracoes") || "");
+      if (Array.isArray(cru)) {
+        const escolhidas = cru.filter((x) => validas.has(x));
+        // Lista vazia guardada seria um ímã que nunca gruda em nada, e um
+        // botão aceso que não faz nada é pior que botão apagado.
+        if (escolhidas.length) return new Set(escolhidas);
+      }
+    } catch { /* nada guardado, ou lixo: vale o padrão */ }
+    return new Set(["transicao"]);
+  }
+
+  function guardarAtracoes() {
+    guardar("osclab:imã:atracoes", JSON.stringify([...atracoes]));
+  }
 
   //: O ARRANJO da tela: a lista de painéis, na ordem em que aparecem. Cada um
   //: é `{id, tipo, nome, sinais[], medida}`. É o estado principal desta tela —
@@ -792,6 +855,29 @@
       ctx.textBaseline = "middle";
       ctx.font = "bold 10px ui-monospace, Consolas, monospace";
       ctx.fillText(String(k + 1), centro, topo + ETIQUETA.altura / 2);
+
+      // No que o ímã grudou, ao lado do número. É a resposta à única dúvida
+      // que o ímã cria: com um pico e uma transição a três pixels um do outro,
+      // o cursor pega um dos dois — e sem isto escrito ninguém sabe qual.
+      // Só o cursor ATIVO mostra a etiqueta. Dois cursores a nove pixels um
+      // do outro — que é o caso comum, medindo trip contra abertura — têm as
+      // duas etiquetas no mesmo lugar, e duas frases sobrepostas não se leem.
+      // O ativo é o que acabou de ser posto ou movido, que é justamente
+      // aquele sobre o qual se tem a dúvida.
+      const preso = k === ativo ? presos[k] : null;
+      if (preso) {
+        ctx.fillStyle = token(k === 0 ? "--cursor-1" : "--cursor-2");
+        ctx.globalAlpha = 0.9;
+        ctx.font = "10px ui-monospace, Consolas, monospace";
+        // Perto da borda direita o texto vira para a esquerda, senão a metade
+        // que interessa é justamente a que sai do canvas.
+        const cabe = x1 - (centro + meia + 5);
+        const paraEsquerda = ctx.measureText(preso.rotulo).width > cabe;
+        ctx.textAlign = paraEsquerda ? "right" : "left";
+        ctx.fillText(preso.rotulo,
+                     centro + (paraEsquerda ? -meia - 5 : meia + 5),
+                     topo + ETIQUETA.altura / 2);
+      }
       ctx.restore();
     });
   }
@@ -1404,6 +1490,152 @@
     ctx.font = fonte;
     ctx.textAlign = alinhado;
     ctx.globalAlpha = opacidade;
+  }
+
+  // --- o ímã dos cursores --------------------------------------------------
+
+  //: Os pontos de atração da janela, achatados e em ordem de tempo. Guardado
+  //: por desenho: durante um arrasto esta lista é consultada a cada quadro, e
+  //: remontá-la ali seria refazer o mesmo trabalho sessenta vezes por segundo.
+  let pontosGuardados = null;
+  let seloDosPontos = -1;
+
+  /** Todos os pontos em que o cursor pode grudar, em ordem de tempo.
+   *
+   * Os instantes vêm PRONTOS do servidor (`plot/imas.py`), onde há teste:
+   * achar pico e transição é conta, e conta não se faz aqui. O que a tela faz
+   * é escolher qual deles está mais perto do mouse — que é mira, não conta,
+   * igual ao clique que escolhe um traço.
+   */
+  function pontosMagneticos() {
+    if (pontosGuardados && seloDosPontos === seloDoDesenho) return pontosGuardados;
+    const saida = [];
+    for (const painel of (dados.paineis || [])) {
+      for (const sinal of (painel.sinais || [])) {
+        const nome = sinal.sinal || sinal.nome;
+        for (const t of (sinal.picos || [])) {
+          saida.push({ t, tipo: "pico", painel: painel.id, chave: sinal.id,
+                       rotulo: `pico de ${nome}` });
+        }
+        for (const t of (sinal.zeros || [])) {
+          saida.push({ t, tipo: "zero", painel: painel.id, chave: sinal.id,
+                       rotulo: `zero de ${nome}` });
+        }
+      }
+      for (const tira of (painel.tiras || [])) {
+        for (const t of (tira.transicoes || [])) {
+          saida.push({ t, tipo: "transicao", painel: painel.id,
+                       chave: tira.indice, rotulo: tira.nome });
+        }
+      }
+    }
+    if (dados.inicio_da_perturbacao !== null
+        && dados.inicio_da_perturbacao !== undefined) {
+      // Sem dono: não é de sinal nenhum, é do registro. Por isso ele some
+      // quando há seleção — selecionar é dizer "obedeça a este aqui".
+      saida.push({ t: dados.inicio_da_perturbacao, tipo: "inicio",
+                   painel: null, chave: null, rotulo: "início da perturbação" });
+    }
+    saida.sort((a, b) => a.t - b.t);
+    pontosGuardados = saida;
+    seloDosPontos = seloDoDesenho;
+    return saida;
+  }
+
+  /** O ponto em que o cursor deve grudar, ou `null` para ficar onde está.
+   *
+   * São três regras, nesta ordem:
+   *
+   * 0. **O menu do ímã diz que TIPO de ponto conta.** É a escolha de quem
+   *    analisa, e vem antes de qualquer regra automática: com só as transições
+   *    ligadas — que é o padrão — nada mais existe para o ímã.
+   * 1. **Com seleção, só os pontos do que foi selecionado.** Selecionar já é o
+   *    gesto de "obedeça a este"; é o que dá controle numa tela com quarenta
+   *    tiras digitais, e é também o jeito de pedir o pico de uma curva
+   *    específica no meio de um evento.
+   * 2. **Sem seleção, os EVENTOS do registro ganham dos picos** — e ganham por
+   *    existirem dentro do raio, não por estarem mais perto. Um pico é
+   *    propriedade de uma curva e há dois por ciclo: com seis canais na tela,
+   *    qualquer lugar onde se ponha o mouse tem um pico a meio pixel, e uma
+   *    disputa por distância acabaria sempre no pico. Longe de qualquer
+   *    evento, os picos voltam a valer — que é o caso de medir amplitude na
+   *    pré-falta.
+   *
+   * O preço é uma faixa de um raio em volta de cada evento onde o pico não se
+   * alcança sem selecionar a curva. Perto de um trip, o trip é quase sempre o
+   * que se quer.
+   */
+  function grudarEm(t, a) {
+    if (!magnetico || !a || t === null || t === undefined) return null;
+    const pontos = pontosMagneticos();
+    if (!pontos.length) return null;
+
+    const raio = RAIO_DO_IMA * Math.abs(segundosPorPixel(a));
+    if (!isFinite(raio) || raio <= 0) return null;
+
+    // O menu do ímã manda primeiro: ele diz QUE TIPO de ponto conta. Depois
+    // disso é que valem a seleção e a prioridade — as duas são sobre quais
+    // pontos, entre os que contam, o cursor prefere.
+    const ligado = (p) => atracoes.has(p.tipo);
+
+    if (selecionados.length) {
+      // Com seleção não há disputa: só existem os pontos do que foi escolhido.
+      return maisPerto(pontos, t, raio,
+        (p) => ligado(p) && selecionados.some((x) => x.painel === p.painel
+                                                  && x.chave === p.chave));
+    }
+    // Sem seleção, os EVENTOS do registro ganham dos picos — e ganham por
+    // existirem, não por estarem mais perto. Um pico é propriedade de uma
+    // curva e há dois por ciclo: com seis canais na tela, qualquer lugar onde
+    // se ponha o mouse tem um pico a meio pixel, e o trip — que é o que se
+    // quer medir — nunca ganharia uma disputa por distância.
+    const evento = (p) => p.tipo === "transicao" || p.tipo === "inicio";
+    return maisPerto(pontos, t, raio, (p) => ligado(p) && evento(p))
+        || maisPerto(pontos, t, raio, (p) => ligado(p) && !evento(p));
+  }
+
+  /** O ponto mais próximo de `t` dentro do raio, entre os que `serve` aceita.
+   *
+   * Busca binária pelo vizinho e uma varredura curta a partir dele: a lista
+   * está em ordem de tempo, e o que interessa é só o que cabe no raio.
+   */
+  function maisPerto(pontos, t, raio, serve) {
+    let lo = 0;
+    let hi = pontos.length;
+    while (lo < hi) {
+      const meio = (lo + hi) >> 1;
+      if (pontos[meio].t < t) lo = meio + 1; else hi = meio;
+    }
+
+    let melhor = null;
+    let melhorDistancia = Infinity;
+    const olhar = (i) => {
+      const p = pontos[i];
+      if (!p) return false;
+      const d = Math.abs(p.t - t);
+      if (d > raio) return false;              // daqui para fora, só piora
+      if (!serve(p)) return true;
+      // Empate desempatado pela precedência, e não pela ordem da lista: dois
+      // pontos no mesmo pixel têm que dar sempre o mesmo resultado.
+      const perto = d < melhorDistancia - 1e-12;
+      const empate = Math.abs(d - melhorDistancia) <= 1e-12;
+      if (perto || (empate && melhor
+                    && PRECEDENCIA[p.tipo] < PRECEDENCIA[melhor.tipo])) {
+        melhor = p;
+        melhorDistancia = d;
+      }
+      return true;
+    };
+    for (let i = lo; i < pontos.length && olhar(i); i++) { /* para no raio */ }
+    for (let i = lo - 1; i >= 0 && olhar(i); i--) { /* idem, para trás */ }
+    return melhor;
+  }
+
+  /** Põe o cursor `k` em `t`, passando pelo ímã quando ele estiver aceso. */
+  function grudarCursor(k, t, a) {
+    const ponto = grudarEm(t, a);
+    presos[k] = ponto;
+    return ponto ? ponto.t : t;
   }
 
   //: Distância máxima, em pixels, entre o clique e o traço para o clique valer
@@ -2069,7 +2301,110 @@
    */
   const filtroTravado = () => !!dados && dados.filtragem === "filtrado";
 
+  /** Liga e desliga o ímã. Fica guardado: quem analisa com ele aceso costuma
+   * querer o mesmo na próxima oscilografia. */
+  function alternarIma() {
+    magnetico = !magnetico;
+    guardar("osclab:imã", magnetico ? "1" : "0");
+    // Desligar não mexe onde os cursores já estão — arrastá-los de volta por
+    // conta própria seria a tela desfazer uma medição que o usuário fez.
+    if (!magnetico) { presos[0] = presos[1] = null; }
+    marcarBotoes();
+    repintar();
+  }
+
+  /** O menu do ímã: em que tipo de ponto ele gruda.
+   *
+   * Abre embaixo do botão e some ao perder o foco ou no Esc. Não é `<dialog>`
+   * modal como a busca de sinais: ali se está escolhendo conteúdo e vale
+   * ocupar a tela; aqui é um ajuste de três segundos, e escurecer a
+   * oscilografia inteira para isso seria desproporcional.
+   */
+  function abrirMenuDoIma() {
+    const ancora = document.getElementById("menu-do-ima");
+    if (!ancora) return;
+    if (ancora.firstChild) { ancora.replaceChildren(); return; }   // já aberto
+
+    const caixa = criar("div", "menu-ima");
+    caixa.append(criar("p", "cabeca-menu", "o ímã gruda em:"));
+
+    const marcas = new Map();
+    /** Trava a ÚLTIMA ligada, em vez de deixar desmarcar e desmarcar sozinha.
+     *
+     * Tudo desligado seria um ímã aceso que não gruda em nada. A primeira
+     * versão devolvia a marca ao lugar em silêncio — e clique que não faz nada
+     * sem dizer por quê é pior que clique proibido: o usuário tenta de novo,
+     * acha que a tela travou, e ainda fica sem poder trocar de "só A" para
+     * "só B". Travada e com a explicação no hover, ele vê que precisa ligar a
+     * outra primeiro.
+     */
+    const travarAUltima = () => {
+      const sozinha = atracoes.size === 1;
+      for (const [chave, marca] of marcas) {
+        const ultima = sozinha && atracoes.has(chave);
+        marca.disabled = ultima;
+        marca.parentElement.title = ultima
+          ? "O ímã precisa grudar em alguma coisa. Ligue outra antes de "
+            + "desligar esta."
+          : "";
+      }
+    };
+
+    for (const [chave, rotulo] of ATRACOES) {
+      const linha = criar("label", "opcao-ima");
+      const marca = document.createElement("input");
+      marca.type = "checkbox";
+      marca.checked = atracoes.has(chave);
+      marca.addEventListener("change", () => {
+        if (marca.checked) atracoes.add(chave);
+        else atracoes.delete(chave);
+        guardarAtracoes();
+        travarAUltima();
+        marcarBotoes();
+      });
+      marcas.set(chave, marca);
+      linha.append(marca, criar("span", null, rotulo));
+      caixa.append(linha);
+    }
+    travarAUltima();
+
+    let pronto = false;
+    const fechar = () => {
+      if (pronto) return;
+      pronto = true;
+      ancora.replaceChildren();
+    };
+    caixa.addEventListener("focusout", (e) => {
+      if (!caixa.contains(e.relatedTarget)) fechar();
+    });
+    caixa.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { e.stopPropagation(); fechar(); }
+    });
+    ancora.append(caixa);
+    caixa.querySelector("input")?.focus();
+  }
+
   function marcarBotoes() {
+    const seta = document.getElementById("seta-do-ima");
+    if (seta) {
+      const quais = ATRACOES.filter(([c]) => atracoes.has(c))
+                            .map(([, r]) => r).join(", ");
+      seta.title = `O ímã está grudando em: ${quais}. Clique para escolher.`;
+    }
+    const ima = document.getElementById("ima");
+    if (ima) {
+      ima.classList.toggle("escolhido", magnetico);
+      ima.setAttribute("aria-pressed", String(magnetico));
+      const quais = ATRACOES.filter(([c]) => atracoes.has(c))
+                            .map(([, r]) => r).join(", ");
+      ima.title = magnetico
+        ? `Ímã aceso: o cursor gruda no ponto mais próximo entre ${quais}. `
+          + "Clique para soltá-lo; use a setinha para escolher em que ele gruda."
+        : "Clique para o cursor grudar nos pontos notáveis. Com um sinal "
+          + "selecionado, ele obedece só a esse sinal; a setinha ao lado "
+          + "escolhe em que tipo de ponto ele gruda.";
+    }
+
     const travado = filtroTravado();
     // Aceso porque o sinal ESTÁ filtrado, e mesmo assim `filtro` continua
     // falso: é o pedido que a tela manda ao servidor, e pedir o filtro num
@@ -2134,6 +2469,8 @@
   }
 
   document.getElementById("filtro")?.addEventListener("click", alternarFiltro);
+  document.getElementById("ima")?.addEventListener("click", alternarIma);
+  document.getElementById("seta-do-ima")?.addEventListener("click", abrirMenuDoIma);
   marcarBotoes();
 
   function escolherReferencia(indice) {
@@ -2736,6 +3073,7 @@
       const dentro = noDesenho(a);
       const naEtiqueta = sobreEtiqueta(a);
       sobreOMouse = dentro ? instanteEm(a) : null;
+      geometriaDoMouse = dentro ? a : null;
       area.classList.toggle("sobre-desenho", dentro);
       area.classList.toggle("no-cursor",
                             naEtiqueta || (dentro && cursorEm(a, a.x) >= 0));
@@ -2748,9 +3086,10 @@
 
     if (arrastando.cursor !== undefined) {
       const a = arrastando.a;
-      const preso = Math.min(Math.max(x, a.x0), a.x1);
+      const limitado = Math.min(Math.max(x, a.x0), a.x1);
+      const solto = dados.de + (limitado - a.x0 - arrastoPx) * segundosPorPixel(a);
       cursores[arrastando.cursor] =
-        dados.de + (preso - a.x0 - arrastoPx) * segundosPorPixel(a);
+        grudarCursor(arrastando.cursor, solto, a);
       repintar();
       lerCursores();
       return;
@@ -2866,7 +3205,12 @@
       // Apertar de novo com o mouse parado em cima do cursor tira o cursor.
       const jaEstava = cursores[k] !== null && sobreOMouse !== null &&
         Math.abs(cursores[k] - sobreOMouse) < (dados.ate - dados.de) * 0.004;
-      porCursor(k, jaEstava ? null : onde);
+      if (jaEstava) {
+        presos[k] = null;
+        porCursor(k, null);
+        return;
+      }
+      porCursor(k, grudarCursor(k, onde, geometriaDoMouse));
       return;
     }
 
@@ -2883,6 +3227,7 @@
       // coisa por vez é o que se espera de uma tecla de desistir.
       if (selecionados.length) { marcarSelecao([]); return; }
       cursores[0] = cursores[1] = null;
+      presos[0] = presos[1] = null;
       medida = null;
       espelhar();
       mostrarLeitura();

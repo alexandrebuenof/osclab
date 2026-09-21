@@ -519,3 +519,24 @@ def test_as_cores_neutras_vao_da_mais_viva_para_a_mais_apagada():
     cromas = [croma(x) for x in ordem]
     assert cromas == sorted(cromas, reverse=True), (
         f"fora de ordem: {list(zip(ordem, [round(c, 1) for c in cromas], strict=True))}")
+
+
+def test_o_contrato_e_o_MESMO_nos_dois_lados():
+    """O `CONTRATO` existe para pegar servidor velho com tela nova. Só que ele
+    é um número escrito em DOIS arquivos, e subir um e esquecer o outro é o
+    erro mais fácil do mundo — já aconteceu três vezes nesta sessão.
+
+    Quando os dois divergem no repositório, a tela se recusa a desenhar e manda
+    reiniciar o programa: um aviso correto para um problema que não existe, e
+    que só aparece depois de subir o servidor e abrir o navegador. Aqui ele
+    aparece no pytest.
+    """
+    import re
+
+    from osclab import paths
+    from osclab.plot import janela
+    js = (paths.STATIC_DIR / "js" / "onda.js").read_text(encoding="utf-8")
+    achado = re.search(r"const CONTRATO = (\d+);", js)
+    assert achado, "a tela precisa declarar o CONTRATO dela"
+    assert int(achado.group(1)) == janela.CONTRATO, (
+        f"onda.js diz {achado.group(1)} e plot/janela.py diz {janela.CONTRATO}")

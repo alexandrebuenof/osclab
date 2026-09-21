@@ -253,6 +253,56 @@ osclab/
   chamam a mesma função. Duas implementações da mesma decisão é como elas
   divergem, e aqui a divergência é justamente a pista que liga o número ao
   traço.
+- **O ímã põe o cursor num ponto NOTÁVEL, e nunca interpola.** Com ele aceso
+  (o botão de ferradura no cabeçalho), os cursores 1 e 2 grudam no ponto
+  notável mais próximo — sempre numa amostra de verdade, pela mesma razão que o
+  cursor sempre cai numa amostra. Fora do raio (14 px) ele não age: cursor que
+  salta para um ponto que ninguém estava mirando é pior que cursor solto. São
+  os cursores de sempre; não há cursor novo.
+- **QUEM decide em que o ímã gruda é o usuário, na setinha ao lado dele**:
+  transições de digital, início da falta, picos de analógico (a crista **e** o
+  vale — o pico negativo de uma corrente é tão pico quanto o positivo) e
+  passagens por zero. **Só as transições vêm ligadas** — é o ponto que serve à medida
+  mais comum do ofício e o único que nunca é ambíguo; tela que já vem com tudo
+  ligado é tela em que o cursor gruda onde ninguém pediu. A escolha fica
+  guardada no navegador. A última opção ligada fica **travada, visível e com a
+  explicação no hover** — a primeira versão desmarcava e remarcava em silêncio,
+  e clique que não faz nada sem dizer por quê é pior que clique proibido (além
+  de impedir trocar de "só A" para "só B").
+- **A passagem por zero é a AMOSTRA MAIS PRÓXIMA do cruzamento.** A passagem
+  verdadeira quase nunca cai numa amostra: a 16 por ciclo ela cai, em média, a
+  um terço de amostra da vizinha. Interpolar daria um instante mais exato no
+  papel e um cursor apontando para onde não há medida. Das duas que cercam o
+  cruzamento fica a que está mais perto do zero. Curva que não muda de sinal
+  (uma envoltória de RMS) não tem passagem nenhuma, e a lista sai vazia.
+- **Com seleção, o ímã só obedece ao que foi selecionado. Sem seleção, os
+  EVENTOS do registro ganham dos picos — por existirem dentro do raio, não por
+  estarem mais perto.** A ordem importa porque um pico é de UMA curva e há dois
+  por ciclo: numa janela de quarenta e cinco ciclos com seis canais são
+  quinhentos e quarenta pontos, e qualquer lugar onde se ponha o mouse tem um
+  pico a meio pixel — numa disputa por distância o trip nunca ganharia.
+  Transição e início da perturbação são poucos, e cada um é um lugar onde
+  alguém quer medir. Longe de qualquer evento os picos voltam a valer (medir
+  amplitude na pré-falta), e dentro do raio de um evento eles se alcançam
+  selecionando a curva — que é o gesto de "onde foi o pico da tensão".
+- **O ímã DIZ no que grudou.** A etiqueta sai ao lado do número do cursor, e só
+  no cursor ativo (duas etiquetas a nove pixels uma da outra não se leem). É a
+  resposta à única dúvida que o ímã cria: com dois pontos próximos, ele pega um
+  e sem isso escrito ninguém sabe qual — e o número que sai dali vai para o
+  laudo. Empate exato é desempatado por precedência fixa (transição, início,
+  pico), nunca pela ordem da lista.
+- **O início da perturbação é PALPITE, e serve só para pôr o cursor.** Sai da
+  grandeza incremental (`x[n] − x[n−N]`, um ciclo atrás): em regime permanente
+  um ciclo é igual ao seguinte e a diferença é quase zero; quando a rede muda
+  de estado, ela salta. **Não é a derivada simples** — essa é grande em toda
+  passagem por zero de uma senoide saudável, e o limiar teria que ficar acima
+  da inclinação normal da onda. O limiar sai da **mediana de `|d|` do registro
+  inteiro**, que é estimador honesto aqui por um motivo de domínio: `d` é perto
+  de zero na pré-falta, **durante a falta sustentada** e no pós-falta — ele só
+  é grande nas transições, que são breves. O detector de perturbação de
+  verdade continua sendo o marco 0.5.
+- **O DISPARO DO RELÉ NÃO ENTRA NESSA CONTA.** O relé dispara *por causa* da
+  falta: o início dela está no trecho de pré-falta, sempre.
 - **Um gráfico NUNCA repete cor.** Duas curvas da mesma cor no mesmo eixo não
   se distinguem — e era o que acontecia com `Current IA` e `Voltage A-G` no
   mesmo painel, porque as duas são fase A. A cor é decidida para o painel
@@ -551,6 +601,22 @@ Três consequências para quem programa isto:
 
 ## Detalhes que já custaram caro (não redescobrir)
 
+- **A falta vem ANTES do disparo, e todo sintético a injetava depois.** O
+  detector de início de perturbação descartava qualquer candidato anterior ao
+  disparo — achando que era ruído de pré-falta — e ainda calibrava o limiar
+  numa janela que ia até o disparo. Nos testes sintéticos ele acertava em
+  cheio; em registro de relé de verdade **não achava nada, nunca**, e quem
+  reportou foi o Alexandre. A lição maior não é sobre o algoritmo: é que um
+  sintético construído com a suposição errada confirma a suposição errada.
+  Quando um detector depende de ONDE o evento está, o teste precisa varrê-lo
+  por todo o registro — hoje há teste com a falta antes, em cima e depois do
+  disparo.
+- **`CONTRATO` é um número em DOIS arquivos.** Subir um e esquecer o outro
+  aconteceu três vezes: a tela se recusa a desenhar e manda reiniciar o
+  programa — aviso correto para um problema que não existe. Há teste que
+  compara `plot/janela.py` com `onda.js`; ele falha no pytest em vez de no
+  navegador.
+
 - **`display: flex` num `<th>` tira a célula do cálculo de colunas.** Com
   `table-layout: fixed`, a largura vem da célula; virando contêiner flex ela
   deixa de ser `table-cell` e a coluna encolhe para o conteúdo — a primeira
@@ -567,9 +633,13 @@ Três consequências para quem programa isto:
   `re.sub(r"//.*|/\*.*?\*/", "", texto, flags=re.S)` come do primeiro `//` até
   o fim do arquivo, e o teste que depende disso passa sempre sem olhar nada —
   o pior tipo de teste. Duas passadas: bloco primeiro, depois `//[^\n]*`.
-- **Nome de variável repetido em escopos diferentes vira defeito.** `medida`
-  era o pacote da leitura dos cursores E o botão instantâneo/RMS dentro de
-  `bloco`. Hoje o botão é `botaoMedida`.
+- **Nome repetido vira defeito, e no JavaScript ele vira defeito MUDO.**
+  Aconteceu duas vezes. `medida` era o pacote da leitura dos cursores E o botão
+  instantâneo/RMS dentro de `bloco` (hoje `botaoMedida`). Depois eu declarei um
+  `encaixar(t, a)` para o ímã sem ver que já havia um `encaixar(texto, largura)`
+  que corta nome de tira digital: declaração de função sobe e a última vence, o
+  nome de toda tira virou `null` na tela, e nada deu erro. **Antes de declarar
+  uma função nova, procure o nome no arquivo.**
 - **Função referenciada e não definida é invisível até o clique.** A
   refatoração perdeu `alternarSelecao` — o JavaScript não reclama na carga, só
   ao clicar, e o sintoma que chega é "não consigo mais destacar um sinal". Se
@@ -610,8 +680,10 @@ Três consequências para quem programa isto:
   `LIBRARY_DIR` para um diretório temporário) grava registros no acervo DE
   VERDADE — e já gravou. Se for rodar à mão, troque os caminhos antes.
 
-- **Servidor velho com tela nova.** Os `.py` só são lidos quando o programa
-  SOBE; o `.js` o navegador recarrega sozinho. Trocar de versão sem reiniciar
+- **Servidor velho com tela nova.** Os `.py` **e os templates `.html`** só são
+  lidos quando o programa SOBE — o Jinja guarda o template compilado em
+  memória, e o programa não roda em modo `debug`. O `.js` e o `.css`, sim, o
+  navegador recarrega sozinho. Trocar de versão sem reiniciar
   deixa a tela nova conversando com o servidor velho — e o resultado não é
   erro, é uma tela plausível e errada (campo que falta vira `undefined`, e
   `undefined` na tela não parece defeito, parece dado). Custou três rodadas de
@@ -780,6 +852,7 @@ Três consequências para quem programa isto:
 | 0.4b+ | Catálogo de sinais (IED × OscLab), segundo eixo, vínculo canal→fase corrigível | **feito** |
 | 0.4b++ | Selecionar sinal por clique, tirar da tela, desfazer | **feito** |
 | 0.4b+++ | Painéis: criar, reordenar, renomear; cor única por gráfico; unidade nos eixos | **feito** |
+| 0.4b++++ | Cursores magnéticos: transição de digital, pico e passagem por zero da onda, início da perturbação | **feito** |
 | 0.4c | Harmônicos | |
 | 0.5 | Bruto/filtrado, descontinuidade, alinhamento | |
 | 0.6 | Localização de faltas (um e dois terminais) | |

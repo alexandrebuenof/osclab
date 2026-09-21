@@ -18,6 +18,34 @@
     </div>
     <div class="acoes">
       <button type="button" class="chave" id="filtro" aria-pressed="false">60 Hz</button>
+      {#- O ímã dos cursores. Ícone e não palavra: ele fica ao lado de três
+          controles que já são texto, e mais uma palavra ali viraria uma frase
+          que ninguém lê. O que ele faz está no `title` e na etiqueta que
+          aparece no cursor quando ele gruda. #}
+      <span class="grupo-ima">
+      <button type="button" class="chave ima" id="ima" aria-pressed="false"
+              aria-label="Ímã dos cursores">
+        <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"
+             focusable="false">
+          {#- A ferradura: arco de fora, arco de dentro, e as duas pernas. #}
+          <path d="M1.6 13.4V7.6a6.4 6.4 0 0 1 12.8 0v5.8h-4.1V7.6a2.3 2.3 0
+                   0 0-4.6 0v5.8z" fill="currentColor"/>
+          {#- Os polos, em vão: é o que faz a ferradura se ler como ímã e não
+              como um U qualquer. #}
+          <rect x="1.6" y="11.1" width="4.1" height="1.15" fill="var(--fundo)"/>
+          <rect x="10.3" y="11.1" width="4.1" height="1.15" fill="var(--fundo)"/>
+        </svg>
+      </button>
+      {#- A setinha abre o menu de em QUE o ímã gruda. Botão à parte, e não um
+          clique longo no ímã: ligar/desligar e configurar são duas ações, e
+          duas ações num alvo só é como se erra uma pelo outra. #}
+      <button type="button" class="chave seta-ima" id="seta-do-ima"
+              aria-label="Escolher em que o ímã gruda" aria-haspopup="true">▾</button>
+        {#- Ponto de montagem do menu, e ELE TEM QUE SER VAZIO: fechar o menu é
+            esvaziar este nó, e se ele fosse o grupo inteiro levaria os dois
+            botões junto — foi o que aconteceu na primeira tentativa. #}
+        <span id="menu-do-ima"></span>
+      </span>
       <div class="lado" id="lado" role="group" aria-label="Lado dos valores">
         <button type="button" data-lado="secundario">secundário</button>
         <button type="button" data-lado="primario">primário</button>

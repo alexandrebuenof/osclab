@@ -23,6 +23,7 @@ from osclab.plot import (
     conversao,
     digitais,
     escala,
+    imas,
     navegacao,
     paineis,
     serie,
@@ -33,7 +34,7 @@ from osclab.plot.conversao import LADOS
 
 #: Versão do formato do pacote da janela. Sobe quando a tela passa a depender
 #: de um campo novo. Ver o comentário em `montar`.
-CONTRATO = 5
+CONTRATO = 8
 
 
 def montar(registro: Record, *, de: float | None = None, ate: float | None = None,
@@ -143,6 +144,11 @@ def montar(registro: Record, *, de: float | None = None, ate: float | None = Non
         "tempo": [round(float(x), 9) for x in tempo_saida],
         "marcacoes_tempo": escala.marcacoes(t0, t1, alvo=6),
         "disparo_s": _disparo(registro),
+        # O instante em que o registro deixou de repetir o ciclo anterior, para
+        # o ímã dos cursores. É PALPITE, e a tela diz isso ao mostrá-lo — ver
+        # `plot/imas.py`. `None` quando não há pré-falta com que calibrar.
+        "inicio_da_perturbacao": _instante(registro,
+                                           imas.inicio_da_perturbacao(registro)),
         "paineis": saida,
         # Tudo que se PODE acrescentar, para a tela montar a busca sem precisar
         # de outra chamada. O nome de cada sinal nasce aqui, no Python, porque
@@ -171,13 +177,21 @@ def _painel_digital(registro: Record, painel, i0: int, i1: int,
                     colunas: int) -> dict:
     """Um painel de tiras digitais."""
     indices = paineis.indices_digitais(painel)
+    tiras = digitais.tiras(registro, i0, i1, colunas, indices)
+    # Cada tira leva as suas transições, para o ímã dos cursores. Vão JUNTO da
+    # tira, e não numa lista à parte, porque é assim que a tela consegue
+    # obedecer só ao digital que o usuário selecionou.
+    for tira in tiras:
+        amostras = imas.afinar(imas.transicoes(registro, tira["indice"]),
+                               i0, i1, colunas)
+        tira["transicoes"] = [round(float(registro.time[k]), 9) for k in amostras]
     return {
         "id": painel.id,
         "tipo": paineis.DIGITAL,
         "nome": painel.nome or "Digitais",
         "do_padrao": painel.do_padrao,
         "sinais_pedidos": [str(k) for k in indices],
-        "tiras": digitais.tiras(registro, i0, i1, colunas, indices),
+        "tiras": tiras,
     }
 
 
@@ -247,7 +261,7 @@ def _painel_analogico(registro: Record, painel, por_id: dict, escalas: dict,
     canais = {c.index: c for c in registro.analog_channels}
     sinais_json = []
     k_esq = k_dir = 0
-    for identidade, alvo, _, eixo in escolhidos:
+    for identidade, alvo, serie_inteira, eixo in escolhidos:
         if eixo == "esq":
             valores = serie.arredondar(esq[0].valores[k_esq], intervalo)
             k_esq += 1
@@ -290,6 +304,13 @@ def _painel_analogico(registro: Record, painel, por_id: dict, escalas: dict,
             "lado": lado_final,
             "convertido": convertido,
             "serie": valores,
+            # Os pontos para o ímã dos cursores: os picos (crista e vale) e as
+            # passagens por zero. Saem da série de RESOLUÇÃO CHEIA, antes da
+            # redução por coluna de pixel — o pico da onda é uma amostra do
+            # arquivo, não o extremo de um traço desenhado.
+            "picos": _instantes(tempo, imas.picos(serie_inteira), colunas),
+            "zeros": _instantes(tempo, imas.passagens_por_zero(serie_inteira),
+                                colunas),
         })
 
     return {
@@ -331,6 +352,19 @@ def _medida_aplicavel(painel, por_id: dict) -> bool:
         return True
     return any(identidade in por_id and por_id[identidade].familia == "canal"
                for identidade in painel.sinais)
+
+
+def _instantes(tempo, amostras, colunas: int) -> list[float]:
+    """Os instantes de uma lista de amostras, afinada por coluna de pixel."""
+    return [round(float(tempo[k]), 9)
+            for k in imas.afinar(amostras, 0, tempo.size, colunas)]
+
+
+def _instante(registro: Record, amostra: int | None) -> float | None:
+    """O instante de uma amostra, ou `None` quando não há amostra nenhuma."""
+    if amostra is None or not (0 <= amostra < registro.time.size):
+        return None
+    return round(float(registro.time[amostra]), 9)
 
 
 def _trechos_recortados(trechos, j0: int, i1: int) -> list:
