@@ -105,7 +105,7 @@
 
     if (itens.length === 0) {
       lista.replaceChildren(
-        criar("p", "vazio", "Nada ainda. Arraste um .cfg e o .dat dele acima.")
+        criar("p", "vazio", "Nada ainda. Arraste um .cfg com o .dat dele, ou um .cev, acima.")
       );
       return;
     }
@@ -138,8 +138,9 @@
       const li = criar("li");
       li.append(criar("span", "nome", item.nome));
       li.append(criar("span", "tem", `tem ${item.tem.join(", ")}`));
-      const falta = item.tem.includes(".cfg") || item.tem.includes(".cff")
-        ? ".dat" : ".cfg";
+      /* So' o `.cfg` espera par: o `.cff` e o `.cev` ja' sao um registro
+       * inteiro sozinhos e nunca chegam aqui. */
+      const falta = item.tem.includes(".cfg") ? ".dat" : ".cfg";
       li.append(criar("span", "falta", `falta ${falta}`));
       ul.append(li);
     }
@@ -183,8 +184,21 @@
     if (item.arquivos && item.arquivos.length) {
       el.append(criar("p", "arquivos", item.arquivos.join("  ")));
     }
+    // Duas coisas diferentes, e é de propósito que só uma leva triângulo.
+    //
+    // O AVISO é do leitor: o que ele fez, deixou de fora ou não conseguiu
+    // confirmar. O RELATO é do relé — a classificação do evento, a distância
+    // que ele calculou. Carimbar `⚠` numa frase como "o relé classificou o
+    // evento como AB T" ensina o usuário a ignorar o triângulo, e aí o aviso
+    // que importa passa despercebido junto.
     for (const aviso of item.avisos || []) {
-      el.append(criar("p", "aviso", `aviso: ${aviso}`));
+      const linha = criar("p", "aviso");
+      linha.append(criar("span", "sinal-de-aviso", "⚠"),
+                   criar("span", null, aviso));
+      el.append(linha);
+    }
+    for (const relato of item.relatos || []) {
+      el.append(criar("p", "relato", relato));
     }
     return el;
   }

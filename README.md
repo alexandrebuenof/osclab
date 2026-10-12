@@ -93,11 +93,11 @@ ruff check .        # lint
 | COMTRADE `.cfg` + `.dat` | **lê** — edições 1991, 1999 e 2013 |
 | COMTRADE `.cff` (arquivo único) | **lê** |
 | Dados ASCII, binário 16 e 32 bits, float 32 | **lê** |
-| SEL `.CEV` | próximo formato |
+| SEL `.CEV` (arquivo único) | **lê** — filtrado, 4 ou 8 amostras/ciclo |
 | ATP `.PL4` | para validar os algoritmos contra resposta conhecida |
 
 Verificado contra registros reais de **GE 850**, **Schneider MiCOM P139**,
-**SEL-421**, **SEL-487E** e **SEL-TWFL**. Cada esquisitice de fabricante que
+**SEL-421**, **SEL-451**, **SEL-487E** e **SEL-TWFL**. Cada esquisitice de fabricante que
 apareceu virou um teste — a lista está no `CLAUDE.md`.
 
 COMTRADE é norma aberta e os sete fabricantes do parque a geram — por isso é a

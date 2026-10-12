@@ -22,12 +22,15 @@ from osclab.formats.base import (
 )
 
 # --- leitores registrados ---------------------------------------------------
+from osclab.formats.cev import CevReader  # noqa: E402
 from osclab.formats.comtrade import ComtradeReader  # noqa: E402
 
 registry.register(ComtradeReader())
+registry.register(CevReader())
 
 __all__ = [
     "AnalogChannel",
+    "CevReader",
     "ComtradeReader",
     "Filtering",
     "FilteringSource",

@@ -166,11 +166,36 @@ class Record:
     #: (n_amostras,) em segundos, relativo a `start_time`.
     time: np.ndarray = field(default_factory=lambda: np.empty(0))
 
+    # --- correções do usuário --------------------------------------------
+    #: Trincas que o USUÁRIO corrigiu: `{"I*W": {"A": 0, "B": 1, "C": 2}}`.
+    #:
+    #: Quais três canais formam um conjunto trifásico é deduzido do nome deles,
+    #: e nome de canal cada fabricante escreve como quer. Quando a dedução erra,
+    #: 3I0, I1, I2 e a localização de falta erram junto — e saem na unidade
+    #: certa, na ordem de grandeza certa, sem nada na tela denunciando.
+    #:
+    #: A chave é o NOME do conjunto (`formats/conjuntos.py`), não a posição
+    #: dele: a posição é o que o `q{i}` dos arranjos salvos usa, e amarrar a
+    #: correção a ela faria uma correção mudar o alvo de outra. Vem do acervo,
+    #: gravado ao lado do registro: quem corrigiu uma trinca corrigiu para
+    #: sempre.
+    trincas_escolhidas: dict = field(default_factory=dict)
+
     # --- diagnóstico ------------------------------------------------------
     filtering: Filtering = Filtering.DESCONHECIDO
     filtering_source: FilteringSource = FilteringSource.DEDUZIDO
-    #: Avisos do leitor, para mostrar na tela. Nunca interrompem a leitura.
+    #: Avisos do LEITOR: o que o programa fez, deixou de fora ou não conseguiu
+    #: confirmar. Nunca interrompem a leitura, e é só isto que a tela marca com
+    #: triângulo — ver `relatos`.
     notes: tuple[str, ...] = ()
+    #: O que o RELÉ concluiu sozinho e gravou no arquivo: a classificação do
+    #: evento, a distância que ele calculou para a falta.
+    #:
+    #: Ficavam junto dos avisos, e carimbar `⚠` numa frase como "o relé
+    #: classificou o evento como AB T" ensina o usuário a ignorar o triângulo —
+    #: o aviso que aparece no caso normal deixa de ser lido. São informação do
+    #: arquivo, não coisa que deu errado.
+    relatos: tuple[str, ...] = ()
 
     # --- derivados --------------------------------------------------------
 

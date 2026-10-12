@@ -53,7 +53,12 @@ import math
 
 import numpy as np
 
-from osclab.dsp.fasor import MINIMO_POR_CICLO, amostras_por_ciclo
+from osclab.dsp.fasor import (
+    MINIMO_POR_CICLO,
+    amostras_por_ciclo,
+    ciclo_em_amostras,
+    pesos_do_ciclo,
+)
 
 
 def _soma_movel(v: np.ndarray, n: int) -> np.ndarray:
@@ -72,11 +77,56 @@ def _soma_movel(v: np.ndarray, n: int) -> np.ndarray:
     return saida
 
 
-def _valida(sinal: np.ndarray, por_ciclo: int) -> np.ndarray | None:
+def _valida(sinal: np.ndarray, por_ciclo: float) -> np.ndarray | None:
     """`None` quando não dá para calcular envoltória nenhuma."""
-    if por_ciclo < MINIMO_POR_CICLO or sinal.shape[-1] < por_ciclo:
+    if por_ciclo < MINIMO_POR_CICLO:
+        return None
+    if sinal.shape[-1] < pesos_do_ciclo(por_ciclo).size:
         return None
     return np.asarray(sinal, dtype=np.float64)
+
+
+def media_do_ciclo(v: np.ndarray, por_ciclo: float) -> np.ndarray:
+    """A média de `v` sobre a janela de UM CICLO que termina em cada amostra.
+
+    É a primitiva de que TODAS as envoltórias saem: a contínua é ela sobre o
+    sinal, o eficaz é a raiz dela sobre o quadrado, e o fasor é ela sobre o
+    sinal girado. Uma implementação só — é assim que as três não divergem.
+
+    Os pesos vêm de `fasor.pesos_do_ciclo`, que trata o caso da taxa que não
+    fecha um número inteiro de amostras por ciclo. Ver lá o porquê.
+
+    A conta é `O(n)` mesmo com a janela grande: os pesos são todos 1 no meio,
+    então o miolo sai de uma soma acumulada e só as três pontas são tratadas
+    uma a uma. Com 167 amostras por ciclo no SEL-TWFL, a diferença entre isso
+    e uma convolução é de segundos.
+    """
+    pesos = pesos_do_ciclo(por_ciclo)
+    largura = pesos.size
+    n = v.shape[-1]
+    saida = np.full(v.shape, np.nan, dtype=v.dtype if np.iscomplexobj(v)
+                    else np.float64)
+    if n < largura:
+        return saida
+
+    acumulado = np.concatenate(
+        (np.zeros(v.shape[:-1] + (1,), dtype=v.dtype), np.cumsum(v, axis=-1)),
+        axis=-1)
+    # `i` percorre as posições em que a janela cabe inteira.
+    i = np.arange(largura - 1, n)
+    inicio = i - largura + 1                      # a amostra mais antiga dela
+
+    if largura == int(round(por_ciclo)):
+        # Taxa que fecha: soma retangular das `largura` amostras, como sempre.
+        total = acumulado[..., i + 1] - acumulado[..., inicio]
+    else:
+        # O miolo (pesos 1) por soma acumulada, e as três pontas na mão.
+        total = (acumulado[..., i] - acumulado[..., inicio + 2]
+                 + pesos[0] * v[..., inicio]
+                 + pesos[1] * v[..., inicio + 1]
+                 + pesos[-1] * v[..., i])
+    saida[..., largura - 1:] = total / float(por_ciclo)
+    return saida
 
 
 def fundamental(sinal: np.ndarray, por_ciclo: int) -> np.ndarray:
@@ -108,12 +158,16 @@ def fasores(sinal: np.ndarray, por_ciclo: int) -> np.ndarray:
     if x is None:
         return np.full(np.shape(sinal), np.nan + 0j, dtype=np.complex128)
 
-    n = int(por_ciclo)
-    m = np.arange(x.shape[-1]) % n
-    giro = np.exp(-2j * np.pi * m / n)
+    n = float(por_ciclo)
+    # O giro usa o índice ABSOLUTO, não `k % n`: com `n` fracionário a
+    # exponencial não tem período inteiro, e o resto quebraria a soma móvel.
+    # A 125 mil amostras o argumento chega a 4.700 radianos, que o float64
+    # ainda carrega com 1e-12 rad de erro — bem abaixo do que se lê na tela.
+    k = np.arange(x.shape[-1], dtype=np.float64)
+    giro = np.exp(-2j * np.pi * k / n)
 
-    soma = _soma_movel(x.astype(np.complex128) * giro, n)
-    return (2.0 / n) * np.conj(giro) * soma
+    return 2.0 * np.conj(giro) * media_do_ciclo(x.astype(np.complex128) * giro,
+                                                n)
 
 
 def _fasor_deslizante(sinal: np.ndarray, por_ciclo: int, extrair) -> np.ndarray:
@@ -156,8 +210,38 @@ def rms(sinal: np.ndarray, por_ciclo: int) -> np.ndarray:
     if x is None:
         return np.full(np.shape(sinal), np.nan, dtype=np.float64)
 
-    n = int(por_ciclo)
-    return np.sqrt(_soma_movel(np.square(x), n).real / n)
+    return np.sqrt(media_do_ciclo(np.square(x), float(por_ciclo)))
+
+
+def continua(sinal: np.ndarray, por_ciclo: int) -> np.ndarray:
+    """Componente contínua: a MÉDIA da janela de um ciclo, em cada amostra.
+
+    Numa senoide pura a média de um ciclo é zero. O que sobra é a assimetria da
+    falta — `i_dc(t) = I₀·e^(−t/τ)`, que existe porque a corrente não pode
+    saltar num circuito indutivo e o curto pegou a onda fora do zero.
+
+    **Esta é a única envoltória que traça uma grandeza física, e não um índice.**
+    A DC é função do tempo de verdade; daqui se lê o τ, e τ é o que dimensiona
+    saturação de TC e assimetria de disjuntor. Medido num curto do alimentador:
+    τ = 6,5 ms, X/R = 2,5.
+
+    **Sai com SINAL**, na unidade do canal. O SIGRA mostra a DC em percentual da
+    fundamental e em módulo; esse número continua na tabelinha do cursor
+    (`Fasor.dc_percentual`), que é onde ele funciona. Como CURVA a percentagem
+    seria razão de duas envoltórias: explode quando o disjuntor abre e a
+    fundamental vai a zero — nos arquivos do parque chega a 1491 %.
+
+    **Ela atrasa meio ciclo e subestima o pico**, porque média de janela é média
+    do passado: no maior valor de um curto real o estimador marcou 2890 A onde a
+    exponencial ajustada dá 3585 A. **Isso não estraga o τ**: exponencial
+    atrasada é a mesma exponencial escalada, `e^(−(t−δ)/τ) = e^(δ/τ)·e^(−t/τ)`,
+    mesma inclinação.
+    """
+    x = _valida(sinal, por_ciclo)
+    if x is None:
+        return np.full(np.shape(sinal), np.nan, dtype=np.float64)
+
+    return media_do_ciclo(x, float(por_ciclo))
 
 
 #: As curvas que a tela sabe desenhar. `instantaneo` não está aqui porque não é
@@ -169,7 +253,8 @@ def rms(sinal: np.ndarray, por_ciclo: int) -> np.ndarray:
 #:                   |  instantâneo   |  RMS
 #:   filtro desligado|  instantaneo   |  rms
 #:   filtro ligado   |  filtrado      |  fundamental
-CURVAS = {"fundamental": fundamental, "rms": rms, "filtrado": filtrada}
+CURVAS = {"fundamental": fundamental, "rms": rms, "filtrado": filtrada,
+          "dc": continua}
 
 
 def calcular(sinal: np.ndarray, trechos, frequencia_hz: float,
@@ -206,7 +291,9 @@ def _por_trecho(sinal, trechos, frequencia_hz, funcao, tipo):
     x = np.asarray(sinal, dtype=np.float64)
     saida = np.full(x.shape, np.nan, dtype=tipo)
     for trecho in trechos:
-        n = amostras_por_ciclo(trecho.taxa_hz, frequencia_hz)
+        # SEM arredondar: a janela é de um ciclo de TEMPO. Ver
+        # `fasor.pesos_do_ciclo` para o que o arredondamento custava.
+        n = ciclo_em_amostras(trecho.taxa_hz, frequencia_hz)
         fatia = (..., slice(trecho.inicio, trecho.fim))
         saida[fatia] = funcao(x[fatia], n)
     return saida

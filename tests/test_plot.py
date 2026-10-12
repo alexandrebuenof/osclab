@@ -25,7 +25,7 @@ from osclab.plot import (
     sinais,
     unidades,
 )
-from tests import arranjo
+from tests import arranjo, fabrica
 from tests.fabrica import PICO, escrever_comtrade
 
 # ---------------------------------------------------------------------------
@@ -174,13 +174,28 @@ def test_titulo_do_grupo(unidade, esperado):
     assert serie.titulo_do_grupo(unidade) == esperado
 
 
+def test_o_titulo_do_grupo_e_SO_a_unidade():
+    """`Correntes G1 (A)` se lê de um golpe; `Correntes alta (A)` quer o espaço,
+    porque ali o apelido é palavra."""
+    assert serie.titulo_do_grupo("A") == "Correntes (A)"
+    assert serie.titulo_do_grupo("kV") == "Tensões (kV)"
+    # Num trafo os DOIS painéis de corrente se chamam igual, e é assim de
+    # propósito: quem os distingue é o nome dos canais dentro deles.
+    assert serie.titulo_do_grupo("A") == serie.titulo_do_grupo("A")
+
+
 # ---------------------------------------------------------------------------
 # Fase: declarada, deduzida ou desconhecida
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("nome,esperado", [
-    ("IAW", "A"), ("IBW", "B"), ("ICX", "C"),      # SEL
+    ("IAW", "A"), ("IBW", "B"), ("ICX", "C"),      # SEL, terminal de 1 letra
     ("VAY", "A"), ("VBZ", "B"),
+    # SEL-787: diferencial de trafo, terminal de DUAS — `IAW1` é o
+    # enrolamento 1. Com o limite antigo de um caractere, as duas trincas de
+    # corrente daquele arquivo não existiam, e nada na tela dizia isso.
+    ("IAW1", "A"), ("IBW1", "B"), ("ICW2", "C"),
+    ("IGW1", "N"), ("IGW2", "N"), ("IN1", "N"),
     ("TC BUC 69kV:I A", "A"),                       # Siemens
     ("TC EXT 34-5kV:I B", "B"),
     ("Current IA", "A"), ("Current IC", "C"),       # Schneider
@@ -190,6 +205,10 @@ def test_titulo_do_grupo(unidade, esperado):
     ("Voltage VNG", "N"),
     ("TC H0 NEUTRO:Ix", "N"),
     ("VDC1", ""), ("FREQ", ""), ("", ""),           # não dá para saber
+    # O terminal para em DOIS caracteres de propósito. Com sufixo livre,
+    # qualquer palavra que comece com I, V ou U seguida de A, B ou C viraria
+    # fase — e um canal de potência reativa entraria em Fortescue.
+    ("VALORES", ""), ("ICAPACITOR", ""), ("IBARRAMENTO", ""),
 ])
 def test_deduz_a_fase_do_nome(nome, esperado):
     assert fases.deduzir(nome) == esperado
@@ -331,6 +350,8 @@ def test_a_janela_tem_tudo_que_a_tela_precisa(tmp_path):
     pacote = _montar(_registro(tmp_path, na=3, n=256, taxa=960.0))
     assert pacote["paineis"]
     grupo = pacote["paineis"][0]
+    # A fábrica escreve `IAW`, `IBW`, `ICW`: uma trinca de corrente e nenhuma
+    # de tensão, então não há o que distinguir e o apelido não aparece.
     assert grupo["nome"] == "Correntes (A)"
     assert len(grupo["sinais"]) == 3
     assert grupo["marcacoes"]
@@ -366,7 +387,7 @@ def test_grupos_separados_por_unidade(tmp_path):
     """Corrente e tensão nunca no mesmo eixo — escalas diferentes."""
     cfg = escrever_comtrade(tmp_path, na=2, n=64)
     texto = cfg.read_text(encoding="utf-8").replace(
-        "2,CH2,B,,A,", "2,CH2,B,,kV,")
+        "2,IBW,B,,A,", "2,IBW,B,,kV,")
     cfg.write_text(texto, encoding="utf-8")
     pacote = _montar(registry.read(cfg))
     analogicos = [p for p in pacote["paineis"] if p["tipo"] == "analogico"]
@@ -417,8 +438,8 @@ def test_lado_invalido_cai_no_lado_natural_do_registro(tmp_path):
 def test_registro_gravado_em_primario_abre_em_primario(tmp_path):
     cfg = escrever_comtrade(tmp_path, na=1, n=64)
     texto = cfg.read_text(encoding="utf-8").replace(
-        "1,CH1,A,,A,0.01,0,0,-32767,32767,600.0,5.0,S",
-        "1,CH1,A,,A,0.01,0,0,-32767,32767,600.0,5.0,P")
+        "1,IAW,A,,A,0.01,0,0,-32767,32767,600.0,5.0,S",
+        "1,IAW,A,,A,0.01,0,0,-32767,32767,600.0,5.0,P")
     cfg.write_text(texto, encoding="utf-8")
     assert _montar(registry.read(cfg))["lado_pedido"] == "primario"
 
@@ -428,8 +449,8 @@ def test_sem_relacao_declarada_nao_inventa(tmp_path):
     convertido por um palpite."""
     cfg = escrever_comtrade(tmp_path, na=1, n=64)
     texto = cfg.read_text(encoding="utf-8").replace(
-        "1,CH1,A,,A,0.01,0,0,-32767,32767,600.0,5.0,S",
-        "1,CH1,A,,A,0.01,0,0,-32767,32767,0,0,S")
+        "1,IAW,A,,A,0.01,0,0,-32767,32767,600.0,5.0,S",
+        "1,IAW,A,,A,0.01,0,0,-32767,32767,0,0,S")
     cfg.write_text(texto, encoding="utf-8")
     registro = registry.read(cfg)
     pacote = _montar(registro, lado="primario")
@@ -827,8 +848,8 @@ def test_unidade_ja_prefixada_no_arquivo_nao_vira_kk(tmp_path):
     """Alguns arquivos declaram o canal em kA; `kkA` não existe."""
     cfg = escrever_comtrade(tmp_path, na=1, n=64)
     texto = cfg.read_text(encoding="utf-8").replace(
-        "1,CH1,A,,A,0.01,0,0,-32767,32767,600.0,5.0,S",
-        "1,CH1,A,,kA,900.0,0,0,-32767,32767,1,1,P")
+        "1,IAW,A,,A,0.01,0,0,-32767,32767,600.0,5.0,S",
+        "1,IAW,A,,kA,900.0,0,0,-32767,32767,1,1,P")
     cfg.write_text(texto, encoding="utf-8")
     r = registry.read(cfg)
     assert _montar(r)["paineis"][0]["unidade"] == "kA"
@@ -863,7 +884,7 @@ def test_a_curva_de_rms_nao_e_negativa_e_o_eixo_comeca_no_zero(tmp_path):
 def test_o_primeiro_ciclo_do_registro_fica_sem_curva(tmp_path):
     """Não há janela antes dele. Desenhar zero ali seria inventar um valor —
     e um zero num gráfico de corrente lê-se como "não havia corrente"."""
-    r = _registro(tmp_path, na=1, n=512, taxa=1200.0)      # 20 amostras/ciclo
+    r = _registro(tmp_path, na=3, n=512, taxa=1200.0)      # 20 amostras/ciclo
     serie_rms = _montar(r, medidas={"A": "rms"}, colunas=10_000)["paineis"][0]
     valores = serie_rms["sinais"][0]["serie"]
     assert valores[:19] == [None] * 19
@@ -885,7 +906,7 @@ def test_ampliar_no_meio_do_registro_nao_abre_buraco_na_curva(tmp_path):
 def test_a_tabelinha_mostra_a_mesma_grandeza_que_o_grafico(tmp_path):
     """Gráfico em RMS e tabela em instantâneo seria a tela se contradizendo no
     mesmo instante. A escolha é uma só, e vale para os dois."""
-    r = _cru(_registro(tmp_path, na=1, n=512, taxa=1200.0))
+    r = _cru(_registro(tmp_path, na=3, n=512, taxa=1200.0))
     alvo = float(r.time[200])
 
     def primeira(**kw):
@@ -933,7 +954,9 @@ def test_a_onda_filtrada_e_a_parte_real_do_mesmo_fasor(tmp_path):
 
 def test_a_onda_filtrada_perde_a_componente_dc(tmp_path):
     """É o que um filtro de 60 Hz faz, e é por isso que a vista existe."""
-    r = _cru(_registro(tmp_path, na=1, n=512, taxa=1200.0))
+    # Três canais porque o filtro do OscLab só existe sobre canal que entrou em
+    # trinca — ver `plot/catalogo.py`. O teste olha o primeiro deles.
+    r = _cru(_registro(tmp_path, na=3, n=512, taxa=1200.0))
     r.analog[0, :] += 30.0                       # offset em todo o registro
     grupo = _montar(r, filtro=True, colunas=10_000)["paineis"][0]
     # A média é tomada sobre um número INTEIRO de ciclos (24, a 20 amostras por
@@ -1038,7 +1061,7 @@ def test_medida_desconhecida_cai_no_instantaneo(tmp_path):
     lixo = {"A": "nada"}
     # O nome do sinal é o que denuncia a grandeza: `IA` é a amostra crua,
     # `IA RMS` seria o eficaz. Uma palavra torta não pode virar medida.
-    assert _montar(r, medidas=lixo)["paineis"][0]["sinais"][0]["sinal"] == "IA"
+    assert _montar(r, medidas=lixo)["paineis"][0]["sinais"][0]["sinal"] == "IAW"
     lido = _em(r, [(float(r.time[50]), 0, 0.0)], medidas=lixo)
     assert _vals(lido["cursores"][0])[0]["grandeza"] == "instantaneo"
 
@@ -1046,9 +1069,12 @@ def test_medida_desconhecida_cai_no_instantaneo(tmp_path):
 def test_cada_grupo_escolhe_a_sua_medida(tmp_path):
     """Corrente em RMS e tensão em instantâneo ao mesmo tempo — leitura comum
     numa falta, e para onde vão os sinais manipulados separadamente."""
-    cfg = escrever_comtrade(tmp_path, na=4, n=512, taxa=1200.0)
+    # Seis canais: a segunda trinca vira tensão. Menos que isso não daria
+    # painel de tensão nenhum — a tela só abre trinca de corrente e de tensão.
+    cfg = escrever_comtrade(tmp_path, na=6, n=512, taxa=1200.0)
     texto = cfg.read_text(encoding="utf-8")
-    texto = texto.replace("4,CH4,A,,A,", "4,CH4,A,,V,")     # o canal 4 vira tensão
+    for k, fase in ((4, "A"), (5, "B"), (6, "C")):
+        texto = texto.replace(f"{k},I{fase}X,{fase},,A,", f"{k},I{fase}X,{fase},,V,")
     cfg.write_text(texto, encoding="utf-8")
     r = _cru(registry.read(cfg))
 
@@ -1056,12 +1082,13 @@ def test_cada_grupo_escolhe_a_sua_medida(tmp_path):
         return arranjo.painel(pacote, unidade)["sinais"][0]["sinal"]
 
     pacote = _montar(r, medidas={"A": "rms"})
-    assert primeiro_sinal(pacote, "A") == "IA RMS"
-    assert primeiro_sinal(pacote, "V") == "VA"
+    # Uma trinca de cada: sem apelido — ver `conjuntos.precisa_numerar`.
+    assert primeiro_sinal(pacote, "A") == "IAW · RMS"
+    assert primeiro_sinal(pacote, "V") == "IAX"
     # E com o filtro ligado, cada um vira a sua versão filtrada.
     com_filtro = _montar(r, filtro=True, medidas={"A": "rms"})
-    assert primeiro_sinal(com_filtro, "A") == "IA 60Hz RMS"
-    assert primeiro_sinal(com_filtro, "V") == "VA 60Hz"
+    assert primeiro_sinal(com_filtro, "A") == "IAW · 60Hz RMS"
+    assert primeiro_sinal(com_filtro, "V") == "IAX · 60Hz"
 
 
 def test_registro_ja_filtrado_nao_e_filtrado_de_novo(tmp_path):
@@ -1080,7 +1107,7 @@ def test_registro_ja_filtrado_nao_e_filtrado_de_novo(tmp_path):
     # de 60 Hz, e o nome do sinal não ganha sufixo de uma conta que não houve.
     pacote = _montar(r, filtro=True, colunas=10_000)
     assert pacote["filtro"] is False
-    assert pacote["paineis"][0]["sinais"][0]["sinal"] == "IA"
+    assert pacote["paineis"][0]["sinais"][0]["sinal"] == "IAW"
 
     # E o mesmo vale para a tabelinha dos cursores, que é lida em laudo.
     lido = _em(r, [(0.05, 0, 0.0), (None, 0, 0.0)], filtro=True)
@@ -1093,25 +1120,30 @@ def test_registro_ja_filtrado_nao_e_filtrado_de_novo(tmp_path):
 
 
 def test_o_nome_do_sinal_diz_o_que_foi_feito_com_o_canal(tmp_path):
-    """`IA` e `IA RMS` são sinais diferentes, e vão ser manipulados separados.
+    """`IAW` e `IAW · RMS` são sinais diferentes, manipulados separados. A base
+    é o nome do ARQUIVO — o relé já nomeia os terminais dele de forma única, e
+    um nome nosso por cima seria uma segunda nomenclatura para a mesma coisa.
     O nome nasce no Python porque é identidade, não rótulo de tela."""
     r = _cru(_registro(tmp_path, na=3, n=512, taxa=1200.0))
     def nomes(**kw):
         return [c["sinal"] for c in _montar(r, **kw)["paineis"][0]["sinais"]]
 
-    assert nomes()[0] == "IA"
-    assert nomes(medidas={"A": "rms"})[0] == "IA RMS"
-    assert nomes(filtro=True)[0] == "IA 60Hz"
-    assert nomes(filtro=True, medidas={"A": "rms"})[0] == "IA 60Hz RMS"
+    assert nomes()[0] == "IAW"
+    assert nomes(medidas={"A": "rms"})[0] == "IAW · RMS"
+    assert nomes(filtro=True)[0] == "IAW · 60Hz"
+    assert nomes(filtro=True, medidas={"A": "rms"})[0] == "IAW · 60Hz RMS"
 
     # Canal que não se conseguiu identificar não ganha nome nosso — nem com
     # sufixo. Um " RMS" solto seria pior que nada.
     assert sinais.nome("", "rms") == ""
 
 
-def test_num_rele_de_trafo_o_nome_diz_de_que_lado_o_canal_e(tmp_path):
+def test_num_rele_de_trafo_o_NOME_DO_ARQUIVO_distingue_as_duas_trincas(tmp_path):
     """Sem o apelido do conjunto, dois canais diferentes se chamariam `IA` e a
-    tela não diria qual é qual. Era um defeito de verdade, não só futuro."""
+    tela não diria qual é qual. Era um defeito de verdade, não só futuro.
+
+    O apelido é um NÚMERO: o programa não afirma qual é a alta. Quem souber
+    rotula, e o rótulo fica gravado com o registro."""
     cfg = escrever_comtrade(tmp_path, na=6, n=512, taxa=1200.0)
     texto = cfg.read_text(encoding="utf-8")
     for k in range(1, 7):
@@ -1119,18 +1151,22 @@ def test_num_rele_de_trafo_o_nome_diz_de_que_lado_o_canal_e(tmp_path):
         fase = "ABC"[(k - 1) % 3]
         # name, ph, ccbm, unidade — o `ph` fica vazio de propósito, para a
         # fase sair da dedução pelo nome, como nos arquivos da Siemens.
-        texto = texto.replace(f"{k},CH{k},{fase},,A,",
+        texto = texto.replace(f"{k},{fabrica.nome_de_canal(k - 1)},{fase},,A,",
                               f"{k},TC {nivel}:I {fase},,,A,")
     cfg.write_text(texto, encoding="utf-8")
 
-    # Cru de propósito: num registro já filtrado não existe `IA RMS` — o
-    # catálogo cai na fundamental — e o que este teste afirma é o apelido do
-    # conjunto, não a medida.
-    canais = _montar(_cru(registry.read(cfg)),
-                     medidas={"A": "rms"})["paineis"][0]["sinais"]
-    assert [c["sinal"] for c in canais] == [
-        "IA RMS AT", "IB RMS AT", "IC RMS AT",
-        "IA RMS BT", "IB RMS BT", "IC RMS BT",
+    # Cru de propósito: num registro já filtrado não existe `· RMS` sobre o
+    # canal — o catálogo cai na fundamental.
+    pacote = _montar(_cru(registry.read(cfg)), medidas={"A": "rms"})
+    graficos = [p for p in pacote["paineis"] if p["tipo"] == "analogico"]
+
+    # Os DOIS painéis se chamam igual: o título é só a unidade. Quem distingue
+    # é o nome dos canais dentro deles, que é o do arquivo — e é por isso que
+    # não foi preciso inventar apelido nenhum.
+    assert [p["nome"] for p in graficos] == ["Correntes (A)", "Correntes (A)"]
+    assert [c["sinal"] for p in graficos for c in p["sinais"]] == [
+        "TC 138kV:I A · RMS", "TC 138kV:I B · RMS", "TC 138kV:I C · RMS",
+        "TC 13.8kV:I A · RMS", "TC 13.8kV:I B · RMS", "TC 13.8kV:I C · RMS",
     ]
 
 
@@ -1150,24 +1186,26 @@ def test_o_cursor_le_o_fasor_junto_com_o_instantaneo(tmp_path):
     assert abs(canal["dc"]) < 1.0            # senoide pura: quase sem DC
 
 
-def test_o_nome_padronizado_chega_na_janela_e_na_leitura(tmp_path):
-    """A tela mostra os dois nomes lado a lado; os dois têm que chegar lá.
+def test_o_nome_do_sinal_e_UM_e_chega_igual_nos_TRES_lugares(tmp_path):
+    """O gráfico, a tabelinha do cursor e a referência angular têm que dizer o
+    mesmo nome — senão a tabelinha sublinha um canal com um nome que não existe
+    em lugar nenhum do gráfico, e quem confere contra o SIGRA se perde.
 
-    O do arquivo é o que o engenheiro reconhece e o que consta do relatório do
-    relé; o nosso é o que não muda de fabricante para fabricante.
+    Havia um segundo campo, `padrao`, com o nome NOSSO (`IA`) ao lado do nome
+    do arquivo. Desde que o nome do sinal passou a ser o do arquivo, os dois
+    carregavam a mesma palavra — e dois campos com o mesmo valor é o começo de
+    dois campos com valores diferentes.
     """
     r = _registro(tmp_path, na=3, n=512, taxa=1200.0)
 
     canal = _montar(r)["paineis"][0]["sinais"][0]
-    assert canal["nome"] == r.analog_channels[0].name
-    assert canal["padrao"] == fases.padrao(r.analog_channels[0])
+    assert canal["nome"] == canal["sinal"] == r.analog_channels[0].name
+    assert "padrao" not in canal
 
     medida = _em(r, [(float(r.time[200]), 0, 0.0)])
-    assert _vals(medida["cursores"][0])[0]["padrao"] == canal["padrao"]
-    # A referência angular também se identifica pelos dois nomes: a tabelinha
-    # sublinha um canal, e quem confere contra o SIGRA precisa saber qual.
-    assert medida["referencia"]["padrao"] == \
-        fases.padrao(r.analog_channels[medida["referencia"]["indice"]])
+    assert _vals(medida["cursores"][0])[0]["sinal"] == canal["sinal"]
+    assert medida["referencia"]["nome"] == \
+        r.analog_channels[medida["referencia"]["indice"]].name
 
 
 def test_a_dc_em_unidade_acompanha_o_percentual(tmp_path):
@@ -1221,15 +1259,16 @@ def test_sem_um_ciclo_antes_nao_ha_fasor_nem_rms(tmp_path):
 def test_a_referencia_angular_e_a_tensao_da_fase_a(tmp_path):
     """Escolha por significado, não por posição: a primeira TENSÃO da fase A,
     mesmo que o arquivo liste correntes antes."""
-    cfg = escrever_comtrade(tmp_path, na=4, n=512, taxa=1200.0)
+    cfg = escrever_comtrade(tmp_path, na=6, n=512, taxa=1200.0)
     texto = cfg.read_text(encoding="utf-8")
-    # canal 4 vira tensão da fase A; os três primeiros seguem correntes
-    texto = texto.replace("4,CH4,A,,A,", "4,CH4,A,,V,")
+    # a segunda trinca vira tensão; a primeira segue corrente
+    for k, fase in ((4, "A"), (5, "B"), (6, "C")):
+        texto = texto.replace(f"{k},I{fase}X,{fase},,A,", f"{k},I{fase}X,{fase},,V,")
     cfg.write_text(texto, encoding="utf-8")
     r = registry.read(cfg)
 
     saida = _em(r, [(float(r.time[200]), 0, 0.0)])
-    assert saida["referencia"]["nome"] == "CH4"
+    assert saida["referencia"]["nome"] == "IAX"
     # A referência tem ângulo zero por definição.
     assert _vals(saida["cursores"][0])[3]["angulo"] == pytest.approx(0.0, abs=1e-6)
 
@@ -1301,7 +1340,7 @@ def test_a_janela_leva_o_indice_do_canal_no_registro(tmp_path):
     cfg = escrever_comtrade(tmp_path, na=4, n=256)
     texto = cfg.read_text(encoding="utf-8")
     # Intercala: canais 2 e 4 viram tensão, 1 e 3 seguem corrente.
-    texto = texto.replace("2,CH2,B,,A,", "2,CH2,B,,V,").replace("4,CH4,A,,A,", "4,CH4,A,,V,")
+    texto = texto.replace("2,IBW,B,,A,", "2,IBW,B,,V,").replace("4,IAX,A,,A,", "4,IAX,A,,V,")
     cfg.write_text(texto, encoding="utf-8")
     r = registry.read(cfg)
 
@@ -1310,7 +1349,45 @@ def test_a_janela_leva_o_indice_do_canal_no_registro(tmp_path):
     por_indice = {c["indice"]: c["nome"]
                   for g in analogicos for c in g["sinais"]}
 
-    assert por_indice == {0: "CH1", 1: "CH2", 2: "CH3", 3: "CH4"}
+    assert por_indice == {0: "IAW", 1: "IBW", 2: "ICW", 3: "IAX"}
     # E os painéis de fato reordenaram: correntes 0 e 2, tensões 1 e 3.
     assert [c["indice"] for c in analogicos[0]["sinais"]] == [0, 2]
     assert [c["indice"] for c in analogicos[1]["sinais"]] == [1, 3]
+
+
+def test_a_reducao_so_entra_com_a_COLUNA_CHEIA():
+    """Reduzir move amostra no tempo: as da mesma coluna saem todas no instante
+    em que a coluna começa. Com a coluna cheia isso é meio pixel e ninguém vê;
+    com uma amostra e meia por coluna é 10,8° de uma onda de 60 Hz — medido num
+    registro de 2000 Hz com 2000 amostras em 1550 colunas —, e o traço ondula.
+    Some ao ampliar, que é quando sobra menos de uma amostra por coluna.
+
+    Daí o limite ser quatro amostras por coluna, e não uma. Ver
+    `serie.LIMITE_SEM_REDUZIR`.
+    """
+    t = np.arange(1000) / 1000.0
+    v = np.sin(2 * np.pi * 60.0 * t).reshape(1, -1)
+
+    # Coluna cheia: reduz, e cada coluna sai com dois pontos.
+    r = serie.reduzir(t, v, 200)
+    assert r.reduzido is True
+    assert r.valores.shape[1] == 2 * 200
+
+    # Abaixo do limite o registro vai cru, no instante exato de cada amostra.
+    for colunas in (400, 1000, 5000):
+        magra = serie.reduzir(t, v, colunas)
+        assert magra.reduzido is False
+        assert magra.valores.shape[1] == 1000
+
+
+def test_a_coluna_reduzida_carrega_o_EXTREMO_de_verdade():
+    """É o que torna o traço honesto: o que a coluna mostra é o que aconteceu
+    ali dentro, e não uma amostra escolhida entre as que caíram no pixel."""
+    t = np.arange(1200) / 1200.0
+    v = np.sin(2 * np.pi * 60.0 * t).reshape(1, -1)
+    r = serie.reduzir(t, v, 200)
+
+    for coluna in range(200):
+        dentro = v[0, coluna * 6:(coluna + 1) * 6]
+        assert r.valores[0, 2 * coluna] == pytest.approx(dentro.min())
+        assert r.valores[0, 2 * coluna + 1] == pytest.approx(dentro.max())

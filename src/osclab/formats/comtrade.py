@@ -168,6 +168,9 @@ class _Cfg:
         self.file_type = "BINARY"
         self.timemult = 1.0
         self.time_code = ""
+        self.local_code = ""
+        self.tmq_code = ""
+        self.leapsec = ""
         self.avisos: list[str] = []
 
     @property
@@ -295,10 +298,85 @@ def _parse_cfg(texto: str) -> _Cfg:
         # A Schneider não escreve esta linha. Um `timemult` de 0 também não
         # significa nada, então nos dois casos vale 1.
         cfg.timemult = mult if mult > 0 else 1.0
+    # As duas linhas da edição 2013, cada uma com dois campos:
+    #
+    #     time_code , local_code      o fuso dos CARIMBOS e o da instalação
+    #     tmq_code  , leapsec         a qualidade do relógio e o segundo bissexto
+    #
+    # Guardar `"0,-4"` inteiro como texto — que era o que se fazia — jogava
+    # fora três dos quatro, e o que sobrava não dizia nada a quem lia.
     if len(resto) > 1:
-        cfg.time_code = resto[1].strip()
+        campos = [x.strip() for x in resto[1].split(",")]
+        cfg.time_code = campos[0] if campos else ""
+        cfg.local_code = campos[1] if len(campos) > 1 else ""
+    if len(resto) > 2:
+        campos = [x.strip() for x in resto[2].split(",")]
+        cfg.tmq_code = campos[0] if campos else ""
+        cfg.leapsec = campos[1] if len(campos) > 1 else ""
 
     return cfg
+
+
+#: O que cada código de qualidade do relógio significa, na tabela da norma.
+#: O SIGRA escreve o 0 como "Normal operation, clock locked".
+_QUALIDADE_DO_RELOGIO = {
+    "0": "relógio travado, operação normal",
+    "1": "erro do relógio abaixo de 1 ns",
+    "2": "erro abaixo de 10 ns",
+    "3": "erro abaixo de 100 ns",
+    "4": "erro abaixo de 1 µs",
+    "5": "erro abaixo de 10 µs",
+    "6": "erro abaixo de 100 µs",
+    "7": "erro abaixo de 1 ms",
+    "8": "erro abaixo de 10 ms",
+    "9": "erro abaixo de 100 ms",
+    "A": "erro abaixo de 1 s",
+    "B": "erro abaixo de 10 s",
+    "F": "relógio sem sincronismo — a hora do arquivo NÃO é confiável",
+}
+
+
+def _fuso_legivel(codigo: str) -> str:
+    """`-4` e `-04h00` viram `UTC−04:00`; `0` e `00h00` viram `UTC`."""
+    limpo = (codigo or "").strip().replace("h", ":").replace("H", ":")
+    if not limpo:
+        return ""
+    sinal = "−" if limpo.startswith("-") else "+"
+    limpo = limpo.lstrip("+-")
+    horas, _, minutos = limpo.partition(":")
+    try:
+        h = int(horas)
+    except ValueError:
+        return ""
+    m = int(minutos) if minutos.isdigit() else 0
+    if h == 0 and m == 0:
+        return "UTC"
+    return f"UTC{sinal}{h:02d}:{m:02d}"
+
+
+def qualidade_do_relogio(cfg: "_Cfg") -> str:
+    """Uma linha com o que o arquivo diz do relógio, para a tela.
+
+    **Não converte nada.** O carimbo fica como o arquivo escreveu, e os
+    códigos são mostrados ao lado — é a convenção do SIGRA, conferida contra
+    ele no `.CFG` do COXIPO em 22/09/2026: ali o `Start time` que ele exibe é
+    o mesmo `18:52:02.960` que nós exibimos, e o fuso aparece em campo
+    separado. Converter por conta própria faria a nossa hora divergir da do
+    gabarito.
+    """
+    partes = []
+    carimbo = _fuso_legivel(cfg.time_code)
+    if carimbo:
+        partes.append(f"carimbos em {carimbo}")
+    local = _fuso_legivel(cfg.local_code)
+    if local and local != carimbo:
+        partes.append(f"hora local {local}")
+    qualidade = _QUALIDADE_DO_RELOGIO.get((cfg.tmq_code or "").strip().upper())
+    if qualidade:
+        partes.append(qualidade)
+    if (cfg.leapsec or "").strip() not in ("", "0", "3"):
+        partes.append("com segundo bissexto no registro")
+    return "; ".join(partes)
 
 
 # ---------------------------------------------------------------------------
@@ -547,7 +625,7 @@ class ComtradeReader:
             line_frequency=cfg.line_frequency,
             start_time=cfg.start,
             trigger_time=cfg.trigger,
-            time_quality=cfg.time_code,
+            time_quality=qualidade_do_relogio(cfg),
             analog_channels=tuple(cfg.analogs),
             status_channels=tuple(cfg.status),
             sample_rates=tuple(cfg.rates),

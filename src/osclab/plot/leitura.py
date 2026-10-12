@@ -38,9 +38,10 @@ import math
 import numpy as np
 
 from osclab.dsp import fasor
-from osclab.formats import conjuntos, fases
+from osclab.formats import fases
 from osclab.formats.base import Record
 from osclab.plot import catalogo, conversao, sinais, unidades
+from osclab.plot import harmonicos as harmonicos_mod
 from osclab.plot import paineis as paineis_mod
 from osclab.plot.conversao import LADOS
 
@@ -155,9 +156,9 @@ def canal_de_referencia(registro: Record, pedido: int | None = None) -> int | No
 
 
 def _em_uma_amostra(registro: Record, i: int, lado: str, escalas: dict,
-                    por_ciclo: int, referencia: int | None,
-                    rotulos: dict[int, str] | None = None,
-                    acrescentados: list | None = None) -> dict:
+                    por_ciclo: float, referencia: int | None,
+                    acrescentados: list | None = None,
+                    com_espectro: set | None = None) -> dict:
     """Tudo que a tela mostra de um cursor parado na amostra `i`.
 
     `escalas` vem de `unidades.por_unidade` — a MESMA que o desenho usou. Se
@@ -186,13 +187,13 @@ def _em_uma_amostra(registro: Record, i: int, lado: str, escalas: dict,
         # medidas diferentes, e posição deixou de identificar coisa nenhuma.
         "sinais": {identidade: linha for identidade, linha in _linhas(
             registro, i, lado, escalas, por_ciclo, angulo_zero,
-            acrescentados, rotulos)},
+            acrescentados, com_espectro)},
     }
 
 
 def _linhas(registro: Record, i: int, lado: str, escalas: dict,
-            por_ciclo: int, angulo_zero: float | None,
-            pedidos: list | None, rotulos: dict | None):
+            por_ciclo: float, angulo_zero: float | None,
+            pedidos: list | None, com_espectro: set | None = None):
     """A leitura de cada sinal pedido, na ordem em que foi pedido.
 
     Cada sinal carrega a PRÓPRIA grandeza — é o `catalogo.efetivo` de quem
@@ -201,6 +202,8 @@ def _linhas(registro: Record, i: int, lado: str, escalas: dict,
     que permite `IA` e `IA RMS` no mesmo instante.
     """
     canais = {c.index: c for c in registro.analog_channels}
+    quer_espectro = com_espectro or set()
+    ate = harmonicos_mod.ORDENS_DESENHADAS
     for identidade, sinal in (pedidos or []):
         divisor, mostrada = escalas.get(sinal.unidade, (1.0, sinal.unidade))
         canal = canais.get(sinal.canal) if sinal.canal >= 0 else None
@@ -210,11 +213,8 @@ def _linhas(registro: Record, i: int, lado: str, escalas: dict,
             "id_efetivo": sinal.id,
             "familia": sinal.familia,
             "nome": canal.name if canal is not None else sinal.nome,
-            # O nome NOSSO, que é o que a legenda mostra em itálico.
-            "padrao": (sinal.fundamental if sinal.familia == "canal"
-                       else sinal.nome),
-            "sinal": (sinal.fundamental if sinal.familia == "canal"
-                      else sinal.nome),
+            # O nome do SINAL — o do canal mais o que foi feito com ele.
+            "sinal": sinal.nome,
             "grandeza": sinal.grandeza,
             "unidade": mostrada,
             "indice": canal.index if canal is not None else None,
@@ -235,6 +235,16 @@ def _linhas(registro: Record, i: int, lado: str, escalas: dict,
             linha["instantaneo"] = instantaneo
             linha["casas_instantaneo"] = casas(instantaneo)
             linha["valor"], linha["casas"] = instantaneo, casas(instantaneo)
+            # O espectro sai da onda COMO ESTÁ NO ARQUIVO — o filtro de 60 Hz
+            # apagaria justamente o que ele mede. Ver `plot/harmonicos.py`.
+            if identidade in quer_espectro:
+                razao = conversao.relacao(canal)
+                lado_do_canal = "primario" if canal.is_primary else "secundario"
+                fator = 1.0
+                if lado != lado_do_canal and razao > 0:
+                    fator = razao if lado == "primario" else 1.0 / razao
+                linha.update(_espectro_da_onda(registro.analog[canal.index], i,
+                                               por_ciclo, fator / divisor, ate))
             if sinal.conta == "rms":
                 linha["valor"], linha["casas"] = linha["rms"], linha["casas_rms"]
             elif sinal.conta == "fundamental":
@@ -243,6 +253,22 @@ def _linhas(registro: Record, i: int, lado: str, escalas: dict,
             elif sinal.conta == "filtrado":
                 linha["valor"], linha["casas"] = (linha["filtrado"],
                                                   linha["casas_filtrado"])
+            elif sinal.conta == "dc":
+                # A DC em unidade de engenharia, COM sinal. O percentual dela
+                # continua no campo `dc`, que é o que o SIGRA mostra.
+                linha["valor"], linha["casas"] = (linha["dc_valor"],
+                                                  linha["casas_dc"])
+            yield identidade, linha
+            continue
+
+        # Resíduo (`IN`, `VN`): é ONDA, não fasor. Soma-se as três fases
+        # amostra a amostra e lê-se o resultado como se lê qualquer canal —
+        # com instantâneo, eficaz verdadeiro, DC e distorção. É justamente
+        # essa diferença para `3I0` que faz o resíduo valer a tela.
+        if sinal.id.split(":")[1:2] == [catalogo.RESIDUAL]:
+            linha.update(_linha_de_residuo(
+                registro, sinal, i, lado, divisor, por_ciclo, angulo_zero,
+                ate if identidade in quer_espectro else 0))
             yield identidade, linha
             continue
 
@@ -266,27 +292,120 @@ def _linhas(registro: Record, i: int, lado: str, escalas: dict,
         yield identidade, linha
 
 
+def _linha_de_residuo(registro: Record, sinal, i: int, lado: str,
+                      divisor: float, por_ciclo: float,
+                      angulo_zero: float | None, espectro_ate: int = 0) -> dict:
+    """A leitura do resíduo de uma trinca no instante `i`.
+
+    A onda é somada sobre o registro INTEIRO, e não sobre a janela do gráfico:
+    o fasor deste instante precisa do ciclo que vem antes dele, e esse ciclo
+    pode estar fora da janela que está na tela.
+    """
+    vazio = {"valor": None, "casas": 1, "instantaneo": None,
+             "casas_instantaneo": 1, "fundamental": None, "angulo": None,
+             "rms": None, "dc": None, "dc_valor": None, "distorcao": None,
+             "filtrado": None, "lado": lado, "convertido": True}
+
+    conjunto = catalogo.conjunto_do_sinal(registro, sinal)
+    if conjunto is None:
+        return vazio
+    onda = catalogo.residuo(registro, conjunto, 0, registro.analog.shape[1],
+                            lado, divisor)
+    if onda is None or not (0 <= i < onda.size):
+        return vazio
+
+    instantaneo = _num(float(onda[i]))
+    linha = dict(vazio)
+    linha.update(_fasor_da_onda(onda, i, por_ciclo, 1.0, angulo_zero))
+    linha["instantaneo"] = instantaneo
+    linha["casas_instantaneo"] = casas(instantaneo)
+    linha["valor"], linha["casas"] = instantaneo, casas(instantaneo)
+    # O resíduo é onda: tem espectro como qualquer canal. A onda já chega em
+    # unidade de tela (o `divisor` entrou em `catalogo.residuo`), então o fator
+    # aqui é 1.
+    if espectro_ate:
+        linha.update(_espectro_da_onda(onda, i, por_ciclo, 1.0, espectro_ate))
+    # As mesmas contas de um canal — o resíduo é onda, e lê-se como onda.
+    if sinal.conta == "rms":
+        linha["valor"], linha["casas"] = linha["rms"], linha["casas_rms"]
+    elif sinal.conta == "fundamental":
+        linha["valor"], linha["casas"] = (linha["fundamental"],
+                                          linha["casas_fasor"])
+    elif sinal.conta == "filtrado":
+        linha["valor"], linha["casas"] = (linha["filtrado"],
+                                          linha["casas_filtrado"])
+    elif sinal.conta == "dc":
+        linha["valor"], linha["casas"] = linha["dc_valor"], linha["casas_dc"]
+    linha["lado"] = lado
+    linha["convertido"] = True
+    return linha
+
+
 def _fasor_do_canal(registro: Record, canal, i: int, lado: str, divisor: float,
-                    por_ciclo: int, angulo_zero: float | None) -> dict:
+                    por_ciclo: float, angulo_zero: float | None) -> dict:
     """O fasor de um canal, já convertido para o lado e a unidade da tela.
 
     A conversão de TC/TP e o prefixo `k` são MULTIPLICAÇÕES POR ESCALAR, então
     aplicá-las depois da DFT dá o mesmo que antes — e custa uma operação em vez
     de uma janela inteira. O ângulo não se toca: escalar não gira fasor.
     """
-    f = fasor.no_instante(registro.analog[canal.index], i, por_ciclo)
-    if f is None:
-        return {"fundamental": None, "angulo": None, "rms": None,
-                "dc": None, "dc_valor": None, "distorcao": None, "filtrado": None,
-                "casas_fasor": 1, "casas_rms": 1, "casas_dc": 1,
-                "casas_filtrado": 1}
-
     razao = conversao.relacao(canal)
     lado_do_canal = "primario" if canal.is_primary else "secundario"
     fator = 1.0
     if lado != lado_do_canal and razao > 0:
         fator = razao if lado == "primario" else 1.0 / razao
     fator /= divisor
+    return _fasor_da_onda(registro.analog[canal.index], i, por_ciclo, fator,
+                          angulo_zero)
+
+
+def _espectro_da_onda(onda, i: int, por_ciclo: float, fator: float,
+                      ate: int) -> dict:
+    """As raias de harmônico de uma onda, na MESMA janela do fasor.
+
+    A conversão de TC/TP e o prefixo `k` são multiplicações por escalar, então
+    aplicá-las depois da DFT dá o mesmo que antes — mesma razão de
+    `_fasor_do_canal`.
+
+    O THD sai das raias que o desenho mostra, e não de `Fasor.distorcao`: quem
+    soma as barras tem que fechar com o número da tabela. Ver
+    `fasor.distorcao_do_espectro`.
+    """
+    if por_ciclo < fasor.MINIMO_POR_CICLO:
+        return {"harmonicos": None, "thd": None, "teto": 1}
+    pesos = fasor.pesos_do_ciclo(por_ciclo)
+    inicio = i - pesos.size + 1
+    if inicio < 0 or i >= onda.size:
+        return {"harmonicos": None, "thd": None,
+                "teto": fasor.ordens_mediveis(por_ciclo)}
+    janela = np.asarray(onda[inicio:i + 1], dtype=np.float64)
+    raias = fasor.espectro(janela, por_ciclo, pesos, ate)
+    if raias is None:
+        return {"harmonicos": None, "thd": None,
+                "teto": fasor.ordens_mediveis(por_ciclo)}
+    thd = fasor.distorcao_do_espectro(raias)
+    return {
+        "harmonicos": [_num(float(v) * fator) for v in raias],
+        "thd": None if thd is None else round(thd, 1),
+        "teto": fasor.ordens_mediveis(por_ciclo),
+    }
+
+
+def _fasor_da_onda(onda, i: int, por_ciclo: float, fator: float,
+                   angulo_zero: float | None) -> dict:
+    """A mesma leitura, sobre uma onda qualquer já em unidade de engenharia.
+
+    Existe separada porque o resíduo (`IN`, `VN`) **é** uma onda: tem
+    instantâneo, eficaz verdadeiro, DC e distorção como qualquer canal. Ele só
+    não tem canal no arquivo — a onda dele é somada na hora, e chega aqui com o
+    `fator` já aplicado, valendo 1.
+    """
+    f = fasor.no_instante(onda, i, por_ciclo)
+    if f is None:
+        return {"fundamental": None, "angulo": None, "rms": None,
+                "dc": None, "dc_valor": None, "distorcao": None, "filtrado": None,
+                "casas_fasor": 1, "casas_rms": 1, "casas_dc": 1,
+                "casas_filtrado": 1}
 
     fundamental = _num(f.fundamental * fator)
     rms = _num(f.rms * fator)
@@ -340,6 +459,120 @@ def _instante_do_disparo(registro: Record) -> float:
     return (registro.trigger_time - registro.start_time).total_seconds()
 
 
+def espectro_entre(registro: Record, a: dict, b: dict, lado: str,
+                   escalas: dict, por_id: dict, quais: set) -> dict | None:
+    """O Fourier do TRECHO entre os dois cursores, não de um ciclo.
+
+    ## Por que existe
+
+    Um ciclo responde "quanto tem AGORA". Um trecho responde "quanto tem neste
+    regime" — e é a pergunta de qualidade de energia: o que a carga injeta se
+    mede na pré-falta, marcada com os dois cursores. De quebra, a janela longa
+    estabiliza o número: a média de doze ciclos não balança como a de um.
+
+    ## O intervalo é ARREDONDADO para baixo, até fechar ciclo inteiro
+
+    A resolução de uma janela de `T` segundos é `1/T`. Quando o trecho não é um
+    número inteiro de ciclos, as raias não caem em cima dos múltiplos de 60 Hz
+    e a fundamental escorre para as vizinhas. Medido numa senoide 100 % pura, a
+    2000 Hz:
+
+        intervalo     maior harmônico FALSO     THD aparente
+         7,0 ciclos            0,19 %               0,26 %
+         7,3 ciclos            3,67 %               4,71 %
+        12,0 ciclos            0,00 %               0,00 %
+        12,5 ciclos            1,70 %               1,75 %
+
+    3,67 % é a ordem de grandeza de um 5º harmônico de verdade: alguém tomaria
+    decisão com ele. Então o trecho é cortado em ciclos inteiros A PARTIR DO
+    PRIMEIRO CURSOR — nunca passa do segundo — e o painel escreve quantos
+    ciclos usou dos que foram pedidos.
+
+    A alternativa seria janelar (Hann): reduz o vazamento, mas mexe nas
+    amplitudes e borra as raias vizinhas. Troca ruim para medir harmônico.
+
+    ## E o trecho tem que ter taxa constante
+
+    Num registro de taxa variável, um intervalo que atravessa a fronteira não é
+    um número de ciclos de coisa nenhuma: metade dele foi amostrada com outro
+    passo. Devolve o motivo em vez de um espectro.
+    """
+    if not quais or a is None or b is None:
+        return None
+    i0, i1 = sorted((int(a["amostra"]), int(b["amostra"])))
+    # UMA leitura de `registro.trechos`: a propriedade remonta os objetos a
+    # cada acesso, e comparar por identidade duas chamadas diferentes dizia
+    # "taxas diferentes" num registro de taxa única.
+    trechos = registro.trechos
+    trecho = _trecho_de(trechos, i0)
+    outro = _trecho_de(trechos, i1)
+    if trecho is None or outro is None or trecho.inicio != outro.inicio:
+        return {"erro": "os cursores estão em trechos de taxas diferentes: "
+                        "entre eles não há número de ciclos que valha para os "
+                        "dois", "sinais": {}}
+    por_ciclo = fasor.ciclo_em_amostras(trecho.taxa_hz, registro.line_frequency)
+    if por_ciclo < fasor.MINIMO_POR_CICLO:
+        return {"erro": "a taxa deste trecho não dá um ciclo que se meça",
+                "sinais": {}}
+
+    pedidos = (i1 - i0 + 1) / por_ciclo
+    inteiros = int(math.floor(pedidos + 1e-9))
+    if inteiros < 1:
+        return {"erro": "menos de um ciclo entre os cursores: não há o que "
+                        "medir", "sinais": {}, "ciclos_pedidos": round(pedidos, 2)}
+
+    # A janela começa no PRIMEIRO cursor e anda ciclos inteiros: assim ela
+    # nunca passa do segundo, e arrastar o segundo cursor a faz crescer de
+    # ciclo em ciclo em vez de borrar o espectro a cada amostra.
+    n_janela = inteiros * por_ciclo
+    pesos = fasor.pesos_do_ciclo(n_janela)
+    fim = i0 + pesos.size
+    if fim > registro.n_samples:
+        return {"erro": "a janela de ciclos inteiros não cabe no registro",
+                "sinais": {}, "ciclos_pedidos": round(pedidos, 2)}
+
+    canais = {c.index: c for c in registro.analog_channels}
+    saida = {}
+    for identidade in quais:
+        sinal = por_id.get(identidade)
+        if sinal is None:
+            continue
+        divisor, _ = escalas.get(sinal.unidade, (1.0, sinal.unidade))
+        canal = canais.get(sinal.canal) if sinal.canal >= 0 else None
+        if canal is not None:
+            onda = registro.analog[canal.index]
+            razao = conversao.relacao(canal)
+            lado_do_canal = "primario" if canal.is_primary else "secundario"
+            fator = 1.0
+            if lado != lado_do_canal and razao > 0:
+                fator = razao if lado == "primario" else 1.0 / razao
+            fator /= divisor
+        else:
+            conjunto = catalogo.conjunto_do_sinal(registro, sinal)
+            if conjunto is None:
+                continue
+            onda = catalogo.residuo(registro, conjunto, 0,
+                                    registro.analog.shape[1], lado, divisor)
+            if onda is None:
+                continue
+            fator = 1.0
+        janela_ = np.asarray(onda[i0:fim], dtype=np.float64)
+        raias = fasor.espectro(janela_, n_janela, pesos,
+                               harmonicos_mod.ORDENS_DESENHADAS, inteiros)
+        if raias is None:
+            continue
+        thd = fasor.distorcao_do_espectro(raias)
+        saida[identidade] = {
+            "harmonicos": [_num(float(v) * fator) for v in raias],
+            "fundamental": _num(float(raias[0]) * fator),
+            "casas_fasor": casas(float(raias[0]) * fator),
+            "thd": None if thd is None else round(thd, 1),
+            "teto": fasor.ordens_mediveis(por_ciclo),
+        }
+    return {"ciclos": inteiros, "ciclos_pedidos": round(pedidos, 2),
+            "erro": "", "sinais": saida}
+
+
 def entre(registro: Record, a: dict, b: dict) -> dict:
     """O que separa os dois cursores: tempo e diferença de cada sinal.
 
@@ -389,7 +622,6 @@ def em(registro: Record, pedidos: list[tuple[float | None, int, float]],
 
     n = registro.n_samples
     escalas = unidades.por_unidade(registro, lado)
-    rotulos = conjuntos.rotulos_por_canal(registro)
     trechos = registro.trechos
     referencia = canal_de_referencia(registro, refere)
 
@@ -400,11 +632,47 @@ def em(registro: Record, pedidos: list[tuple[float | None, int, float]],
     por_id = catalogo.por_id(registro, lado)
     acrescentados = []
     for painel in (layout or []):
-        if painel.tipo != paineis_mod.ANALOGICO:
+        if painel.tipo == paineis_mod.ANALOGICO:
+            for identidade in painel.sinais:
+                alvo = catalogo.efetivo(identidade, painel.medida, filtro,
+                                        por_id)
+                if alvo is not None:
+                    acrescentados.append((identidade, alvo))
+    # Os fasoriais DEPOIS, e só o que nenhum gráfico de ondas já pediu. A
+    # resposta é casada pelo id, e o mesmo `c0:instantaneo` num gráfico com o
+    # filtro aceso é `IAW · 60Hz`: se o do fasorial viesse por cima, a
+    # tabelinha daquele gráfico passaria a mostrar a amostra crua. O fasor não
+    # muda com isso — módulo e ângulo saem da mesma janela nos dois casos.
+    ja_pedidos = {identidade for identidade, _ in acrescentados}
+    # Quem quer ESPECTRO. Calcular as raias de todo sinal da tela seria uma DFT
+    # de vinte e cinco ordens por canal a cada movimento do cursor, para jogar
+    # fora — só o painel de harmônicos usa.
+    com_espectro: set[str] = set()
+    for painel in (layout or []):
+        if painel.tipo != paineis_mod.HARMONICOS:
             continue
         for identidade in painel.sinais:
-            alvo = catalogo.efetivo(identidade, painel.medida, filtro, por_id)
-            if alvo is not None:
+            alvo = por_id.get(identidade)
+            if alvo is None or not harmonicos_mod.tem_espectro(alvo):
+                continue
+            com_espectro.add(identidade)
+            if identidade not in ja_pedidos:
+                ja_pedidos.add(identidade)
+                acrescentados.append((identidade, alvo))
+    for painel in (layout or []):
+        if painel.tipo != paineis_mod.FASORIAL:
+            continue
+        # O fasor é da LINHA: nem o filtro nem a medida mexem nele, então o
+        # sinal vai como foi pedido. Ver `plot/fasorial.py`.
+        # A REFERÊNCIA entra junto, mesmo não estando no diagrama: os ângulos
+        # das correntes a partir de `VAY` precisam do fasor de `VAY`, e a tela
+        # não calcula fasor nenhum.
+        for identidade in (*painel.sinais, painel.referencia):
+            if not identidade:
+                continue
+            alvo = por_id.get(identidade)
+            if alvo is not None and identidade not in ja_pedidos:
+                ja_pedidos.add(identidade)
                 acrescentados.append((identidade, alvo))
 
     cursores = []
@@ -424,16 +692,19 @@ def em(registro: Record, pedidos: list[tuple[float | None, int, float]],
             andar += int(round(float(ciclos) * amostras))
         i = int(np.clip(aqui + andar, 0, n - 1))
 
-        # Depois de andar, o cursor pode ter mudado de trecho.
+        # Depois de andar, o cursor pode ter mudado de trecho. Aqui a janela é
+        # a DE MEDIDA: um ciclo de TEMPO, sem arredondar, que é o que faz o
+        # cursor dar o mesmo número da curva. Ver `fasor.pesos_do_ciclo`.
         trecho = _trecho_de(trechos, i)
-        amostras = fasor.amostras_por_ciclo(trecho.taxa_hz if trecho else 0.0,
-                                            registro.line_frequency)
+        ciclo = fasor.ciclo_em_amostras(trecho.taxa_hz if trecho else 0.0,
+                                        registro.line_frequency)
+        largura = fasor.pesos_do_ciclo(ciclo).size if ciclo > 0 else 0
         # Uma janela que atravessa a fronteira não é um ciclo de coisa nenhuma.
-        if trecho is not None and i - amostras + 1 < trecho.inicio:
-            amostras = 0
+        if trecho is not None and i - largura + 1 < trecho.inicio:
+            ciclo = 0.0
         cursores.append(_em_uma_amostra(registro, i, lado, escalas,
-                                        amostras, referencia, rotulos,
-                                        acrescentados))
+                                        ciclo, referencia, acrescentados,
+                                        com_espectro))
 
     primeiro = cursores[0] or (cursores[1] if len(cursores) > 1 else None)
     do_cursor = _trecho_de(trechos, primeiro["amostra"]) if primeiro else None
@@ -448,14 +719,22 @@ def em(registro: Record, pedidos: list[tuple[float | None, int, float]],
     return {
         "referencia": {
             "indice": referencia,
+            # O MESMO nome que a linha da tabelinha leva: o do arquivo. A
+            # referência precisa ser encontrável na tela, e já foi anunciada
+            # como `IA` enquanto as linhas diziam `IAW` — um nome que não
+            # existia em lugar nenhum do gráfico.
             "nome": canais[referencia].name if referencia is not None else None,
-            "padrao": fases.padrao(canais[referencia])
-            if referencia is not None else None,
         },
         "amostras_da_janela": amostras,
         "filtro": filtro,
         "cursores": cursores,
         "entre": entre(registro, presentes[0], presentes[1])
+        if len(presentes) == 2 else None,
+        # O Fourier do TRECHO, para o painel de harmônicos em «cursor 2 − 1».
+        # Vai sempre que há dois cursores e um painel de harmônicos: trocar a
+        # opção do menu passa a ser instantâneo, sem ida ao servidor.
+        "espectro_entre": espectro_entre(registro, presentes[0], presentes[1],
+                                         lado, escalas, por_id, com_espectro)
         if len(presentes) == 2 else None,
         "lado_pedido": lado,
         "amostras_por_ciclo": round(por_ciclo, 4),

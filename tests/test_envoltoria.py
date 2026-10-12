@@ -233,3 +233,70 @@ def test_taxa_variavel_tambem_na_onda_filtrada():
     curva = envoltoria.calcular(sinal, trechos, 60.0, "filtrado")
     np.testing.assert_allclose(curva[a.size + 39:], envoltoria.filtrada(b, 40)[39:],
                                rtol=1e-9, atol=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# A componente contínua
+# ---------------------------------------------------------------------------
+
+def test_a_contINUA_de_uma_senoide_pura_e_zero():
+    """Média de um ciclo inteiro de cosseno é zero, por definição. Se este
+    teste falhar, a janela não está fechando um ciclo — e aí NENHUMA envoltória
+    deste arquivo vale, porque todas usam a mesma janela."""
+    curva = envoltoria.continua(senoide(100.0, por_ciclo=20, ciclos=6), 20)
+    assert np.all(np.isnan(curva[:19]))
+    np.testing.assert_allclose(curva[19:], 0.0, atol=1e-12)
+
+
+def test_a_continua_devolve_o_deslocamento_que_foi_posto():
+    """Resposta conhecida: senoide com 37 de offset tem contínua 37."""
+    for offset in (37.0, -12.5, 0.0):
+        curva = envoltoria.continua(
+            senoide(100.0, por_ciclo=16, ciclos=6, dc=offset), 16)
+        np.testing.assert_allclose(curva[15:], offset, atol=1e-12)
+
+
+def test_a_continua_sai_COM_SINAL():
+    """O SIGRA mostra a DC em módulo; nós mostramos com sinal, e isso está
+    conferido contra ele nos oito canais de um registro real (ver `CLAUDE.md`).
+    Tirar o sinal aqui esconderia de que lado a onda está deslocada — que é
+    metade do que a assimetria conta."""
+    curva = envoltoria.continua(senoide(10.0, por_ciclo=16, ciclos=4, dc=-5.0), 16)
+    assert curva[20] < 0
+
+
+def test_rms_ao_quadrado_e_fundamental_mais_continua_ao_quadrado():
+    """As três curvas saem de contas independentes, e Parseval as amarra: sem
+    harmônico, `rms² = fundamental² + dc²`.
+
+    É o teste que pega as três de uma vez. Se alguém trocar um `/n` por um
+    `/(n-1)`, ou esquecer um √2 na fundamental, a identidade abre — e nenhuma
+    das três, olhada sozinha, denunciaria.
+    """
+    x = senoide(100.0, por_ciclo=32, ciclos=6, dc=40.0)
+    ef = envoltoria.rms(x, 32)[40]
+    fu = envoltoria.fundamental(x, 32)[40]
+    dc = envoltoria.continua(x, 32)[40]
+    assert ef**2 == pytest.approx(fu**2 + dc**2, rel=1e-12)
+
+
+def test_a_continua_bate_com_a_do_cursor():
+    """Curva e cursor são duas implementações da mesma identidade — a curva por
+    soma móvel sobre o registro inteiro, o cursor por uma janela só. É assim
+    que elas divergem, em silêncio, meses depois."""
+    x = senoide(80.0, graus=33.0, por_ciclo=24, ciclos=6, dc=-17.0)
+    np.testing.assert_allclose(envoltoria.continua(x, 24)[23:],
+                               ponto_a_ponto(x, 24, "dc")[23:],
+                               rtol=1e-9, atol=1e-9)
+
+
+def test_a_continua_segue_os_trechos_de_taxa():
+    """Mesma regra de todas: nenhuma janela atravessa a fronteira entre dois
+    trechos, porque meia janela de cada lado não é um ciclo de coisa nenhuma."""
+    a = senoide(50.0, por_ciclo=20, ciclos=6, dc=9.0)
+    b = senoide(50.0, por_ciclo=40, ciclos=6, dc=9.0)
+    sinal = np.concatenate([a, b])
+    trechos = [Trecho(0, a.size, 1200.0), Trecho(a.size, sinal.size, 2400.0)]
+    curva = envoltoria.calcular(sinal, trechos, 60.0, "dc")
+    assert np.all(np.isnan(curva[a.size:a.size + 39]))
+    np.testing.assert_allclose(curva[a.size + 39:], 9.0, atol=1e-9)

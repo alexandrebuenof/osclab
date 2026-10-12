@@ -381,6 +381,8 @@ def test_sem_arranjo_no_corpo_a_rota_abre_no_padrao(cliente, tmp_path):
 
     assert [p["nome"] for p in do_get["paineis"]] == \
         [p["nome"] for p in torto["paineis"]]
+    # A fábrica escreve `IAW`, `IBW`, `ICW`: uma trinca de corrente e nenhuma
+    # de tensão — não há o que distinguir, e o apelido não aparece.
     assert do_get["paineis"][0]["nome"] == "Correntes (A)"
 
 
@@ -540,3 +542,328 @@ def test_o_contrato_e_o_MESMO_nos_dois_lados():
     assert achado, "a tela precisa declarar o CONTRATO dela"
     assert int(achado.group(1)) == janela.CONTRATO, (
         f"onda.js diz {achado.group(1)} e plot/janela.py diz {janela.CONTRATO}")
+
+
+def test_a_rota_corrige_a_trinca_de_uma_componente(cliente, tmp_path):
+    """A componente é o ÚNICO sinal cuja origem é palpite.
+
+    `IAW · RMS` sai do canal 0 por definição — o id dele diz isso. `3I0 G1`
+    sai de três canais que o programa escolheu olhando nomes, e quando escolhe
+    errado a componente sai na unidade certa, na ordem de grandeza certa, sem
+    nada na tela denunciando.
+    """
+    cfg = escrever_comtrade(tmp_path, na=6, n=256)
+    dat = cfg.with_suffix(".dat")
+    envio = {"arquivos": [(cfg.open("rb"), cfg.name), (dat.open("rb"), dat.name)]}
+    sha = cliente.post("/api/acervo", data=envio,
+                       content_type="multipart/form-data").get_json()["aceitos"][0]["sha"]
+
+    antes = cliente.get(f"/api/onda/{sha}?colunas=200").get_json()
+    componente = next(x for x in antes["catalogo"] if x["id"] == "q0:0:rms")
+    assert componente["origem"] == "IAW, IBW, ICW"
+    assert componente["conjunto"]["canais"] == {"A": 0, "B": 1, "C": 2}
+    chave = componente["conjunto"]["chave"]
+
+    # E o sinal de um canal só NÃO traz conjunto: não há o que corrigir ali.
+    de_um_canal = next(x for x in antes["catalogo"] if x["id"] == "v0:rms")
+    assert de_um_canal["conjunto"] is None
+
+    r = cliente.post(f"/api/onda/{sha}/trincas",
+                     json={chave: {"A": 0, "B": 4, "C": 5}})
+    assert r.status_code == 200
+    assert r.get_json()["trincas"] == {chave: {"A": 0, "B": 4, "C": 5}}
+
+    depois = cliente.get(f"/api/onda/{sha}?colunas=200").get_json()
+    corrigida = next(x for x in depois["catalogo"] if x["id"] == "q0:0:rms")
+    assert corrigida["origem"] == "IAW, IBX, ICX"
+
+
+def test_corrigir_trinca_de_registro_que_nao_existe(cliente):
+    assert cliente.post("/api/onda/naoexiste/trincas",
+                        json={"I*W": {"A": 0, "B": 1, "C": 2}}).status_code == 404
+
+
+def test_a_tela_pede_colunas_em_PIXEL_DE_VERDADE():
+    """O canvas é criado com `largura × devicePixelRatio`, e o Chrome
+    multiplica esse fator pelo zoom do navegador: a 80 % ele vale 0,8.
+
+    Pedindo colunas em pixel de CSS, o servidor mandava ~1 ponto por pixel de
+    CSS e o canvas tinha 0,8 pixel real para cada um — mais pontos que pixels,
+    e o traçador escolhia. Dava batimento no envelope da onda, que não está no
+    arquivo. Vale para os dois lados: acima de 100 %, ou em tela HiDPI, o traço
+    saía mais grosseiro do que a tela conseguiria mostrar.
+    """
+    from osclab import paths
+    js = (paths.STATIC_DIR / "js" / "onda.js").read_text(encoding="utf-8")
+    assert 'p.set("colunas", String(colunasDeVerdade()))' in js
+    corpo = js[js.index("function colunasDeVerdade"):]
+    corpo = corpo[:corpo.index("\n  }")]
+    assert "devicePixelRatio" in corpo
+    assert "larguraDisponivel()" in corpo
+
+
+def test_so_o_AVISO_leva_triangulo():
+    """O aviso é do LEITOR — o que ele fez, deixou de fora ou não conseguiu
+    confirmar. O relato é do RELÉ: a classificação do evento, a distância que
+    ele calculou.
+
+    Carimbar `⚠` numa frase como "o relé classificou o evento como AB T"
+    ensina o usuário a ignorar o triângulo, e aí o aviso que importa passa
+    despercebido junto. É a mesma regra do `bruto` que saiu do cabeçalho.
+    """
+    from osclab import paths
+    js = (paths.STATIC_DIR / "js" / "acervo.js").read_text(encoding="utf-8")
+    trecho = js[js.index("for (const aviso of item.avisos"):]
+    trecho = trecho[:trecho.index("return el;")]
+    assert '"sinal-de-aviso", "⚠"' in trecho
+    # O relato entra sem triângulo nenhum.
+    relato = trecho[trecho.index("item.relatos"):]
+    assert "⚠" not in relato
+
+
+def test_o_cabecalho_NAO_anuncia_a_gravacao_bruta():
+    """`bruto` é o caso comum — todo COMTRADE do parque cai nele — e um aviso
+    que aparece sempre deixa de ser lido.
+
+    O que continua aparecendo é o que MUDA o que se pode fazer: `filtrado`
+    trava o botão do filtro, e `desconhecido` diz que o programa não decidiu e
+    por isso deixou o botão livre. O diagnóstico em si continua sendo medido —
+    ver `analysis/filtragem.py`; o que mudou é quando ele vai para a tela.
+    """
+    from osclab import paths
+    js = (paths.STATIC_DIR / "js" / "onda.js").read_text(encoding="utf-8")
+    trecho = js[js.index("function mostrarFiltragem"):]
+    trecho = trecho[:trecho.index("alvo.hidden")]
+    assert "gravação já filtrada pelo relé" in trecho
+    assert "bruta ou filtrada? não deu para saber" in trecho
+    assert "gravação bruta" not in trecho
+
+
+def test_o_botao_da_medida_e_curto_e_de_largura_fixa():
+    """Ele mostra o ESTADO, então troca de palavra a cada clique. Com
+    `instantâneo` de um lado e `RMS` do outro, o «+ sinal» ao lado andava
+    alguns pixels a cada clique — o alvo do mouse se movia debaixo do dedo de
+    quem acabou de clicar."""
+    import re
+
+    from osclab import paths
+    js = (paths.STATIC_DIR / "js" / "onda.js").read_text(encoding="utf-8")
+    assert '"RMS" : "inst."' in js
+    assert '"instantâneo"' not in js
+    css = (paths.STATIC_DIR / "css" / "osclab.css").read_text(encoding="utf-8")
+    bloco = css[css.index(".grafico-titulo .medida {"):]
+    assert re.search(r"min-width:\s*[\d.]+em", bloco[:bloco.index("}")])
+
+
+def test_o_nome_do_sinal_e_escrito_INTEIRO_na_tela():
+    """Houve uma versão que escrevia a frequência em `<sub class="hz">`, com o
+    servidor mandando o nome partido em três. Saiu: `IAW ·60Hz`, com o ponto
+    colado no subscrito, lia pior que `IAW · 60Hz`, e o nome passava a existir
+    em duas formas que precisavam ser conferidas uma contra a outra.
+
+    Este teste é a guarda da volta: se alguém recriar o subscrito sem recriar o
+    estilo dele, o navegador aplica o padrão, que estica a linha — a legenda e
+    a tabelinha ganham um pixel de altura só onde há frequência, e as linhas
+    deixam de se alinhar.
+    """
+    from osclab import paths
+    js = (paths.STATIC_DIR / "js" / "onda.js").read_text(encoding="utf-8")
+    assert 'criar("sub", "hz"' not in js
+    assert '"partes"' not in js and ".partes" not in js
+
+def test_o_botao_do_filtro_nao_carimba_uma_FREQUENCIA_no_rotulo():
+    """O botão dizia `60 Hz`. Num registro de 50 Hz isso era um rótulo errado
+    que nada na tela denunciava — e o rótulo do botão é estático, então nem
+    havia como ele acompanhar o arquivo. Agora ele diz o que FAZ, e a setinha
+    ao lado diz qual filtro é.
+    """
+    import re
+
+    from osclab import paths
+    html = (paths.TEMPLATES_DIR / "onda.html").read_text(encoding="utf-8")
+    botao = re.search(r'<button[^>]*id="filtro"[^>]*>(.*?)</button>', html,
+                      re.S)
+    assert botao, "o botão do filtro sumiu do onda.html"
+    assert not re.search(r"\d+\s*Hz", botao.group(1)), botao.group(1)
+
+
+def test_o_menu_suspenso_nasce_VAZIO_no_html():
+    """Fechar um menu é esvaziar a âncora dele. Se a âncora fosse o grupo
+    inteiro, fechar levaria os botões junto — foi o que aconteceu na primeira
+    tentativa do menu do ímã. Os dois pontos de montagem têm que estar vazios.
+    """
+    import re
+
+    from osclab import paths
+    html = (paths.TEMPLATES_DIR / "onda.html").read_text(encoding="utf-8")
+    for alvo in ("menu-do-ima", "menu-do-filtro"):
+        achado = re.search(rf'<span id="{alvo}">(.*?)</span>', html, re.S)
+        assert achado, f"o ponto de montagem {alvo} sumiu"
+        assert not achado.group(1).strip(), f"{alvo} nasceu com conteúdo dentro"
+
+
+def test_TODA_classe_que_a_tela_cria_existe_no_css():
+    """`criar("div", "menu-suspenso")` com o CSS ainda chamando `.menu-ima`
+    deixa o menu sem borda, sem fundo e por cima do gráfico — funcionando, e
+    ilegível. Não dá erro nenhum.
+
+    Confere só as classes de UMA palavra que o `onda.js` cria: as compostas
+    (`achado mudou`) misturam classe de estado, que o CSS declara junto.
+    """
+    import re
+
+    from osclab import paths
+    js = (paths.STATIC_DIR / "js" / "onda.js").read_text(encoding="utf-8")
+    css = (paths.STATIC_DIR / "css" / "osclab.css").read_text(encoding="utf-8")
+    declaradas = set(re.findall(r"\.([a-z][a-z0-9-]*)", css))
+    usadas = {c for c in re.findall(r'criar\("[a-z]+",\s*"([a-z0-9-]+)"', js)}
+    assert not (usadas - declaradas), f"o onda.js cria e o CSS não tem: {usadas - declaradas}"
+
+
+def test_o_RODAPE_do_painel_diz_de_que_canais_do_arquivo_aquilo_saiu(cliente,
+                                                                     tmp_path):
+    """É a contrapartida do `G1`.
+
+    O ordinal não depende de fabricante nenhum, e é justamente por não depender
+    que ele não diz nada sozinho: `G1` é a primeira trinca DAQUELE arquivo. O
+    rodapé é onde o programa responde "`G1` é qual?", citando os nomes do
+    arquivo entre aspas — sem elas, um `TC BUC 69kV:I A` no meio de uma lista
+    com espaços e dois-pontos vira sopa, e um `J1 -IA` parece subtração.
+
+    Já houve a rotulagem manual no lugar disto. Ela existia para CONSERTAR um
+    palpite do programa; o programa não palpita mais, então não há o que
+    consertar — há o que INFORMAR, e informar é barato.
+    """
+    cfg = escrever_comtrade(tmp_path, na=6, n=256)
+    dat = cfg.with_suffix(".dat")
+    envio = {"arquivos": [(cfg.open("rb"), cfg.name), (dat.open("rb"), dat.name)]}
+    sha = cliente.post("/api/acervo", data=envio,
+                       content_type="multipart/form-data").get_json()["aceitos"][0]["sha"]
+
+    pacote = cliente.get(f"/api/onda/{sha}?colunas=200").get_json()
+    graficos = [p for p in pacote["paineis"] if p["tipo"] == "analogico"]
+    # Os dois painéis se chamam igual — o título é só a unidade — e quem os
+    # distingue é o nome dos canais, que é o do arquivo.
+    assert [p["nome"] for p in graficos] == ["Correntes (A)", "Correntes (A)"]
+    assert [s["sinal"] for s in graficos[0]["sinais"]] == ["IAW", "IBW", "ICW"]
+    assert [s["sinal"] for s in graficos[1]["sinais"]] == ["IAX", "IBX", "ICX"]
+
+    # Sem calculado no gráfico não há rodapé: o nome do canal já está na
+    # legenda, e o grupo dele se pergunta no catálogo ou no editor de grupos.
+    assert graficos[0]["rodape"] == []
+    assert graficos[1]["rodape"] == []
+
+    # Com a componente, o rodapé aparece e diz de que trinca ela saiu.
+    arranjo = {"paineis": [{"id": "p1", "tipo": "analogico", "nome": "",
+                            "sinais": ["c0:instantaneo", "q0:0:rms"],
+                            "medida": "instantaneo"}]}
+    com = cliente.post(f"/api/onda/{sha}?colunas=200", json=arranjo).get_json()
+    assert com["paineis"][0]["rodape"] == [
+        'G1 — "IAW", "IBW", "ICW"',
+        "componentes simétricas: módulo do fasor de um ciclo, em eficaz",
+    ]
+
+
+def test_o_rodape_NAO_aparece_quando_nao_ha_CALCULADO(cliente, tmp_path):
+    """Um painel com as três fases e mais nada não tem rodapé: a linha
+    repetiria o nome do arquivo que já está na legenda. Ela existe para
+    traduzir o `G1` de um `3I0 G1` — o que sai de TRÊS canais e não tem nome de
+    arquivo a herdar."""
+    sha = _sha_de_um_registro(cliente, tmp_path, na=3, n=128)
+    pacote = cliente.get(f"/api/onda/{sha}?colunas=200").get_json()
+    grafico = next(p for p in pacote["paineis"] if p["tipo"] == "analogico")
+    assert grafico["nome"] == "Correntes (A)"
+    assert grafico["rodape"] == []
+
+
+def test_o_traco_suave_so_vale_onde_ha_POUCA_amostra_por_ciclo():
+    """Num sinal com descontinuidade de verdade — a entrada de uma falta num
+    registro bruto — uma curva suave passaria por fora do degrau e desenharia
+    um pico que não existe. Registro filtrado não tem degrau.
+
+    A regra mora no `onda.js`; o que este teste guarda é que ela continua
+    CONDICIONAL, e não aplicada a todo traço.
+    """
+    from osclab import paths
+    js = (paths.STATIC_DIR / "js" / "onda.js").read_text(encoding="utf-8")
+    assert "AMOSTRAS_PARA_SUAVIZAR = 8" in js
+    assert "dados.amostras_da_janela_do_fasor <= AMOSTRAS_PARA_SUAVIZAR" in js
+    # E nunca sobre traço reduzido: ali o desenho já é mínimo e máximo por
+    # coluna de pixel, e arredondar isso inventaria forma onde há estatística.
+    assert "!dados.reduzido" in js
+
+
+def test_canal_sem_vinculo_NAO_e_anunciado_como_problema():
+    """A coluna fica vazia, e essa é a decisão.
+
+    Escrevia «não reconhecido» em cor de aviso. A tensão da bateria e as
+    grandezas que o relé já calculou nunca vão ter vínculo, porque não são fase
+    de nada: a linha inteira ficava marcada como problema num registro em que
+    não há problema nenhum. Aviso que aparece no caso normal deixa de ser lido
+    como aviso e passa a ser lido como defeito do programa.
+    """
+    from osclab import paths
+    js = (paths.STATIC_DIR / "js" / "onda.js").read_text(encoding="utf-8")
+    assert "não reconhecido" not in js
+    css = (paths.STATIC_DIR / "css" / "osclab.css").read_text(encoding="utf-8")
+    assert ".vinculo.nenhum" not in css, "sobrou regra de CSS sem dono"
+
+
+# ---------------------------------------------------------------------------
+# O apelido do registro, e a exportação com ele
+# ---------------------------------------------------------------------------
+
+def test_renomear_vale_na_TELA_e_nao_no_disco(cliente, tmp_path):
+    """`UPC1 ALIMENTADOR 11SEL-451-521_09_202613...` é o nome que o fabricante
+    exporta, e ele não diz que evento é aquele. O nome novo vale dentro do
+    OscLab; o arquivo continua com o nome original, porque é pelo nome base que
+    o leitor acha o `.dat` a partir do `.cfg`."""
+    from osclab.library import acervo
+
+    sha = _sha_de_um_registro(cliente, tmp_path, na=3, n=128)
+    de_antes = acervo.obter(sha).nome_do_arquivo
+
+    r = cliente.post(f"/api/acervo/{sha}/nome",
+                     json={"nome": "  curto na SE Barra do Garças  "})
+    assert r.status_code == 200
+    assert r.get_json()["nome"] == "curto na SE Barra do Garças"
+    assert r.get_json()["nome_do_arquivo"] == de_antes
+
+    # O acervo passa a mostrar o nome novo; os arquivos no disco, não.
+    assert acervo.obter(sha).nome == "curto na SE Barra do Garças"
+    nomes = {c.name for c in acervo.pasta_do_registro(sha).iterdir()}
+    assert f"{de_antes}.cfg" in nomes and f"{de_antes}.dat" in nomes
+
+    # Apagar o apelido devolve o nome do arquivo, sem precisar lembrar dele.
+    r = cliente.post(f"/api/acervo/{sha}/nome", json={"nome": "   "})
+    assert r.get_json()["nome"] == de_antes
+    assert acervo.obter(sha).nome == de_antes
+
+
+def test_o_apelido_nao_aceita_o_que_estraga_nome_de_arquivo(cliente, tmp_path):
+    """O apelido vira nome de arquivo na exportação: `19/01` ali abriria uma
+    pasta que não existe."""
+    from osclab.library import acervo
+
+    sha = _sha_de_um_registro(cliente, tmp_path, na=3, n=128)
+    r = cliente.post(f"/api/acervo/{sha}/nome", json={"nome": 'curto 19/01 <A:B>'})
+    assert r.get_json()["nome"] == "curto 19-01 -A-B-"
+    assert acervo.obter(sha).nome == "curto 19-01 -A-B-"
+
+
+def test_exportar_sai_em_zip_com_os_DOIS_arquivos_renomeados(cliente, tmp_path):
+    """Um COMTRADE são dois arquivos, e o leitor acha um a partir do outro pelo
+    NOME BASE: renomear só um entregaria um par que não abre."""
+    import io
+    import zipfile
+
+    sha = _sha_de_um_registro(cliente, tmp_path, na=3, n=128)
+    cliente.post(f"/api/acervo/{sha}/nome", json={"nome": "curto na SE"})
+
+    r = cliente.get(f"/api/acervo/{sha}/exportar")
+    assert r.status_code == 200
+    assert "curto na SE.zip" in r.headers["Content-Disposition"]
+    with zipfile.ZipFile(io.BytesIO(r.data)) as zip_:
+        assert sorted(zip_.namelist()) == ["curto na SE.cfg", "curto na SE.dat"]
+        # E o conteúdo é o do arquivo, não um arquivo vazio com nome bonito.
+        assert zip_.read("curto na SE.cfg").decode("utf-8").strip()

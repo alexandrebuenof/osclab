@@ -8,10 +8,25 @@ conhecida — filtrar em 60 Hz, tomar o eficaz de um ciclo, os dois.
 
 Um canal dá origem a quatro sinais, e eles são coisas diferentes:
 
-    IA           a amostra crua
-    IA RMS       eficaz verdadeiro da janela de um ciclo
-    IA 60Hz      só a componente de 60 Hz, no tempo
-    IA 60Hz RMS  o eficaz dessa componente — a "fundamental"
+    IAW              a amostra crua, como o relé gravou
+    IAW · RMS        eficaz verdadeiro da janela de um ciclo
+    IAW · 60Hz       só a componente de 60 Hz, no tempo
+    IAW · 60Hz RMS   o eficaz dessa componente — a "fundamental"
+
+**A base é o nome do ARQUIVO**, não um nome nosso. Já foi `IA`, `IB`, `IC` —
+a fundamental que o programa deduzia —, e a tela ficava com duas nomenclaturas
+para a mesma coisa: `IAW` na aba do IED e `IA` na legenda do gráfico. Pior, num
+trafo dois canais viravam `IA` e foi preciso inventar um apelido de trinca para
+desempatar. Com o nome do relé não há empate possível: ele já nomeia os
+terminais dele de forma única, em todo fabricante.
+
+O `·` separa o nome do canal do que se fez com ele. Não é hífen porque o GE
+grava canais chamados `J1 -IA`: `J1 -IA - RMS` teria dois hífens de
+significados diferentes na mesma linha.
+
+O `60` sai da frequência NOMINAL DO REGISTRO, e não de uma constante: um
+arquivo de 50 Hz escreve `IA 50Hz` sozinho. Escrever `60` num registro de 50 Hz
+seria um nome errado que nada na tela denunciaria.
 
 Cada um tem nome próprio porque cada um vai poder ser manipulado sozinho:
 posto num gráfico separado, comparado com outro, usado numa conta. Sem nome
@@ -25,6 +40,19 @@ tabelinha, no relatório e, mais adiante, na fórmula que o usuário escrever. U
 nome montado no JavaScript viveria só na tela e teria que ser remontado — igual,
 com sorte — em cada um dos outros lugares.
 
+## O nome é UM, e é desenhado inteiro
+
+`IAW · 60Hz RMS` é o nome — em texto puro, o mesmo na legenda, na tabelinha, no
+relatório e na fórmula.
+
+Houve uma versão em que a frequência ia em **subscrito**, para o nome ocupar
+menos: o servidor mandava o nome partido em três (`("IAW ·", "60Hz", "RMS")`) e
+a tela encolhia o do meio. Saiu. O que se ganhava em largura se perdia em
+leitura — `IAW ·60Hz` com o ponto colado no subscrito lê-se pior que
+`IAW · 60Hz` —, e o nome passava a existir em duas formas, com um teste só para
+garantir que as duas diziam a mesma coisa. Uma forma só é mais barata que duas
+formas conferidas.
+
 ## Por que não `IA₁` para a fundamental
 
 Porque no marco 0.4b entram as componentes simétricas, e ali `I1` é **sequência
@@ -36,16 +64,52 @@ explícito é mais longo e nunca é ambíguo.
 
 from __future__ import annotations
 
-#: As quatro vistas, e como cada uma se chama no fim do nome do sinal. A ordem
-#: do sufixo é a ordem das operações: filtra-se primeiro, mede-se depois.
-SUFIXOS = {
-    "instantaneo": "",
-    "rms": "RMS",
-    "filtrado": "60Hz",
-    "fundamental": "60Hz RMS",
+#: A frequência que os nomes usam quando ninguém disse qual é a do registro.
+FREQUENCIA_PADRAO = 60.0
+
+#: As quatro vistas e o sufixo de cada uma, em duas partes só para o `{f}` da
+#: frequência poder ser preenchido. A ordem é a das operações: filtra-se
+#: primeiro, mede-se depois.
+_PARTES_DO_SUFIXO = {
+    "instantaneo": ("", ""),
+    "rms": ("", "RMS"),
+    # A contínua não leva frequência no nome: ela é o que sobra DEPOIS de tirar
+    # a alternada, e `IAW · 60Hz DC` se leria como "a DC da componente de
+    # 60 Hz", que é zero por definição.
+    "dc": ("", "DC"),
+    "filtrado": ("{f}Hz", ""),
+    "fundamental": ("{f}Hz", "RMS"),
 }
 
-GRANDEZAS = tuple(SUFIXOS)
+GRANDEZAS = tuple(_PARTES_DO_SUFIXO)
+
+
+def frequencia_no_nome(frequencia: float) -> str:
+    """`60`, `50`, `59.94` — sem casa decimal quando não precisa."""
+    valor = float(frequencia or FREQUENCIA_PADRAO)
+    return f"{valor:g}"
+
+
+def partes_do_sufixo(grandeza: str,
+                     frequencia: float = FREQUENCIA_PADRAO) -> tuple[str, str]:
+    """`("60Hz", "RMS")` — o que pode ir em subscrito e o que fica normal."""
+    sub, resto = _PARTES_DO_SUFIXO.get(grandeza, ("", ""))
+    return (sub.format(f=frequencia_no_nome(frequencia)), resto)
+
+
+#: O que separa o nome do canal do que o OscLab fez com ele. Ponto médio, e
+#: não hífen: o GE grava `J1 -IA` e `J2 -VX`, e `J1 -IA - RMS` põe dois hífens
+#: de significados diferentes na mesma linha.
+SEPARADOR = " · "
+
+
+def sufixo(grandeza: str, frequencia: float = FREQUENCIA_PADRAO) -> str:
+    """`RMS`, `60Hz`, `60Hz RMS` — o fim do nome, em texto puro."""
+    return " ".join(x for x in partes_do_sufixo(grandeza, frequencia) if x)
+
+
+#: Mantido para quem só quer o sufixo do caso comum de 60 Hz.
+SUFIXOS = {g: sufixo(g) for g in GRANDEZAS}
 
 #: A combinação dos dois controles da tela. O filtro é do registro inteiro (e
 #: trava quando o relé já filtrou); a medida é de cada gráfico.
@@ -81,22 +145,26 @@ def aplicavel(filtro: bool, filtragem: str) -> bool:
     return bool(filtro) and str(filtragem) != "filtrado"
 
 
-def nome(padrao: str, grandeza: str, rotulo: str = "") -> str:
-    """O nome do sinal: o canal, o que foi feito com ele, e de que conjunto é.
+#: O que separa o nome do canal do que o OscLab fez com ele. Ponto médio, e
+#: não hífen: o GE grava `J1 -IA` e `J2 -VX`, e `J1 -IA - RMS` põe dois hífens
+#: de significados diferentes na mesma linha.
+SEPARADOR = " · "
 
-        IA            uma trinca de correntes só no registro
-        IA RMS        a mesma, medida em eficaz
-        IA RMS AT     num relé de trafo, onde há correntes de dois lados
 
-    O apelido do conjunto (`AT`, `W`, `69kV`) vem por último e **só existe
-    quando há mais de um conjunto da mesma grandeza** — ver
-    `formats/conjuntos.py`. Sem ele, um registro de trafo teria dois canais
-    chamados `IA` e a tela não diria qual é qual.
+def nome(base: str, grandeza: str,
+         frequencia: float = FREQUENCIA_PADRAO) -> str:
+    """O nome do sinal: o canal do arquivo e o que foi feito com ele.
 
-    Devolve `""` quando o canal não tem nome padronizado: o OscLab não batiza o
-    que não conseguiu identificar, e um `" RMS"` solto seria pior que nada.
+        IAW              a amostra crua
+        IAW · RMS        a mesma, medida em eficaz
+        IAW · 60Hz       só a componente de 60 Hz, no tempo
+        IAW · 60Hz RMS   o eficaz dessa componente
+
+    Devolve `""` quando o canal não tem nome — arquivo torto, e um `" RMS"`
+    solto seria pior que nada.
     """
-    if not padrao:
+    base = (base or "").strip()
+    if not base:
         return ""
-    partes = [padrao, SUFIXOS.get(grandeza, ""), (rotulo or "").strip()]
-    return " ".join(p for p in partes if p)
+    fim = sufixo(grandeza, frequencia)
+    return f"{base}{SEPARADOR}{fim}" if fim else base

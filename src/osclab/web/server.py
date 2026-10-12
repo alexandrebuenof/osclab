@@ -17,6 +17,8 @@ GET    /                          o acervo: arrastar arquivos e ver o que entrou
 GET    /api/acervo                a lista, em JSON
 POST   /api/acervo                envio de arquivos (multipart)
 DELETE /api/acervo/<sha>          tira um registro do acervo
+POST   /api/acervo/<sha>/nome     renomeia o registro DENTRO do OscLab
+GET    /api/acervo/<sha>/exportar baixa os arquivos com o nome escolhido
 GET    /onda/<sha>                a tela de formas de onda
 GET    /api/onda/<sha>            uma janela do registro, pronta para desenhar
 POST   /api/onda/<sha>            a mesma janela, com o arranjo de painéis
@@ -44,7 +46,12 @@ ainda não tem arranjo nenhum, e quem monta o padrão é o servidor.
 
 from __future__ import annotations
 
-from flask import Flask, jsonify, render_template, request
+import io
+import zipfile
+from pathlib import Path
+
+from flask import (Flask, jsonify, render_template, request, send_file,
+                   send_from_directory)
 
 from osclab import paths, version
 from osclab.formats import registry
@@ -67,6 +74,25 @@ def create_app() -> Flask:
         static_folder=str(paths.STATIC_DIR),
     )
     app.config["MAX_CONTENT_LENGTH"] = TAMANHO_MAXIMO
+
+    @app.url_defaults
+    def _versao_do_estatico(endpoint, valores):
+        """Todo `.js` e `.css` sai com `?v=<instante em que mudou>` no link.
+
+        Sem isto o navegador podia continuar rodando o `onda.js` de antes de
+        uma correção: o Flask não manda prazo de validade, e aí vale o palpite
+        do navegador, que guarda o arquivo por um tempo proporcional à idade
+        dele. Já custou rodadas de "ainda está com o bug" sobre um conserto que
+        estava no disco e não na tela. Com o instante no link, arquivo novo é
+        endereço novo, e o Ctrl+F5 deixa de ser parte do procedimento.
+        """
+        if endpoint != "static" or "filename" not in valores:
+            return
+        try:
+            arquivo = Path(app.static_folder) / valores["filename"]
+            valores["v"] = int(arquivo.stat().st_mtime)
+        except OSError:
+            pass
 
     # -----------------------------------------------------------------------
     # Páginas
@@ -172,6 +198,58 @@ def create_app() -> Flask:
             layout=_layout(),
         ))
 
+    @app.post("/api/acervo/<sha>/nome")
+    def renomear(sha: str):
+        """O usuário dá ao registro um nome que diga que evento é aquele.
+
+        **O arquivo no disco não muda.** O acervo guarda os arquivos com o nome
+        original de propósito — é assim que o leitor acha o `.dat` a partir do
+        `.cfg`. O nome novo é uma camada por cima, e quem quiser o arquivo com
+        ele exporta. Ver `library/acervo.py`.
+        """
+        pedido = request.get_json(silent=True) or {}
+        try:
+            nome = acervo.gravar_apelido(sha, pedido.get("nome", ""))
+        except FormatError as exc:
+            return jsonify(erro=str(exc)), 404
+        item = acervo.obter(sha)
+        return jsonify(nome=nome,
+                       nome_do_arquivo=item.nome_do_arquivo if item else nome)
+
+    @app.get("/api/acervo/<sha>/exportar")
+    def exportar(sha: str):
+        """Os arquivos do registro, com o nome escolhido na tela.
+
+        Um registro COMTRADE são dois arquivos (ou três, com o `.hdr`), e o
+        leitor acha um a partir do outro pelo **nome base** — então renomear um
+        sem renomear os outros entrega um par que não abre. Por isso a
+        exportação sai em `.zip` quando há mais de um arquivo: ali os três saem
+        com o mesmo nome base, de uma vez, e a extensão de cada um se mantém.
+        """
+        item = acervo.obter(sha)
+        if item is None:
+            return jsonify(erro="Este registro não está no acervo."), 404
+        pasta = acervo.pasta_do_registro(sha)
+        arquivos = [(nome, pasta / nome) for nome in item.arquivos
+                    if (pasta / nome).is_file()]
+        if not arquivos:
+            return jsonify(erro="Os arquivos deste registro sumiram do disco."), 404
+
+        base = item.nome
+        if len(arquivos) == 1:
+            nome, caminho = arquivos[0]
+            return send_from_directory(
+                pasta, nome, as_attachment=True,
+                download_name=f"{base}{Path(nome).suffix}")
+
+        saco = io.BytesIO()
+        with zipfile.ZipFile(saco, "w", zipfile.ZIP_DEFLATED) as zip_:
+            for nome, caminho in arquivos:
+                zip_.write(caminho, f"{base}{Path(nome).suffix}")
+        saco.seek(0)
+        return send_file(saco, mimetype="application/zip", as_attachment=True,
+                         download_name=f"{base}.zip")
+
     @app.post("/api/onda/<sha>/vinculos")
     def corrigir_vinculos(sha: str):
         """O usuário corrige a fase que o programa deduziu errado.
@@ -184,6 +262,22 @@ def create_app() -> Flask:
         except FormatError as exc:
             return jsonify(erro=str(exc)), 404
         return jsonify(vinculos={str(k): v for k, v in escolhas.items()})
+
+    @app.post("/api/onda/<sha>/trincas")
+    def corrigir_trincas(sha: str):
+        """O usuário diz QUAIS TRÊS CANAIS formam uma trinca.
+
+        Quais três formam um conjunto sai do nome deles, e nome de canal cada
+        fabricante escreve como quer. Quando erra, 3I0, I1 e I2 erram junto e
+        saem na unidade certa, sem nada na tela denunciando. A correção fica
+        gravada ao lado do registro. Ver `library/acervo.py`.
+        """
+        try:
+            escolhas = acervo.gravar_trincas(sha,
+                                             request.get_json(silent=True) or {})
+        except FormatError as exc:
+            return jsonify(erro=str(exc)), 404
+        return jsonify(trincas=escolhas)
 
     @app.delete("/api/aguardando")
     def esquecer_aguardando():

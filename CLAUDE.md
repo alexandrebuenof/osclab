@@ -25,6 +25,25 @@ e NOJA.
    o trabalho é então fazer o número caber bem. Um dígito a mais que reduz o
    erro de leitura vale a largura que custa.
 
+## Versionamento — decidido pelo Alexandre em 12/10/2026
+
+`X.Y.Z`, e quem decide o dígito é o TAMANHO da mudança:
+
+| dígito | quando | exemplo |
+|---|---|---|
+| `Z` — último | detalhe: um ajuste de tela, um texto, um bug pequeno | o rótulo da régua, o botão do modo sem destaque |
+| `Y` — meio | função nova | o diagrama fasorial inteiro → `0.5.0` |
+| `X` — primeiro | mudança muito grande | lançar a ferramenta para o público → `1.0.0` |
+
+**E o `Z` só sobe quando o Alexandre aprova a rodada, não a cada ajuste.**
+Ele pede um detalhe, eu implemento e mostro; ele pede o seguinte, eu
+implemento e mostro. A versão sobe UMA vez, no fim, quando ele disser que
+está bom — senão a lista de marcos vira uma linha por clique e nenhuma delas
+conta nada.
+
+Até a aprovação, o que muda é só o código: `VERSION` e a tabela de marcos
+ficam como estão.
+
 ## O que é o programa
 
 Leitor e analisador de oscilografia: lê vários formatos e fabricantes, analisa
@@ -478,16 +497,19 @@ osclab/
   fase — a última porque em `BARRA A` a fase é o segundo `A`. Sem A, B e C
   completos, zero conjuntos: dois terços da informação não autorizam mostrar
   um número.
-- **Num relé de trafo há dois `IA`.** Correntes de alta e de baixa, na mesma
-  unidade. Por isso o nome do sinal carrega o **apelido do conjunto**:
-  `IA RMS AT`, `3I0 BT`. O apelido só aparece quando há mais de um conjunto da
-  mesma grandeza — sufixo que não distingue nada é ruído.
-- **`AT`/`BT` só se o arquivo disser o nível de tensão.** Quando os nomes
-  trazem os kV, o maior é a alta e a dedução é segura. Quando não trazem
-  (`IAW` e `IAX`, da SEL), o apelido sai do que **difere** entre os nomes —
-  corta-se o começo e o fim comuns e o miolo distingue. Sai `W` e `X` sem o
-  programa saber o que é enrolamento. **Nunca se inventa AT/BT**: inverter os
-  lados num laudo é erro que só aparece tarde.
+- **O nome do sinal é o nome do CANAL**, como o relé o escreveu, mais o que o
+  OscLab fez com ele: `IAW · RMS`, `TC BUC 69kV:I A · 60Hz`. Nenhum sinal se
+  chama `IA` — o relé já nomeia os terminais dele de forma única, e um nome
+  nosso por cima seria uma segunda nomenclatura para a mesma coisa.
+- **O ordinal `[1]` só existe na componente de sequência**, que sai de TRÊS
+  canais e por isso não tem nome de arquivo a herdar. Ele é a posição do
+  conjunto dentro da grandeza, naquele arquivo, e vem sempre acompanhado da
+  origem — os três canais que entraram na conta.
+- **O programa nunca diz alta nem baixa, nem tendo o nível de tensão no
+  nome.** Inverter os lados num laudo é erro que só aparece tarde. O ordinal
+  não afirma nada, e quem precisa saber lê a **origem**: o rodapé do gráfico e
+  a coluna da direita do OscLab dizem de que canais do arquivo aquilo saiu,
+  com os nomes entre aspas.
 - **`3I0` é a SOMA, não a média.** É ela que circula pelo neutro e é ela que se
   compara com o ajuste do elemento de terra. `I0` obrigaria a multiplicar por
   três de cabeça toda vez.
@@ -564,7 +586,9 @@ usuário compõe a partir de sinais**:
 - **Depois**, o usuário cria novos diagramas — analógicos e fasoriais —
   acrescenta e remove sinais de cada um dinamicamente, e monta a análise dele.
   — **feito para analógico e digital** (criar, reordenar, renomear, apagar,
-  pôr e tirar sinais). Falta o fasorial e o de Fourier.
+  pôr e tirar sinais). **O fasorial entrou na 0.4.6** — em pu pelas bases
+  de RTC/RTP, com o cursor e a referência angular escolhidos por painel
+  (ver `plot/fasorial.py`). Falta o de Fourier.
 - **Por fim**, uma calculadora cria sinais novos a partir dos existentes.
 
 A ordem que ele pediu em 20/09/2026, depois dos painéis: **cursores magnéticos**
@@ -598,6 +622,7 @@ Três consequências para quem programa isto:
 | Repositório | GitHub público: **github.com/alexandrebuenof/osclab** |
 | Licença | AGPL-3.0-or-later; direitos da distribuidora |
 | Formatos | COMTRADE é a base; depois SEL `.CEV`; PL4 para validar algoritmos |
+| **Ondas viajantes (TWFL)** | **Adiado, e de propósito.** O `.CFG` do SEL-TWFL abre e é lido como qualquer COMTRADE — e é só isso que se espera dele hoje. Ondas viajantes não se analisam com janela de um ciclo: a 10 kHz, o que interessa são as frentes de onda em microssegundos, não fasor, não RMS, não componente simétrica. Vai ganhar **um modo de oscilografia próprio**, no futuro. Enquanto isso, **não gastar conversa com ele** — nem em comissionamento, nem em rodada de SIGRA, nem em nada que cobre dele um número de proteção convencional. (Combinado com o Alexandre, e repetido por ele em 22/09/2026 porque eu tinha esquecido de anotar.) |
 
 ## Detalhes que já custaram caro (não redescobrir)
 
@@ -853,7 +878,32 @@ Três consequências para quem programa isto:
 | 0.4b++ | Selecionar sinal por clique, tirar da tela, desfazer | **feito** |
 | 0.4b+++ | Painéis: criar, reordenar, renomear; cor única por gráfico; unidade nos eixos | **feito** |
 | 0.4b++++ | Cursores magnéticos: transição de digital, pico e passagem por zero da onda, início da perturbação | **feito** |
-| 0.4c | Harmônicos | |
+| 0.4b+++++ | Resíduo no tempo (`IN`/`VN`), componente contínua, janela de um ciclo de TEMPO | **feito** — `0.4.2` |
+| 0.4b++++++ | Comissionamento: testes contra o gabarito do próprio relé e contra o SIGRA | **feito** |
+| 0.4b+++++++ | Grupos trifásicos nomeados (`G1`), editor de grupos, tela «canais» | **feito** |
+| 0.4b++++++++ | Catálogo em matriz (linha por canal, coluna por conta), modo tradicional/avançado, apelido do registro e exportação | **feito** — `0.4.3` |
+| 0.4b+++++++++ | O filtro empurra para o filtrado TUDO que está no gráfico (inclusive o escolhido à mão) e o catálogo marca o sinal desenhado; menus suspensos fecham pela setinha, que vira para cima quando aberto; `.js`/`.css` com `?v=` no link | **feito** — `0.4.4` |
+| 0.4b++++++++++ | `IN`/`VN` com as mesmas colunas de um canal: `· 60Hz` (onda) e `· 60Hz RMS` (≡ `3I0`, pela linearidade da DFT); num `.CEV`, `IN · RMS` pela DFT; rodapé distingue resíduo filtrado | **feito** — `0.4.5` |
+| 0.4c | **Diagrama fasorial**: painel novo, em pu pelas bases de RTC/RTP do arquivo (com a correção √3 do TP fase-fase, medida na pré-falta), cursor escolhido por painel, referência angular por painel (saiu da tabelinha das ondas), módulo e ângulo ao lado | **feito** — `0.4.6` |
+| 0.4c+ | Fasorial: base do pu **editável** e com duas peneiras (par `x / 1` é relação, não nominal; na tensão a pré-falta tem que bater) — sem base utilizável, 1 pu é o maior fasor daquela grandeza no registro inteiro; botão da referência angular com menu; catálogo do fasorial com «ocultar sinais nulos» e os calculados em cor | **feito** — `0.4.7` |
+| 0.4c++ | Fasorial: seta de comprimento MÍNIMO, tracejada, para o fasor pequeno demais não sumir no centro (canal sem sinal não ganha seta); «+ ao lado» põe um segundo diagrama na mesma linha, já no outro cursor; a base digitada passou a valer também no desenho | **feito** — `0.4.8` |
+| 0.4c+++ | Fasorial: o diagrama ao lado nasce VAZIO e independente; referência angular com busca e sobre TODOS os sinais com fasor — inclusive os que não estão no diagrama (ela vai ao servidor, porque muda o que ele calcula); `G1` colado no nome no seletor | **feito** — `0.4.10` |
+| 0.4c++++ | **Arrastar pelo título** muda a ordem dos gráficos; soltar um fasorial sobre outro põe os dois lado a lado; «+ ao lado» virou «+ diagrama ao lado»; a nota do pu diz de onde o número saiu sem depender do hover | **feito** — `0.4.11` |
+| 0.4c+++++ | Um botão só, «+ adicionar gráfico», com o tipo no menu; arrastar exige ESCOLHER o gráfico antes, rola a tela perto da borda e marca o destino com linha tracejada; rodapé do grupo sem o «de» e presente também no fasorial | **feito** — `0.4.12` |
+| 0.4c++++++ | Base do pu derivada da RELAÇÃO mais o secundário nominal (`120 / 1` → `600 / 5` e `13800 / 115`), conferida na pré-falta para a tensão; escolher o gráfico vale em qualquer parte vazia dele; linha de solta centrada no vão | **feito** — `0.4.13` |
+| 0.4c+++++++ | Base do pu conferida contra a ORDEM DE GRANDEZA do que o registro mede: pega o par escrito em volt/ampère num canal gravado em kV/kA (corrige pelo prefixo) e o par que não é nominal de nada; «+ diagrama lateral» | **feito** — `0.4.14` |
+| 0.4c++++++++ | O anel tracejado do fasorial passou a ser **1 pu** (era metade da escala, que não significa nada) e leva o nome escrito | **feito** — `0.4.15` |
+| 0.4c+++++++++ | Fasorial com botão **sem escala | em pu**, sem escala por padrão (toda seta do mesmo tamanho: só o ângulo); fora de escala passou a ser **ponta vazada** (o tracejado não se via numa seta de 17 px); o número da escala encostou no círculo dele | **feito** — `0.4.16` |
+| 0.4c++++++++++ | O 1 pu de uma componente de sequência passou a sair da FASE da trinca também no caminho sem placa (era o pico da própria componente: `V2` de 2 % enchia o círculo igual a um de 30 %) | **feito** — `0.4.17` |
+| 0.4c+++++++++++ | **Uma régua por grandeza** no fasorial: o círculo vale tantos pu de corrente E tantos de tensão, cada um com o seu anel de 1 pu. Régua única era o erro de origem — numa falta a corrente vai a 8 pu e a tensão da fase com defeito a 0,35 pu, e cinco das seis setas travavam no centro. A seta travada virou **haste atenuada** (sólido até o módulo real, apagado o resto): a ponta vazada tinha 8 px e sumia. A legenda das réguas passou a ser desenhada DEPOIS das setas, com fundo e no quadrante mais vazio, para não ficar atrás de um fasor | **feito** — `0.4.18` |
+| 0.4c++++++++++++ | Rótulo da régua enxuto (`1,5 pu (kV)`, sem «círculo = ») e encostado na borda quando não cabe; e a **pré-falta que confere a base derivada passou a sair do LADO DA TELA** — em secundário ela era comparada com o valor de primário do arquivo, 120× maior, e um RTP perfeitamente declarado caía no «maior do registro» | **feito** — `0.4.19` |
+| 0.4c+++++++++++++ | A régua do fasorial passou a sair do **registro inteiro**, não do instante do cursor: a mesma corrente de carga ocupava metade do círculo na pré-falta e virava um toco na falta, sem nada ter acontecido com ela. Régua agrupada por **grandeza** e não pela unidade escrita (`kV` e `V` dividem uma só); degraus 4, 6 e 8 na escada; mínimo da seta de 0,15 para 0,20 | **feito** — `0.4.20` |
+| 0.4c++++++++++++++ | Catálogo do fasorial igual ao analógico: a **cor do traço** nas linhas que já estão no diagrama (clicável, troca a cor) e o **símbolo da família** em cada linha — senoide para o que o relé gravou, `ƒx` para o que o OscLab contou | **feito** — `0.4.21` |
+| 0.4c+++++++++++++++ | Catálogo do fasorial dobrado em **blocos** («Senoidais», «Calculados»), com o símbolo da família no cabeçalho e não repetido em cada linha; e a base do pu passou a mostrar TRÊS algarismos significativos — `0,07 kV` arredondava 0,0664 kV (66,4 V) e apagava justo a precisão que faz o pu valer | **feito** — `0.4.22` |
+| 0.4c++++++++++++++++ | O botão do modo não fica mais destacado no «avançado»: destaque nesta barra quer dizer «ligado» (ímã, filtro), e o modo é uma chave de duas posições — o rótulo dele já diz em qual está | **feito** — `0.4.23` |
+| **0.5** | **Diagrama fasorial fechado.** Painel próprio, em pu com uma régua por grandeza tirada do registro inteiro, base derivada do RTC/RTP e conferida contra o que o registro mede, cursor e referência angular por diagrama, diagrama lateral, arrastar para reordenar, e o catálogo em blocos | **feito** — `0.5.0` |
+| 0.5+ | Marcar um sinal no catálogo já o manda para «já na tela», com a cor; e **a leitura do cursor passou a ser refeita quando a lista de sinais muda** — `carregar()` traz a janela e as séries, mas o pacote do cursor é outro pedido, e sem ele o sinal novo entrava sem módulo nem ângulo: só desenhava quando o usuário mexia o cursor | **feito** — `0.5.1` |
+| **0.6** | **Painel de harmônicos.** Espectro em barras no instante de um cursor, em % da fundamental de cada sinal, com o THD das barras ao lado; janela de 1 ciclo (a do relé) ou do TRECHO entre os dois cursores, cortado em ciclos inteiros; só entra onda (canal e resíduo), o teto de ordens é o Nyquist da taxa e vai escrito, e o painel só se cria no modo avançado | **feito** — `0.6.0` |
 | 0.5 | Bruto/filtrado, descontinuidade, alinhamento | |
 | 0.6 | Localização de faltas (um e dois terminais) | |
 | 0.7 | Mini relatório | |
@@ -871,6 +921,187 @@ set OSCLAB_AMOSTRAS=C:\Users\alexa\Documents\06 - Ferramentas\Oscilografias
 python app.py --testes
 ```
 
+#### O arquivo sintético precisa PARECER de relé
+
+A fábrica batizava os canais de `CH1`, `CH2`, `CH3`. O nome de um canal não é
+enfeite: é de onde `formats/conjuntos.py` deduz a que equipamento o canal
+pertence — tira a letra da fase do nome e junta quem sobrou igual. De `CH1`,
+`CH2`, `CH3` sobram três nomes diferentes, nenhuma trinca fechava, e **todo
+registro sintético exercitava um caminho que nenhum arquivo de relé percorre**.
+
+Só apareceu quando a lista do OscLab passou a depender da trinca: treze testes
+caíram de uma vez, e nenhum deles era sobre o que estava sendo mudado. Hoje a
+fábrica escreve `IAW`, `IBW`, `ICW`, `IAX`, ... — sufixo alfabético a cada três
+canais, como um relé nomeia terminais —, então `na=3` sai com uma trinca e
+`na=6` com duas, que é um transformador.
+
+### O que o primeiro comissionamento pegou (22/09/2026)
+
+Na primeira vez que o `test_comissionamento.py` rodou sobre o acervo inteiro,
+ele reprovou — e reprovou certo. Dois defeitos, os dois do tipo que não dá
+erro na tela.
+
+#### 1. Um `.CEV` do parque que o leitor não abria
+
+O **SEL-787** escreve outra primeira linha:
+
+    SEL-451, sem versão:    "FID","RID","SID",<soma>
+    SEL-787, CEV_VER 2.0.1: "FID","CEV_VER",<soma>
+
+A assinatura exigia a primeira forma, o `sniff` recusava e nenhum leitor
+assumia o arquivo. O esqueleto dos dois dialetos é o mesmo — mudam três campos
+do cabeçalho (`REC_NUM`/`NUM_CH_A`/`NUM_CH_D` no lugar de
+`EVENT_NUM`/`LOCATION`/`SER_NUM`) e o 787 não traz `SID`, então a estação fica
+vazia, que é o honesto.
+
+A assinatura lista os dois dialetos **na mão**, e não um `"FID",.*`: um `sniff`
+que assume demais sequestra arquivo dos outros leitores, e o erro aparece longe
+dali — como formato lido errado, não como formato recusado.
+
+#### 2. Duas trincas que não existiam, e nada dizia isso
+
+`fases._SEL` aceitava **um** caractere de terminal depois da letra da fase
+(`IAW`, `VBY`). O SEL-787, sendo diferencial de transformador, nomeia os
+enrolamentos com **dois**: `IAW1`, `IAW2`, `IGW1`, `IN1`.
+
+Resultado: naquele arquivo o programa não reconhecia fase em nenhum dos nove
+canais de corrente, as duas trincas não se formavam, e **3I0, I1, I2, IN e a
+localização de falta simplesmente não existiam** — enquanto os canais
+apareciam na tela e desenhavam normalmente. É exatamente o modo de falha que a
+aba do IED e o lápis de correção existem para combater.
+
+O limite passou para **dois** caracteres (`_TERMINAL`), e não para livre: com
+sufixo livre, `VALORES` viraria fase A e um canal de potência reativa entraria
+em Fortescue. Há teste fixando os dois lados — `IAW1` → A e `ICAPACITOR` → "".
+
+Efeito colateral conferido canal a canal nos dez arquivos do acervo: só as
+colunas `3V0M` e `3V0A` do 451 passaram a deduzir fase N. São colunas SEM
+UNIDADE, então não entram em conjunto, nem em resíduo solto, nem em conta
+nenhuma — a lista de sinais do 451 é idêntica antes e depois.
+
+#### 3. E uma afirmação nossa que era falsa
+
+O comentário do `FILTRADO_ATE` dizia que amostras em valor eficaz seriam prova
+de relatório filtrado, "porque só o relatório filtrado é escrito assim". O
+`.CEV` do 787 derruba: 16 amostras por ciclo, THD de 0,9 a 1,8 % em regime
+(onda CRUA — o filtrado dá ~0 %) e ainda assim escrito em eficaz. Conferido
+contra o cabeçalho do próprio relé: com o ×√2 os sete canais fecham dentro de
+1,3 %; sem ele, erram 30 %.
+
+**O eficaz é do formato CEV, não do relatório filtrado.** A taxa é o único
+critério.
+
+### Comissionamento: o relé escreve o próprio gabarito (22/09/2026)
+
+Todo arquivo traz, além das amostras, medidas que o relé calculou por dentro.
+**Esses números são um gabarito escrito pelo fabricante**, e conferir contra
+eles não precisa de arquivo de referência nenhum. Mora em
+`tests/test_comissionamento.py`, ligado por `OSCLAB_AMOSTRAS`.
+
+Descartou o plano anterior — um `gabarito.json` chaveado por sha256 —, e o
+motivo vale guardar: **um gabarito que a gente mesmo escreve prova que a conta
+não mudou, não que ela está certa.**
+
+#### As três camadas, e o que cada uma prende
+
+1. **Sintéticos** (`tests/fabrica.py`): resposta CONHECIDA. Prendem a
+   MATEMÁTICA, de forma absoluta — melhor que comparar com software, porque
+   não há segunda implementação para estar errada.
+2. **`test_comissionamento.py`**: matemática MAIS leitura (escala de TC/TP,
+   ordem de canal, base de tempo) contra o que o relé afirma.
+3. **SIGRA**: terceiro independente, manual. Cobre os arquivos da SEL que não
+   trazem gabarito nenhum dentro. **O 487E já foi conferido** (22/09/2026,
+   13 canais, 0,05 % de mediana — ver abaixo). Sobra o **COXIPO**, e mesmo ele
+   tem um `.CEV` do mesmo evento que já passa nas conferências. O SEL-TWFL
+   também não traz gabarito, mas está fora de escopo — ver «Decisões já
+   tomadas».
+
+#### As oito conferências
+
+    1. resíduo calculado x o MEDIDO pelo relé        (todos os formatos)
+    2. fasor de PRÉ-FALTA do cabeçalho               (.CEV)
+    3. fasor de FALTA do cabeçalho                   (.CEV, com trecho parado)
+    4. colunas V1M / 3V0M / 3V2M em regime           (.CEV)
+    5. o mesmo evento exportado nos dois formatos    (par .CEV + COMTRADE)
+    6. a hora do TRIP x a amostra em que o digital muda   (.CEV)
+    7. o instantâneo por coluna do cabeçalho         (.CEV do SEL-787)
+    8. I1 x a coluna lenta LI1M, em regime           (.CEV)
+
+**A 6 é a única que prende a BASE DE TEMPO.** Todas as outras comparam número
+com número na mesma amostra e passariam igual com o registro inteiro deslocado
+no tempo. Ali não: o relé carimba uma hora de RELÓGIO (`HOUR_T1`…), e para ela
+virar índice de amostra passam a hora do disparo, o recuo pela marca `>` e a
+taxa. Prende o desempacotamento dos digitais junto. Medido no alimentador: o
+relé carimba 13:36:57,980 → amostra 208, e é exatamente onde `TRIP` muda. Das
+481 amostras, só 40 têm mudança alguma, e a 208 é a maior rajada (17 digitais).
+
+**A 7 casa campo do cabeçalho com coluna pelo nome EXATO, unidade inclusive.**
+É o que separa os dois dialetos sem lista de nomes: no 451 os campos são `IA`,
+`IA_PF` (sem unidade) e nenhum casa com a coluna `IA(A)`; no 787 os campos SÃO
+`IAW1(A)` e casam os doze.
+
+**O neutro que a dedução do programa deixa solto é emparelhado AQUI DENTRO**
+(`_neutros_pelo_nome`), pela chave do nome: `IGW1` → `I*W1`, `J1 -IG` →
+`J1 -I*`. São quatro pares a mais de graça. Fazer a mesma dedução no
+`conjuntos.py` mexeria no que alimenta `3I0`, `I1` e a localização de falta —
+risco desproporcional para um ganho que é só de conferência. **Decidido em
+22/09/2026, e o argumento é do Alexandre:** o `N` de um conjunto não entra em
+conta nenhuma (toda conta passa por `conjunto.abc`, que devolve só A, B e C),
+então pendurá-lo não compra cálculo, compra só agrupamento.
+
+#### O que foi medido
+
+    resíduo MEDIDO x nosso IN calculado
+      SIPROTEC, 4 grandezas (3I0 e 3V0 dos dois enrolamentos)   0,001 %
+      SEL .CEV, IG                                              0,000 %
+      MiCOM, Current IN                                          15,6 %  (*)
+    fasores do cabeçalho do .CEV
+      8 am/ciclo, pré-falta            0,60 % de módulo, 0,13° de ângulo
+      8 am/ciclo, falta                0,42 %,           0,37°
+      4 am/ciclo, pré-falta            1,09 %,           0,41°
+      4 am/ciclo, falta                  não confere — ver abaixo
+    colunas do relé, em regime
+      V1M                              +0,04 %
+      3V0M                             +1,12 %
+      3V2M (com o fator 3)             −4,90 %
+    mesmo evento em dois arquivos (.CEV filtrado x COMTRADE bruto)
+      casam por carimbo de disparo com Δt = 63 µs; pré-falta dentro de 0,5 %
+
+(*) **O MiCOM não é defeito nosso.** O `Current IN` dele é entrada própria,
+que pode estar num TC toroidal noutro ponto do circuito; as relações de TC
+declaradas são idênticas, então não há como saber isso pelo arquivo. O
+`Voltage VNG` do mesmo relé é pior: declara TP de 79.674 V contra 138.000 V
+das fases — é 138000/√3, ou seja, bases diferentes, e esse o teste detecta e
+pula sozinho.
+
+#### Três limites que viraram guarda no teste
+
+**As colunas `L*` do `.CEV` são média móvel de 10 CICLOS.** `LI1M`, `L3I2M` e
+`LIGM` só mudam uma vez por ciclo, sobem e descem em rampa linear e continuam
+caindo dez ciclos depois de o disjuntor abrir. Ajustadas contra a nossa conta,
+as três dão a mesma janela de 10 ciclos com 2 % de erro rms. **Só comparáveis
+em regime** — foi por isso que `LI1M` fechou e `L3I2M`/`LIGM` não.
+
+**O `.CEV` de 4 amostras por ciclo não serve para fasor de FALTA.** O curto do
+arquivo dura 1,5 ciclo e não existe janela de um ciclo inteiramente dentro
+dele; o relé calculou o dele por dentro, a 16 amostras por ciclo ou mais, e só
+depois decimou o relatório para 4. Erro medido: 18,9 %. Isso é resolução do
+relatório, não defeito do leitor. A pré-falta continua valendo (1,09 %).
+
+**O `.CEV` grava corrente como INTEIRO TRUNCADO.** Simulado com senoide limpa:
+−1,16 % no fasor a 82 A de pico, −0,39 % a 200 A, −0,03 % a 2500 A. Foi o que
+explicou o −1,24 % do `I1` contra o `LI1M`. A tensão tem 2 decimais, e por isso
+o `V1` fecha em +0,04 %. Consequência prática: **o `.CEV` perde precisão em
+corrente de carga**, e isso importará na localização de falta.
+
+#### O fator 3 da sequência negativa
+
+A SEL grava `3V2M` e `L3I2M`; nós chamamos de `V2` e `I2`. Sem o fator 3 a
+comparação dava −67,89 % de "erro" que não era erro nenhum. **Decidido em
+22/09/2026 manter `I2`/`V2`** — são as componentes de Fortescue de verdade, e
+`3I0` só leva o 3 porque é igual ao resíduo. O preço foi pago no `descricao`
+do sinal, que agora diz "o relé costuma gravar 3I2, que é o TRIPLO desta".
+
 ### O gabarito: comparar com o SIGRA
 
 O Alexandre usa o **SIGRA** (Siemens) no dia a dia e ele é a referência para
@@ -886,6 +1117,56 @@ Convenções do SIGRA já decifradas a partir de um registro real:
 - **"DC %"** é relativa à fundamental eficaz, e o SIGRA a mostra **em módulo**;
   nós mostramos com sinal. Os módulos batem nos oito canais.
 - Clicar num valor faz aquele canal virar **0°**; os demais giram junto.
+
+#### O eixo de tempo do SIGRA conta a partir do DISPARO
+
+Não do início do registro. Custou uma comparação inteira errada em 22/09/2026:
+o cursor marcava «898,3 ms» e eu procurei a amostra 1797 (898,3 ms do início do
+arquivo), quando o instante era 898,3 ms **depois do disparo** — que naquele
+registro fica a 101,6 ms do início, ou seja, a amostra 1999.
+
+A conversão, sempre:
+
+    amostra = (disparo − início + o que o SIGRA mostra) × taxa
+
+Com a amostra errada o erro deu 1,8 % e parecia defeito nosso. Com a certa, deu
+0,05 %.
+
+#### Caso conferido — LT COXIPO (SEL-421), 22/09/2026, 9 canais
+
+`LT COXIPO I UPC1 - 08_18_2026 - ... - BC.CFG`, 2000 Hz, cursor em +231,6 ms do
+disparo (amostra 666), os dois em **secundário**.
+
+    erro de módulo da fundamental:  máximo 0,11 %   mediano 0,10 %
+    erro de ângulo RELATIVO:        máximo 0,10°    mediano 0,06°
+
+Três correntes e seis tensões. **Com isto, todo arquivo do parque que não traz
+gabarito dentro de si está conferido contra um terceiro independente.**
+
+#### Caso conferido — SEL-487E, 22/09/2026, 13 canais
+
+Segundo registro conferido contra o SIGRA, e o primeiro num arquivo que **não
+traz gabarito nenhum dentro** — era justamente o que faltava para ele.
+
+`QPC1-TR4-UPC2SEL-487E-317_09_202600_28_30_878_170.CFG`, 2000 Hz, cursor em
++898,3 ms do disparo (amostra 1999), os dois programas em **secundário**.
+
+    erro de módulo da fundamental:  máximo 0,28 %   mediano 0,05 %
+    erro de ângulo RELATIVO:        máximo 0,80°    mediano 0,16°
+
+Canal a canal, as seis correntes de fase dos dois bancos (`IAS`…`ICT`) ficam em
+0,01 a 0,09 %, e as seis tensões (`VAV`…`VCZ`) em 0,01 a 0,12 %. O pior caso,
+0,28 % e 0,80°, é o `IY2` — 60 mA com 8 % de contínua, onde o ângulo de um
+sinal pequeno se mexe mais.
+
+**O `Extremum` bate em módulo mas NÃO em sinal.** Em `IBS`, `VAV` e `VBZ` os
+dois programas dão o mesmo número com sinais opostos: nós devolvemos a amostra
+de maior valor ABSOLUTO da janela, e o SIGRA parece preferir outra convenção.
+Em `ICS` e `IY2` a diferença passa de 2 % — provavelmente porque a nossa janela
+de um ciclo de TEMPO leva 34 amostras onde a dele leva 33, e a amostra extra
+pode conter o extremo. Como a fundamental fecha em 0,05 %, a onda é a mesma;
+isto é definição, não leitura. **Fica em aberto**, e não vale como conferência
+até alguém decidir qual convenção seguir.
 
 #### Caso conferido — registro `26.09.05 12.39.30.248`, cursor em 214,2 ms
 
@@ -924,6 +1205,48 @@ E antes de comparar qualquer fasor, garantir que os dois cursores estão na
 diferença muda a DC em vários pontos percentuais — foi o que produziu uma
 divergência de 75 % na `Current IA` em 233 ms, e não era bug nenhum.
 
+### O fuso do COMTRADE: mostrar, nunca converter (22/09/2026)
+
+O mesmo curto do COXIPO aparece com **quatro horas de diferença** entre os dois
+arquivos que o relé gerou:
+
+    .CEV   disparo = 18/08/2026 14:52:03.061      (hora local)
+    .CFG   disparo = 18/08/2026 18:52:03.061601   (UTC)
+
+A resposta está na última linha do `.cfg`, que a edição 2013 da norma reserva
+para isto — **quatro campos em duas linhas**:
+
+    time_code , local_code      o fuso dos CARIMBOS e o da instalação
+    tmq_code  , leapsec         a qualidade do relógio e o segundo bissexto
+
+No COXIPO: `0,-4` e `0,0` — carimbos em UTC, instalação em UTC−4 (Cuiabá),
+relógio travado. E o nome que o próprio relé deu ao arquivo traz `14_52_03`,
+hora local. **Não é caso isolado e não é um fuso só**: no parque o SEL-421
+carimba em UTC e o SIPROTEC carimba em hora local (`-4,...` no `time_code`).
+
+**Guardávamos a primeira linha inteira como texto (`"0,-4"`) e jogávamos três
+dos quatro campos fora.** O que sobrava não dizia nada a quem lia.
+
+#### A decisão, e o gabarito que a decidiu
+
+**A hora NÃO é convertida.** O carimbo fica como o arquivo escreveu, e os
+códigos aparecem ao lado, no cabeçalho.
+
+Não foi preferência: é a convenção do SIGRA, conferida contra ele no `.CFG` do
+COXIPO. Ali o `Start time` que ele exibe é o mesmo `18:52:02.960` que nós
+exibimos, e o fuso aparece em campos separados (`Time Code: 00h00`,
+`Local Code: -04h00`, `Time Quality Code: Normal operation, clock locked`).
+Converter por conta própria faria a nossa hora divergir do gabarito — e do
+nome que o relé deu ao arquivo.
+
+A linha sai em português, e o código `F` do `tmq_code` — relé sem sincronismo —
+é escrito com todas as letras, porque ali a hora do arquivo deixa de servir
+para cruzar com outro registro:
+
+    carimbos em UTC; hora local UTC−04:00; relógio travado, operação normal
+    carimbos em UTC−04:00; erro abaixo de 1 ms
+    ... relógio sem sincronismo — a hora do arquivo NÃO é confiável
+
 ### Esquisitices que os arquivos reais revelaram
 
 - **Schneider MiCOM P139** escreve `2001` no campo da edição — que não é edição
@@ -936,11 +1259,599 @@ divergência de 75 % na `Current IA` em 233 ms, e não era bug nenhum.
 - **SEL-487E** tem 5760 canais digitais: a matriz de estados fica com dezenas de
   MB. Se virar problema, desempacotar sob demanda.
 - Nomes de subestação com acento vêm em **cp1252**, não UTF-8.
+- **Siemens SIPROTEC** escreve o NÚMERO DO CANAL no campo `ccbm` (`1`, `2`, `3`
+  para IA, IB, IC). O `ccbm` da norma é o equipamento vigiado e é o mesmo nas
+  três fases; um número por fase põe cada uma num conjunto só dela, nenhum
+  conjunto fecha, e o registro de um transformador fica **sem componente
+  simétrica nenhuma e com dois canais chamados `IA` na mesma tela** — sem erro,
+  sem aviso. Corrigido: `ccbm` só de dígitos não é nome de equipamento.
+- **Relé tem mais entrada do que a instalação usa.** Um SEL-451 grava dois
+  terminais de TC e dois de TP com só um de cada par cabeado; um SEL-487E tem
+  cinco terminais de TC e três livres. A trinca não cabeada é reconhecida pela
+  medição e não entra no gráfico padrão — ver `analysis/presenca.py`. Sem isso,
+  o programa também achava que precisava distinguir duas trincas e carimbava
+  sufixo em todo canal. Hoje a trinca morta **conta** para a numeração, de
+  propósito: o nome não pode mudar quando o usuário desmarca «ocultar sinais
+  nulos» — ver `conjuntos.precisa_numerar`.
 - **Siemens SIPROTEC** deixa o campo `ph` (fase) VAZIO e escreve a fase no fim
   do nome do canal ("TC BUC 69kV:I A"). Para componentes simétricas (marco 0.4)
   vai ser preciso deduzir a fase do nome quando o campo não vier preenchido.
 - Alguns registros trazem o disparo na **amostra 0**, sem janela de pré-falta —
   a detecção por grandezas delta (marco 0.5) precisa tratar esse caso.
+
+### O arranjo de abertura (marco 0.4)
+
+Um painel por TRINCA de corrente e de tensão, na ordem do arquivo — que é, na
+prática, a ordem em que se conta um evento. Três decisões dentro disso:
+
+- **Só corrente e tensão.** Um relé grava muito mais — tensão da bateria,
+  frequência, ângulos que ele mesmo calculou, corrente diferencial em pu — e
+  cada unidade dessas virava um gráfico na abertura. O resto é escolha de quem
+  analisa, e está a um clique no «+ sinal».
+- **A separação é por trinca, não por unidade.** É isso que tira a tensão da
+  bateria do caminho: ela é volt e não é uma das três fases de nada.
+- **O residual solto entra na trinca.** O `IG` de um SEL e o `3I0` de um
+  Siemens não saem do nome das fases trocando uma letra, mas são do mesmo vão —
+  e num evento à terra são a primeira coisa que se procura. Com mais de uma
+  trinca da mesma unidade, só entram quando o nível de tensão do nome casa com
+  o de uma delas; pendurar o residual no lado errado do trafo é pior que não
+  mostrá-lo.
+
+Quando nenhuma trinca é reconhecida, vale o arranjo antigo (um painel por
+unidade): sem trinca não há com que escolher, e tela vazia é pior que tela
+cheia demais.
+
+### O nome do sinal é o nome do CANAL
+
+    IED       IAW                      o canal, com o nome que o relé deu
+    OscLab    IAW · RMS                o que o relé NÃO gravou
+              IAW · 60Hz
+              IAW · 60Hz RMS
+
+Já foi `IA`, `IB`, `IC` — a fundamental que o programa deduz do nome do canal —
+e antes disso `IA'`, `IA [1]`, `IA AT`. Todas essas versões tinham o mesmo
+defeito de raiz: **duas nomenclaturas para a mesma coisa na mesma tela**,
+`IAW` na aba do IED e `IA` na legenda do gráfico. E como num trafo dois canais
+diferentes viravam `IA`, foi preciso inventar um apelido de trinca só para
+desempatar — apóstrofo, colchete, letra do terminal, cada um com o seu
+problema.
+
+O nome do relé não empata: ele já nomeia os terminais dele de forma única, em
+todo fabricante. Some o desempate, some a segunda nomenclatura, e o nome fica
+sendo o que o engenheiro já lê no relatório do relé.
+
+**O separador é ` · `, não hífen.** O GE grava canais chamados `J1 -IA` e
+`J2 -VX`: `J1 -IA - RMS` põe dois hífens de significados diferentes na mesma
+linha.
+
+**O vínculo com a fase continua existindo** — é dele que saem as trincas, as
+componentes simétricas e o agrupamento dos painéis. O que saiu foi a
+nomenclatura: nenhum sinal se chama `IA`.
+
+**O nome é UM, e é desenhado inteiro.** Houve uma versão em que a frequência
+ia em subscrito: o servidor mandava o nome partido em três (`("IAW ·", "60Hz",
+"RMS")`) e a tela encolhia o do meio. Saiu. O que se ganhava em largura se
+perdia em leitura — `IAW ·60Hz`, com o ponto colado no subscrito, lê pior que
+`IAW · 60Hz` — e o nome passava a existir em duas formas, com um teste só para
+garantir que as duas diziam a mesma coisa.
+
+### O ordinal `[1]` só existe no que sai de uma TRINCA
+
+E existe ali porque não há alternativa: `3I0` e `IN` saem de TRÊS canais, então
+não há um nome de arquivo a herdar. Por grandeza, na ordem do arquivo — `3I0 [1]`,
+`3I0 [2]` —, e só quando o arquivo tem mais de um conjunto daquela grandeza.
+
+**A contagem inclui os conjuntos SEM SINAL**, senão a componente escondida e a
+visível se chamariam igual quando o usuário desmarcasse «ocultar sinais nulos».
+
+**Um residual sem dono conta como conjunto de um canal só.** O GE grava dois
+(`J1 -IG` e `J1 Ig`) e o SIPROTEC outros dois (`NEUTRO:Ix`).
+
+#### E o ordinal vem acompanhado da origem
+
+Um ordinal não diz nada sozinho — é essa a propriedade que o faz servir a
+qualquer fabricante. O programa paga o preço escrevendo de que canais a
+componente saiu, em dois lugares:
+
+- **no rodapé do gráfico**, que aparece **só** quando há componente ou resíduo
+  no painel: `[1] — de "IAS", "IBS", "ICS"`;
+- **na coluna da direita da aba do OscLab**, ao lado do sinal.
+
+**São os TRÊS canais que entram na conta**, não os do conjunto: o residual
+(`TC BUC 69kV:3I0`, `IG`) pertence ao mesmo vão e aparece no mesmo painel, mas
+não entra em Fortescue — citá-lo ali prometeria que ele foi somado.
+
+**Os nomes vão entre aspas.** Sem elas, um `TC BUC 69kV:I A` no meio de uma
+lista — com espaço e dois-pontos dentro — vira sopa, e um `J1 -IA` parece
+subtração.
+
+**E é lista de canais, não fórmula.** `IAW + IBW + ICW` mentia duas vezes: o
+`+` entre eficazes sugere soma de módulos (três fases de 400 A somariam 1200 A,
+quando o 3I0 verdadeiro é zero), e para `I1` e `I2` a conta nem é soma — exige
+girar duas fases de 120°, que é multiplicar por complexo.
+
+#### A trinca da componente é a ÚNICA origem que se corrige
+
+Na aba do OscLab, **só a componente simétrica** mostra a origem à direita, e só
+ela ganha lápis ao lado. A assimetria é de propósito:
+
+- `IAW · RMS` não mostra origem nenhuma. Ela existe — o canal 0 —, mas
+  **repete o começo do próprio nome** e não é palpite: o id do sinal é
+  literalmente "o canal 0, em eficaz". Não há como errar, então não há o que
+  corrigir nem o que informar; escrever `IAW` ao lado de `IAW · RMS` só
+  gastaria tela.
+- `3I0 [1] → IAW, IBW, ICW` é uma **dedução**: o programa olhou os nomes e
+  decidiu que aqueles três formam uma trinca. Quando erra, 3I0, I1, I2 e a
+  localização de falta erram junto — na unidade certa, na ordem de grandeza
+  certa, sem nada na tela denunciando. Medido num registro real: trocar uma
+  fase levou o 3I0 de 302 A para 4262 A.
+
+A correção fica gravada em `trincas.json` ao lado do registro, pelo mesmo
+motivo da correção de fase: quem corrigiu corrigiu para sempre, não até fechar
+o navegador. Correção vazia apaga e a dedução volta a valer.
+
+**A chave é o NOME do conjunto** (`I*W`, `CURRENT I*`), não a posição dele. A
+posição é o `q{i}` que os arranjos salvos usam; amarrar a correção a ela faria
+uma correção mudar o alvo de outra.
+
+**E a ordem da lista sai dos canais DEDUZIDOS, não dos corrigidos.** Se
+corrigir uma trinca a fizesse trocar de lugar com outra, um gráfico salvo
+passaria a desenhar a corrente de outro equipamento — sem erro nenhum na tela.
+
+Só A, B e C se corrigem: são os que entram em Fortescue. Os candidatos
+oferecidos são os canais da MESMA unidade, e duas fases no mesmo canal são
+recusadas — a matriz aplicada a isso devolve número, e o número não quer dizer
+nada.
+
+#### O título do painel é só a unidade
+
+`Correntes (A)`, `Tensões (kV)`. Num trafo os dois painéis de corrente se
+chamam igual, e quem os distingue é o nome dos canais dentro deles — `IAW` num,
+`IAX` no outro.
+
+#### Não há mais rotulagem manual de trinca
+
+Houve: o usuário escrevia `alta`/`baixa` e o nome ficava gravado em
+`rotulos.json`. Ela existia para **consertar um palpite do programa**, de
+quando a tela afirmava qual era a alta. O programa não palpita mais. Saíram
+junto: `rotulos.json`, a rota `/api/onda/<sha>/rotulos`, o `rotulo_escolhido`
+do canal, o `OrigemDoRotulo.ESCOLHIDO` e o lápis de rotular.
+
+#### O programa não diz "alta" nem "baixa"
+
+Ele já disse, e foi um erro. `AT`/`BT` afirmava **duas** coisas: que existe um
+transformador ali, e qual lado é qual. A segunda saía da primeira, e a primeira
+nunca era verificada — um relé que grava uma linha de 138 kV e o serviço
+auxiliar de 13,8 kV tem dois níveis diferentes e nenhum transformador no meio.
+
+E o modo de falha era o pior possível: **silencioso**. Dois defeitos reais no
+leitor de nível, os dois em produção, nenhum dando erro:
+
+- **`L1V` lido como "1 volt"** e `L2V` como "2 volts". As duas linhas de um
+  TWFL — as duas no MESMO nível — apareciam com tensões diferentes. Só não
+  viraram `AT` e `BT` por acidente: aquele arquivo tem quatro trincas de tensão
+  e a regra de lados só atuava com duas ou três.
+- **`TC EXT 34-5kV` lido como 5 kV.** A Siemens escreve `34-5kV` para 34,5 kV
+  porque o ponto decimal não cabe no nome do canal. Errava por um fator de sete
+  e acertava o lado por acidente, só porque o outro enrolamento era 69 kV.
+
+Os dois estão corrigidos (o número não pode vir colado a uma letra; o hífen
+entre dígitos é vírgula decimal) e `nivel_de_tensao` continua servindo para
+casar o residual solto com a trinca certa — o que é um EMPARELHAMENTO, não um
+ranqueamento. Mas a dedução de lado saiu.
+
+#### O número não é lado
+
+`[1]` é ordinal DENTRO da grandeza: num relé com duas trincas de corrente e
+duas de tensão que o arquivo não relaciona, `3I0 [1]` e `3V0 [1]` são a
+primeira corrente e a primeira tensão, e não há como afirmar que são do mesmo
+lado do equipamento. Corrente e tensão só se intercalam no arranjo quando os
+apelidos de uma grandeza correspondem aos da outra.
+
+Quem sabe é quem abriu o arquivo, e o rodapé do gráfico dá a ele o que precisa
+para saber: os nomes dos canais, como o relé os escreveu.
+
+### `IN` e `VN`: o resíduo no TEMPO, que não é o `3I0` (decidido em 22/09/2026)
+
+`3I0` é módulo de fasor: passa pela janela de um ciclo e **só enxerga 60 Hz**.
+A soma `ia+ib+ic` amostra a amostra não filtra nada — carrega a assimetria (a
+DC da falta) e os harmônicos do resíduo, que é justamente o que um TC saturando
+despeja ali. São grandezas diferentes, e por isso as duas existem:
+
+    IN [1]          ia+ib+ic amostra a amostra — a senoide, com DC e harmônicos
+    IN [1] · RMS    o eficaz VERDADEIRO dessa soma, janela de um ciclo
+    3I0 [1]         o módulo do fasor de 60 Hz da mesma trinca
+
+Em regime senoidal puro `IN · RMS` e `3I0` dão o mesmo número. **Quando não dão,
+a diferença é a medida**: é DC, harmônico ou saturação de TC. Medido no
+COMTRADE bruto de um curto real do alimentador: em regime a diferença é
++0,21 %; no instante de maior DC do resíduo (694 A) `IN · RMS` marca 1275 A e
+`3I0` marca 871 A — **46 % de diferença**, e os dois números estão certos.
+
+É isso que permite explicar por que dois relés no mesmo vão atuaram diferente:
+um de terra com filtro de RMS vê o primeiro número, um com filtro de
+fundamental vê o segundo.
+
+**A contínua do resíduo (`IN · DC`) é oferecida no registro bruto** desde
+27/09/2026, e é a parte de **0 Hz** do `IN` — complementar ao `3I0`, que é a
+de 60 Hz. A onda do resíduo se parte em três pedaços ortogonais, e Parseval
+amarra os três:
+
+    IN·RMS² = 3I0² + IN·DC² + harmônicos²
+
+Medido no alimentador, na entrada da falta: `3I0` 15 A e `IN · DC` 15 A **ao
+mesmo tempo** — metade alternada, metade deslocamento. Quem olhasse só o `3I0`
+levaria metade da história.
+
+**A DC do resíduo é a que satura TC de terra.** A de cada fase já estava na
+tela desde 22/09; a que passa pelo TC de neutro é esta. Num `.CEV` ela não é
+oferecida, pela mesma razão da contínua dos canais: o relé a remove antes de
+gravar.
+
+**A variante `60Hz` do resíduo não é oferecida.** `IN · 60Hz RMS` é, por
+definição, o próprio `3I0` — seriam duas linhas com o mesmo número e nomes
+diferentes, e quem olhasse teria de descobrir sozinho que são a mesma conta.
+
+**E num registro JÁ FILTRADO (`.CEV`) sobra só a senoide** — `IN`, sem
+`IN · RMS`. Ali as amostras já são a componente de 60 Hz: não há DC nem
+harmônico para o eficaz enxergar, e ele vira o `3I0` com outro nome. Medido no
+`.CEV` do alimentador, **em regime a diferença é +0,03 %**.
+
+O que sobra são duas bordas — entrada da falta e extinção —, cada uma com
+~1,4 ciclo em que as curvas se descolam (até 84 %). **Isso não é grandeza**: é
+a resposta transitória de dois estimadores de janela de um ciclo sobre o mesmo
+degrau. Com a janela metade cheia o eficaz marca 0,71 do valor final e a DFT
+marca 0,50, porque um é energia e o outro é correlação com um cosseno de ciclo
+inteiro. O erro medido é **positivo em 100 % das amostras** — fenômeno de rede
+iria para os dois lados.
+
+E há um motivo mais forte que o tamanho da diferença: **no `.CEV` as amostras
+já são a saída do filtro do relé**, então `IN · RMS` ali seria um eficaz
+aplicado EM CIMA daquele filtro — uma cadeia de medição que nenhum relé tem.
+Um 50N com filtro de RMS mede as amostras BRUTAS. Naquelas bordas a curva não
+mostraria como elemento nenhum viu a falta.
+
+No registro bruto é o contrário: ali `IN · RMS` é uma cadeia real, e a
+diferença para o `3I0` chega a 46 % por causa da DC — informação de verdade.
+
+**`IN` não é o neutro medido.** O canal do arquivo (`IG` no SEL, `J1 -IG` no
+GE, `NEUTRO:Ix` no SIPROTEC) continua na aba do IED com o nome que o relé deu.
+Comparar os dois é um ensaio de verdade: se o `IN` calculado não bate com o
+neutro medido, ou a trinca está errada, ou um TC está saturado, ou o neutro
+mede outro ponto do circuito. Conferido contra o `.CEV` do alimentador, amostra
+a amostra: **erro mediano 0,000 A e máximo 1,414 A num pico de 2659 A** — o
+máximo é a quantização inteira do CEV somada nos três canais.
+
+**A conversão de TC/TP vem ANTES da soma.** Nada garante que as três fases
+estejam gravadas na mesma relação; somar primeiro e converter depois daria um
+número na unidade certa e na ordem de grandeza certa, sem nada denunciando.
+
+**O resíduo começa na PRIMEIRA amostra**, diferente de toda componente
+simétrica: soma de três números não precisa de histórico nenhum.
+
+**Ele leva o lápis da trinca**, pela mesma razão que a componente: sai de três
+canais que o programa escolheu olhando nomes. Os dois compartilham a mesma
+trinca, então corrigi-la por qualquer um deles arruma os dois.
+
+**O rodapé cita só os resíduos que estão NO PAINEL** (`IN`, `VN`, ou os dois),
+e a nota do resíduo é separada da nota das componentes: dizer «módulo do fasor
+de um ciclo» embaixo de uma senoide somada no tempo descreveria a conta errada.
+
+Vale igual para tensão: `VN` é `va+vb+vc` no tempo — o resíduo que um TP em
+delta aberto mede.
+
+### A janela de medida é UM CICLO DE TEMPO, não um número inteiro de amostras (22/09/2026)
+
+Um SEL a 2000 Hz num sistema de 60 Hz grava **33,3333 amostras por ciclo**.
+A janela de 33 amostras é 0,99 ciclo, e a média de 0,99 ciclo de uma senoide
+**não é zero**: sobra 1,01 % do pico, girando a 60 Hz.
+
+Isso aparecia como ondulação de 1 % no RMS e na fundamental — tolerável — e
+**como o gráfico inteiro** na componente contínua, cujo valor verdadeiro é
+zero. Foi assim que o problema foi descoberto: a curva de `VAY · DC` desenhou
+uma senoide de ±0,1 kV em cima do zero.
+
+**Não é caso raro.** 2000 Hz é a taxa de quase todo COMTRADE do parque:
+
+    arquivo            taxa    am/ciclo   vazamento da janela arredondada
+    MiCOM Schneider    1200      20,000                           0,000 %
+    SEL-451 .CEV        480       8,000                           0,000 %
+    SEL-451 COMTRADE   2000      33,333                           1,011 %
+    SEL-487E           2000      33,333                           1,011 %
+    SEL COXIPO         2000      33,333                           1,011 %
+    SIPROTEC           2000      33,333                           1,011 %
+    SEL-TWFL          10000     166,667                           0,200 %
+
+#### A correção
+
+`fasor.pesos_do_ciclo(n)` devolve os pesos de uma janela de **um ciclo de
+tempo**: trapézio sobre as amostras cheias, mais a ponta fracionária
+interpolada entre as duas amostras que a cercam. Os pesos somam exatamente
+`n`. Tudo sai dali — `envoltoria.media_do_ciclo` é a primitiva única, e a
+contínua é ela sobre o sinal, o eficaz é a raiz dela sobre o quadrado, e o
+fasor é ela sobre o sinal girado.
+
+Medido, num registro real (tensões do alimentador, trecho em regime):
+
+    grandeza      janela de 33   um ciclo de tempo
+    DC                 1,010 %             0,048 %
+    RMS                0,497 %             0,165 %
+    60Hz RMS           0,495 %             0,166 %
+
+O que sobra no RMS e na fundamental já não é vazamento: numa senoide sintética
+pura a ondulação cai para **0,003 %**. O resto é harmônico e ruído do próprio
+sinal.
+
+#### Com taxa que FECHA, nada muda — e isso é deliberado
+
+Com `n` inteiro os pesos são todos 1: o Fourier de ciclo cheio de sempre, que é
+o que o relé roda por dentro. **Todo número já conferido contra o SIGRA e
+contra os relés saiu de arquivo com taxa inteira** — o MiCOM a 20 amostras por
+ciclo, os `.CEV` a 4 e a 8 — e essa conferência continua valendo dígito a
+dígito. Há teste fixando os pesos em 1 nesse caso.
+
+#### O que NÃO mudou
+
+`fasor.amostras_por_ciclo` (o arredondado) continua existindo e continua certo
+para o que é contagem de ÍNDICE: andar um ciclo com a tecla, a margem de
+história, o passo de "comparar com um ciclo atrás". O que mudou é só a janela
+de MEDIDA, e ela agora vem de `fasor.ciclo_em_amostras`, sem arredondar.
+
+A janela fracionária ocupa uma ou duas amostras a mais que o ciclo, então o
+começo de cada trecho fica sem curva por essas amostras a mais. É o mesmo
+preço, pela mesma razão, do primeiro ciclo que nunca teve envoltória.
+
+Custo de tempo, no maior arquivo do parque (SEL-TWFL, 50 canais × 5000
+amostras, 166,7 por ciclo): RMS 8 ms, fundamental 14 ms, contínua 4 ms — todos
+os canais de uma vez. A conta é `O(n)` porque os pesos são 1 no miolo: só as
+três pontas são tratadas uma a uma.
+
+### `· DC`: a contínua em ampère, e só no registro BRUTO (22/09/2026)
+
+`IAW · DC` é a **média da janela de um ciclo**, em unidade de engenharia e
+**com sinal**. Numa senoide pura dá zero; o que sobra é a assimetria da falta,
+`i_dc(t) = I₀·e^(−t/τ)`.
+
+**Só existe em registro bruto.** O relé tira a contínua antes de gravar, então
+num `.CEV` ela é zero por construção. Medido nos três `.CEV` do parque, **só
+em regime**: mediana de 0,00 % a 0,02 % da fundamental, contra 0,2 % a 1,1 %
+nos COMTRADE (com máximos de 43 % a 1491 %). Os poucos por cento que sobram no
+`.CEV` são artefato de janela em cima de borda, e no arquivo de 4 amostras por
+ciclo uma "média de quatro amostras" é um estimador ruim por natureza.
+
+**Em ampère, não em percentual, e isto foi decidido com argumento.** O SIGRA
+mostra "DC %" relativa à fundamental eficaz, em módulo — e o percentual
+continua na tabelinha do cursor (`Fasor.dc_percentual`), já conferido contra
+ele nos oito canais de um registro real. Como CURVA o percentual seria razão de
+duas envoltórias: quando o disjuntor abre, a fundamental vai a zero e a razão
+estoura. A divisão de trabalho é a que a tela já usa — **curva para o que varia
+no tempo, tabelinha para índice num instante**.
+
+**A DC é a única envoltória que traça uma grandeza FÍSICA e não um índice**, e
+é dela que se lê o τ. Medido num curto real do alimentador: **τ = 6,5 ms,
+X/R = 2,5**. O estimador atrasa meio ciclo e subestima o pico (marcou 2890 A
+onde a exponencial ajustada dá 3585 A), **mas isso não estraga o τ**:
+exponencial atrasada é a mesma exponencial escalada, mesma inclinação.
+
+O que a curva mostra, no mesmo curto (fase A, primário):
+
+    amostra   inst      DC     RMS   60Hz RMS
+       190   -7460   -1325    2712     1703      ← entra a falta, DC forte
+       200   -1004   -2890    4144     2881      ← pico da DC: 100 % da fund.
+       230   -4017    -335    4093     4078
+       260   -5503      70    4034     4033      ← DC extinta: RMS = fund.
+
+É a demonstração de por que o `RMS` passa por cima da `60Hz RMS` e depois
+encosta nela: a diferença entre as duas **é** a DC.
+
+### Eficaz e filtro só para o que é alternado
+
+Um relé grava contínua junto com alternada: a tensão da bateria, a frequência
+medida, as magnitudes e os ângulos que ele mesmo calculou. O catálogo oferecia
+`VDC1 RMS`, `VDC1 60Hz` e `V1M RMS` — contas que não significam nada: a
+componente de 60 Hz de 132 V contínuos é zero, e o eficaz de um ciclo de um
+número parado é o próprio número com cara de medida de alternada.
+
+**Alternado é o que oscila em torno do zero**: a fundamental não fica abaixo da
+média. TC e TP não passam contínua, então um canal de verdade tem média
+praticamente zero mesmo numa falta assimétrica. Medido: a maior razão
+`|média|/fundamental` num canal alternado real foi 0,9; a menor num contínuo,
+84.
+
+Duas condições acompanham, cada uma por um caso real:
+
+- **sem unidade declarada não é alternado** — é o que pega os ÂNGULOS do CEV,
+  que giram de −180° a +180° e por isso têm cara de fundamental;
+- **sem fundamental nenhuma, a unidade decide** — um vão com o disjuntor aberto
+  o registro inteiro tem corrente zero, e zero não é contínua: é alternada que
+  não está passando.
+
+### O que ganha conta do OscLab: fase alternada, e só
+
+Ser alternado não bastava. Um relé grava as sequências que ele MESMO calculou
+(`V1M`, `3V2M`, `LIGM`, `LI1M`), a tensão de sincronismo, a de memória. Filtrar
+em 60 Hz um número que já É o módulo do fasor de 60 Hz é a mesma conta feita
+duas vezes: o resultado sai na unidade certa e tem cara de medida.
+
+São **duas** condições, e nenhuma é lista de nomes suspeitos — lista de nomes
+envelhece a cada fabricante novo:
+
+1. **é alternado** — e o teste de peso aqui é a **unidade, que é lista
+   BRANCA**: só ampère e volt, com prefixo. Grau, hertz, `I/IrObj` e unidade
+   nenhuma não entram. É o que barra os ângulos do GE, as magnitudes do CEV e
+   as correntes diferencial e de restrição em pu do SIPROTEC — estas últimas
+   com letra de fase no nome (`87T:I diff.:phs A`), e foi a unidade que as
+   pegou;
+2. **a fase foi reconhecida** — `IA`…`IN`, `VA`…`VN`. Barra `VS1`, `VS2`,
+   `V1MEM`, `Voltage Vref` e o terceiro banco de TC do 487E, nomeado `IY1`,
+   `IY2`, `IY3`.
+
+Auditado canal por canal nos seis arquivos do parque, quatro fabricantes: zero
+lixo entrando, zero canal de fase saindo.
+
+**Estar em trinca não é condição.** Foi, e custava seis neutros de verdade:
+`J1 -IG` e `J1 Ig` do GE e os dois `NEUTRO:Ix` do SIPROTEC ficam fora de trinca
+porque o arquivo tem mais de uma trinca da mesma unidade e nada com que decidir
+de qual delas eles são. São residuais, e num evento à terra são a primeira
+coisa que se procura.
+
+**Estar sem sinal também não é condição.** Um terminal de TC não cabeado ganha
+as contas como qualquer outro; quem o tira da tela é a caixa «ocultar sinais
+nulos». Três motivos, em ordem de peso:
+
+- **é a única incerteza que não dá para auditar.** Um transformador energizado
+  de um lado só tem a trinca do outro lado em zero legitimamente, e nenhuma
+  medida sobre um registro só distingue isso de uma entrada aberta. Alternado e
+  fase reconhecida erram por dado estranho ou fabricante novo, e o erro aparece
+  na tela; este erra por física que o arquivo não separa. **Teste que não se
+  pode conferir nunca decide se a coisa existe, só o que se mostra.**
+- **botão morto.** Sem a conta, o RMS não faz nada quando o usuário desmarca a
+  caixa para conferir que a entrada está mesmo aberta.
+- **custa nada e não mente.** RMS de zero é zero, e esse zero é a resposta que
+  alguém foi procurar no arquivo.
+
+Vale para as componentes simétricas também: a de uma trinca muda existe e fica
+escondida, como os canais dela.
+
+Medido, para dimensionar: dos canais alternados e nulos dos seis arquivos, 18
+estão em trinca e 5 fora — e desses 5, quatro já não têm fase reconhecida. O
+teste de validade comprava **um** canal no parque inteiro.
+
+Num registro que o relé JÁ gravou filtrado (o `.CEV`), sobra **uma** conta: o
+eficaz da janela de um ciclo. As duas variantes `60Hz` saíram — a primeira não
+calculava nada (era o canal com outro nome, e ao lado de «gravação filtrada
+pelo relé» no cabeçalho se lia como filtrar duas vezes) e a segunda prometia
+uma ressalva sobre harmônicos que é do registro inteiro, não de cada sinal.
+Um `.CEV` de alimentador tem 13 linhas no OscLab.
+
+### Aviso do LEITOR e relato do RELÉ são coisas diferentes
+
+Os dois saem do leitor e aparecem no cartão do acervo, e só um leva triângulo:
+
+- **aviso** (`Record.notes`, `⚠`): o que o programa fez, deixou de fora ou não
+  conseguiu confirmar — soma de verificação que não bateu, colunas vazias que
+  ficaram de fora, a conversão de eficaz para instantâneo do CEV.
+- **relato** (`Record.relatos`, sem triângulo): o que o RELÉ concluiu sozinho e
+  gravou no arquivo — a classificação do evento (`AB T`), a distância que ele
+  calculou para a falta.
+
+Os dois já foram a mesma lista, e o resultado era um `⚠` em cima de "o relé
+classificou o evento como AB T". **Aviso que aparece quando não há nada errado
+ensina a ignorar o triângulo** — e aí o aviso que importa passa despercebido
+junto. É a mesma regra do `bruto` que saiu do cabeçalho.
+
+Os textos são de uma linha, de propósito: quem abre uma oscilografia não vai
+ler um parágrafo, e um aviso não lido é igual a aviso nenhum.
+
+### O cabeçalho só anuncia a filtragem quando ela muda alguma coisa
+
+O diagnóstico de bruto × filtrado continua sendo **medido** — distorção
+harmônica em trecho de amplitude parada, `analysis/filtragem.py` — e continua
+travando o botão do filtro. O que saiu da tela foi o veredito `bruto`.
+
+Ele é o caso comum: todo COMTRADE do parque cai nele, e `gravação bruta
+(deduzido)` aparecia em cima de toda oscilografia. **Aviso que aparece sempre
+deixa de ser lido** — e, pior, passa a ser lido como defeito do programa.
+
+Ficam na tela os dois que mudam o que se pode fazer: `filtrado`, que trava o
+botão, e `desconhecido`, que diz que o programa não decidiu e por isso deixou o
+botão livre.
+
+Não é o mesmo que deduzir pela extensão. `.CEV` declara (pelas amostras por
+ciclo) e COMTRADE é medido, com três vereditos possíveis; um COMTRADE exportado
+já filtrado sai `filtrado` e trava o botão, sem a extensão dizer nada.
+
+### Coluna de pixel é pixel DE VERDADE, não pixel de CSS
+
+Sintoma: com o zoom do navegador fora de 100 %, a onda ganhava um **batimento
+no envelope** — o pico desenhado variava de um ciclo para o outro muito mais do
+que o sinal varia. Medido no registro do alimentador: no arquivo o pico de
+ciclo varia ~1 %; na tela variava muito mais.
+
+Duas causas somadas, e as duas são a mesma ideia mal aplicada:
+
+1. **A tela pedia colunas em pixel de CSS.** O canvas é criado com
+   `largura × devicePixelRatio`, e o Chrome multiplica esse fator pelo zoom: a
+   80 % ele vale 0,8 numa tela comum. O servidor mandava ~1 ponto por pixel de
+   CSS e o canvas tinha 0,8 pixel real para cada um — mais pontos que pixels, e
+   o traçador escolhia. Vale para os dois lados: acima de 100 %, ou em tela
+   HiDPI, o traço saía mais grosseiro do que a tela mostraria.
+2. **A redução só entrava acima de DUAS amostras por coluna.** Dois pontos por
+   pixel é exatamente o que não se desenha: a linha sobe e desce dentro do
+   mesmo pixel. Hoje reduz com mais de UMA.
+
+Com as duas, cada coluna carrega o mínimo e o máximo do que aconteceu dentro
+dela, e o número de colunas é o de pixels que existem. Nada é escolhido.
+
+**O batimento não estava no arquivo** — e vale desconfiar sempre que um
+envelope "respirar" na tela: a primeira pergunta é quantas amostras estão
+caindo em cada pixel.
+
+### Oito amostras por ciclo desenham um polígono
+
+Ligar duas amostras com uma RETA desenha menos onda do que existe: no meio do
+caminho entre duas amostras, a corda passa abaixo da senoide, e quanto depende
+só de quantas amostras há por ciclo.
+
+| amostras/ciclo | a reta fica abaixo |
+|---|---|
+| 4 | 29,3 % |
+| 8 | 7,6 % |
+| 16 | 1,9 % |
+| 33 | 0,4 % |
+
+É por isso que um CEV filtrado (8 por ciclo) aparecia pontudo e o COMTRADE
+bruto do MESMO evento (33 por ciclo) aparecia redondo. Não era defeito do
+arquivo nem da leitura — era o que oito pontos ligados por retas desenham.
+
+O traço agora é uma curva de Catmull-Rom quando há **8 amostras por ciclo ou
+menos**: ela reconstrói a senoide com 0,9 % de erro (trinta vezes melhor que a
+reta), passa exatamente por todas as amostras e não ultrapassa o pico delas.
+
+**Só onde há pouca amostra**, e o motivo é o oposto do estético: num sinal com
+descontinuidade de verdade — a entrada de uma falta num registro bruto — uma
+curva suave passaria por fora do degrau e desenharia um pico que não existe.
+Registro filtrado não tem degrau, porque o filtro do relé os removeu. E nunca
+sobre traço reduzido: ali o desenho já é mínimo e máximo por coluna de pixel, e
+arredondar isso inventaria forma onde há estatística.
+
+### E as do `.CEV` da SEL (marco 0.4)
+
+Nenhuma está escrita em campo nenhum do arquivo. As três primeiras foram
+confirmadas contra o COMTRADE **bruto do mesmo evento do mesmo relé** — um
+SEL-451 do ALIMENTADOR 11 de SE BARRO DURO.
+
+- **A amostra vem em valor EFICAZ, não instantâneo.** A coluna `VA(kV)` oscila
+  como senoide, mas o pico dela é o eficaz: 8,030 kV no filtrado contra
+  11,355 kV no bruto — razão 1,4141. O leitor multiplica por raiz de 2; sem
+  isso o filtrado aparece 41 % menor que o bruto e o botão de RMS da tela
+  devolve o valor dividido por raiz de 2, tudo sem erro na tela.
+- **A hora do cabeçalho é a do DISPARO**, não a da primeira amostra. A amostra
+  disparada é a que traz `>` na coluna `TRIG`; o início sai da conta e bateu com
+  o do COMTRADE em 0,3 ms.
+- **As colunas `ANAnn` não são canais de onda.** São as grandezas que o próprio
+  relé calculou amostra a amostra, e o nome de cada uma está no campo `ERAQnn`
+  do cabeçalho: `V1M`, `V1A`, `3V2M`, `3V2A`, `3V0M`, `3V0A`, `LI1M`, `LI1A`,
+  `L3I2M`, `L3I2A`, `LIGM`, `LIGA`, `DC1`, `FREQ` — magnitude em eficaz e
+  ângulo em grau. **É a referência do próprio relé para as nossas componentes
+  de sequência**, sem depender de nenhum outro programa.
+- **O arquivo termina com os ajustes do relé**, depois de um marcador
+  `"SETTINGS"`. Dali para baixo ele deixa de ser CSV: é um campo só, com
+  quebras de linha dentro.
+- O bit de cada digital vai do **mais significativo para o menos**, na ordem dos
+  nomes. Conferido contra o COMTRADE: o `TRIP` sobe em +331,25 ms no CEV e em
+  +331,5 ms no bruto — dentro de um intervalo de amostragem.
+- A dedução de bruto × filtrado (`analysis/filtragem.py`) **não conclui nada num
+  CEV de 8 amostras por ciclo**: o arquivo imprime a corrente com 3 algarismos
+  (`-46`, `57`) e essa precisão de impressão vira 0,46 % de distorção aparente,
+  acima do limiar de ruído de quantização que foi calibrado para um COMTRADE
+  binário de 16 bits.
+
+  Resolvido pelo FORMATO, não pela medição: um CEV a 4 ou 8 amostras por ciclo
+  é o relatório de evento filtrado da SEL — não daria para gravar onda crua com
+  tão pouco, e as amostras vindo em valor eficaz são a outra prova. O leitor
+  declara `filtrado` e o botão do filtro trava. Acima de 8 por ciclo pode ser o
+  relatório bruto em CEV, e aí volta a valer a dedução.
 
 ## Contexto completo
 

@@ -43,7 +43,7 @@ def test_os_metadados_dos_canais_chegam_inteiros(tmp_path):
     r = registry.read(escrever_comtrade(tmp_path, na=3))
     nomes = [c.name for c in r.analog_channels]
     fases = [c.phase for c in r.analog_channels]
-    assert nomes == ["CH1", "CH2", "CH3"]
+    assert nomes == ["IAW", "IBW", "ICW"]
     assert fases == ["A", "B", "C"]
     assert all(c.unit == "A" for c in r.analog_channels)
     assert all(not c.is_primary for c in r.analog_channels)
@@ -174,9 +174,44 @@ def test_lixo_no_fim_do_dat_nao_atrapalha(tmp_path):
 
 
 def test_campos_extras_da_edicao_2013(tmp_path):
+    """As duas linhas de 2013 trazem QUATRO campos, e guardar a primeira linha
+    inteira como texto (`"0,-4"`) jogava três deles fora.
+
+    O que sobrava não dizia nada a quem lia. Agora sai em português, e a
+    informação importa: no parque o SEL-421 carimba em **UTC** e o SIPROTEC em
+    **hora local**, e o mesmo curto aparece nos dois com quatro horas de
+    diferença. Sem essa linha, a tela mostrava duas horas diferentes para o
+    mesmo evento sem explicar nenhuma.
+    """
     r = registry.read(escrever_comtrade(tmp_path, revisao="2013"))
     assert r.format_name == "comtrade-2013"
-    assert r.time_quality == "0,-4"
+    assert "carimbos em UTC" in r.time_quality
+    assert "hora local UTC−04:00" in r.time_quality
+
+
+def test_a_hora_NAO_e_convertida_pelo_fuso(tmp_path):
+    """**Decisão, não esquecimento**, e o gabarito é o SIGRA: no `.CFG` do
+    COXIPO ele exibe o mesmo `18:52:02.960` que nós exibimos e põe o fuso num
+    campo separado. Converter por conta própria faria a nossa hora divergir
+    dele — e divergir do nome que o próprio relé deu ao arquivo.
+    """
+    r = registry.read(escrever_comtrade(tmp_path, revisao="2013"))
+    sem_fuso = registry.read(escrever_comtrade(tmp_path / "b", revisao="1999"))
+    assert r.start_time == sem_fuso.start_time
+    assert r.trigger_time == sem_fuso.trigger_time
+
+
+def test_relogio_sem_sincronismo_e_dito_com_todas_as_letras(tmp_path):
+    """Um `F` no `tmq_code` quer dizer que o relé perdeu o sincronismo. A hora
+    do arquivo deixa de valer para cruzar com outro registro, e isso não pode
+    sair como um código que ninguém decora."""
+    from osclab.formats.comtrade import _Cfg, qualidade_do_relogio
+
+    cfg = _Cfg()
+    cfg.time_code, cfg.local_code, cfg.tmq_code = "0", "-3", "F"
+    texto = qualidade_do_relogio(cfg)
+    assert "NÃO é confiável" in texto
+    assert "UTC−03:00" in texto
 
 
 def test_dat_em_maiusculas(tmp_path):

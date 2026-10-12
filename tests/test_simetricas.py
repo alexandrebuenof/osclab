@@ -211,46 +211,77 @@ def test_corrente_e_tensao_nao_se_juntam():
 # O apelido que distingue um conjunto do outro
 # ---------------------------------------------------------------------------
 
-def test_conjunto_unico_nao_ganha_apelido():
-    """No registro de distribuição, com uma trinca só, `IA` continua `IA`.
-    Sufixo que não distingue nada é ruído."""
+def test_todo_conjunto_ganha_NOME_DE_GRUPO_mesmo_sozinho():
+    """Já foi condicional: com uma trinca só, o nome saía limpo (`3I0`, `IN`) e
+    o apelido seria barulho. Deixou de ser quando o grupo virou objeto que o
+    usuário EDITA — o editor de grupos chama aquilo de `G1`, o rodapé do
+    gráfico cita `G1`, e um sinal chamado `3I0` sem grupo no nome obrigaria
+    quem lê a descobrir de qual deles ele saiu.
+
+    O preço é este: num alimentador o nome é `3I0 G1` onde antes era `3I0`."""
     achados = conjuntos.de_registro(registro(
         canal(0, "Current IA"), canal(1, "Current IB"), canal(2, "Current IC")))
-    assert achados[0].rotulo == ""
-    assert achados[0].origem_do_rotulo == conjuntos.OrigemDoRotulo.UNICO
+    assert achados[0].rotulo == "G1"
+    assert achados[0].origem_do_rotulo == conjuntos.OrigemDoRotulo.NUMERO
 
 
-def test_rele_de_trafo_ganha_AT_e_BT_pelo_nivel_de_tensao():
-    """Dois lados, e o de maior tensão é a alta. É a única forma de acertar o
-    lado sem adivinhar — e inverter AT com BT num laudo só aparece tarde."""
+def test_o_NIVEL_DE_TENSAO_nao_decide_mais_o_lado():
+    """O programa não diz mais alta nem baixa, nem tendo o nível no nome.
+
+    `AT`/`BT` afirmava duas coisas: que há um transformador ali, e qual lado é
+    qual. A segunda saía da primeira, e a primeira nunca era verificada — um
+    relé que grava uma linha de 138 kV e o serviço auxiliar de 13,8 kV tem dois
+    níveis e nenhum transformador no meio. Quem sabe é quem abriu o arquivo.
+    """
     achados = conjuntos.de_registro(registro(
         canal(0, "TC 13.8kV:I A"), canal(1, "TC 13.8kV:I B"), canal(2, "TC 13.8kV:I C"),
         canal(3, "TC 138kV:I A"), canal(4, "TC 138kV:I B"), canal(5, "TC 138kV:I C"),
     ))
     por_rotulo = {c.rotulo: c.abc for c in achados}
-    assert por_rotulo == {"BT": (0, 1, 2), "AT": (3, 4, 5)}
-    assert all(c.origem_do_rotulo == conjuntos.OrigemDoRotulo.TENSAO for c in achados)
+    assert por_rotulo == {"G1": (0, 1, 2), "G2": (3, 4, 5)}
+    assert all(c.origem_do_rotulo == conjuntos.OrigemDoRotulo.NUMERO
+               for c in achados)
 
 
-def test_tres_enrolamentos_viram_AT_MT_BT():
+def test_tres_enrolamentos_tambem_sao_numerados():
     achados = conjuntos.de_registro(registro(
         *[canal(i, f"TC {kv}:I {f}") for i, (kv, f) in enumerate(
             [(nivel, fase) for nivel in ("230kV", "69kV", "13.8kV")
              for fase in "ABC"])]))
-    assert [c.rotulo for c in sorted(achados, key=lambda c: c.abc)] == ["AT", "MT", "BT"]
+    assert [c.rotulo for c in sorted(achados, key=lambda c: c.abc)] == [
+        "G1", "G2", "G3"]
 
 
-def test_sem_nivel_de_tensao_o_apelido_sai_do_que_DIFERE_nos_nomes():
-    """`IAW` e `IAX` são enrolamentos W e X na nomenclatura da SEL. O programa
-    não sabe o que é enrolamento — ele corta o que os nomes têm em comum e o
-    que sobra distingue, que dá na mesma."""
+def test_a_contagem_do_GRUPO_e_do_arquivo_e_nao_da_grandeza():
+    """`G1` tem que apontar para um grupo só, porque o usuário vai editá-lo por
+    esse nome. Então a trinca de corrente é `G1` e a de tensão é `G2` — e não
+    `G1` as duas, cada uma contada dentro da sua grandeza.
+
+    A posição DENTRO da grandeza continua existindo, em `ordem`: é ela que diz
+    que a primeira corrente e a primeira tensão são do mesmo lado do
+    equipamento, e é o que intercala os painéis na abertura. Ver
+    `plot/paineis.py`."""
+    achados = conjuntos.de_registro(registro(
+        canal(0, "IA", "A"), canal(1, "IB", "A"), canal(2, "IC", "A"),
+        canal(3, "VA", "V"), canal(4, "VB", "V"), canal(5, "VC", "V"),
+    ))
+    assert [c.rotulo for c in achados] == ["G1", "G2"]
+    assert [c.ordem for c in achados] == [1, 1]
+
+
+def test_sem_nivel_de_tensao_o_apelido_e_um_NUMERO():
+    """`IAW` e `IAX` são os terminais W e X de um SEL. O terminal é o nome que
+    o relé dá ao borne dele, e **não diz de que lado do equipamento aquilo
+    está** — quem lê `IA W` não sabe mais que quem lê `IA G1`, e corre o risco
+    de achar que sabe. O nome do arquivo continua ao lado do nosso na tela.
+    """
     achados = conjuntos.de_registro(registro(
         canal(0, "IAW"), canal(1, "IBW"), canal(2, "ICW"),
         canal(3, "IAX"), canal(4, "IBX"), canal(5, "ICX"),
     ))
     por_rotulo = {c.rotulo: c.abc for c in achados}
-    assert por_rotulo == {"W": (0, 1, 2), "X": (3, 4, 5)}
-    assert all(c.origem_do_rotulo == conjuntos.OrigemDoRotulo.ARQUIVO
+    assert por_rotulo == {"G1": (0, 1, 2), "G2": (3, 4, 5)}
+    assert all(c.origem_do_rotulo == conjuntos.OrigemDoRotulo.NUMERO
                for c in achados)
 
 
@@ -262,20 +293,94 @@ def test_mesma_tensao_nos_dois_nao_vira_AT_e_BT():
         canal(3, "TC LINHA 2 69kV:I A"), canal(4, "TC LINHA 2 69kV:I B"),
         canal(5, "TC LINHA 2 69kV:I C"),
     ))
-    assert {c.rotulo for c in achados} == {"1", "2"}
-    assert all(c.origem_do_rotulo == conjuntos.OrigemDoRotulo.ARQUIVO
+    assert {c.rotulo for c in achados} == {"G1", "G2"}
+    assert all(c.origem_do_rotulo == conjuntos.OrigemDoRotulo.NUMERO
                for c in achados)
 
 
 @pytest.mark.parametrize("texto,volts", [
     ("TC BUC 69kV:I A", 69_000.0), ("TC 13.8 kV:I B", 13_800.0),
     ("TC 13,8kV", 13_800.0), ("BARRA 500V", 500.0), ("IAW", None),
+    # A Siemens escreve `34-5kV` para 34,5 kV: o ponto decimal não cabe no
+    # nome do canal dela. Lido como `5 kV`, errava por um fator de sete.
+    ("TC EXT 34-5kV:I A", 34_500.0),
+    # E o pior de todos: `L1V` NÃO é "1 volt". Lido assim, as duas linhas de
+    # um TWFL — as duas no mesmo nível — apareciam com tensões diferentes, e
+    # daí a alta e a baixa de um transformador que não existe.
+    ("L1VA", None), ("L2VA", None), ("J2 Van", None),
 ])
 def test_le_o_nivel_de_tensao_escrito_no_nome(texto, volts):
     assert conjuntos.nivel_de_tensao(texto) == volts
+
+
+def test_niveis_PARECIDOS_DEMAIS_nao_viram_alta_e_baixa():
+    """Dois vãos de 230 kV com um dígito trocado na digitação não são alta e
+    baixa de coisa nenhuma. Errar o lado num laudo só aparece tarde."""
+    achados = conjuntos.de_registro(registro(
+        canal(0, "TC 230kV:I A"), canal(1, "TC 230kV:I B"), canal(2, "TC 230kV:I C"),
+        canal(3, "TC 230.1kV:I A"), canal(4, "TC 230.1kV:I B"),
+        canal(5, "TC 230.1kV:I C"),
+    ))
+    assert {c.rotulo for c in achados} == {"G1", "G2"}
+
+
+def test_as_duas_linhas_de_um_TWFL_nao_viram_alta_e_baixa():
+    """`L1VA` e `L2VA` são a linha 1 e a linha 2, no MESMO nível de tensão.
+    Enquanto o `1` e o `2` eram lidos como volts, elas viravam `AT` e `BT`."""
+    # O `ph` vem preenchido, como no arquivo real do TWFL.
+    achados = conjuntos.de_registro(registro(
+        canal(0, "L1VA", "kV", "A"), canal(1, "L1VB", "kV", "B"),
+        canal(2, "L1VC", "kV", "C"),
+        canal(3, "L2VA", "kV", "A"), canal(4, "L2VB", "kV", "B"),
+        canal(5, "L2VC", "kV", "C"),
+    ))
+    assert {c.rotulo for c in achados} == {"G1", "G2"}
+    assert all(c.origem_do_rotulo == conjuntos.OrigemDoRotulo.NUMERO
+               for c in achados)
+
+
+def test_tres_trincas_vivas_sao_TODAS_numeradas():
+    """Com três, não há nomenclatura de lado que se aplique — e inventar uma
+    seria afirmar do equipamento o que o arquivo não diz."""
+    achados = conjuntos.de_registro(registro(
+        *[canal(i, f"I{f}{t}") for i, (t, f) in enumerate(
+            [(term, fase) for term in ("W", "X", "Y") for fase in "ABC"])]))
+    assert [c.rotulo for c in sorted(achados, key=lambda c: c.abc)] == [
+        "G1", "G2", "G3"]
 
 
 def test_canal_que_nao_e_corrente_nem_tensao_fica_de_fora():
     achados = conjuntos.de_registro(registro(
         canal(0, "FREQ", "Hz"), canal(1, "POT A", "MW"), canal(2, "POT B", "MW")))
     assert achados == ()
+
+
+def test_ccbm_SO_DE_DIGITOS_nao_e_nome_de_equipamento():
+    """O SIPROTEC da Siemens escreve o NÚMERO do canal no `ccbm`: `1`, `2`, `3`
+    para IA, IB, IC.
+
+    O `ccbm` da norma é o equipamento vigiado, e por definição é o mesmo nas
+    três fases. Acreditar num número põe cada fase num conjunto só dela — e o
+    registro de um transformador de verdade ficou por todo o marco 0.4 sem
+    componente simétrica nenhuma, com dois canais chamados `IA` na mesma tela,
+    sem erro nenhum.
+    """
+    achados = conjuntos.de_registro(registro(
+        canal(0, "TC 69kV:I A", ccbm="1"), canal(1, "TC 69kV:I B", ccbm="2"),
+        canal(2, "TC 69kV:I C", ccbm="3"),
+        canal(3, "TC 13.8kV:I A", ccbm="1"), canal(4, "TC 13.8kV:I B", ccbm="2"),
+        canal(5, "TC 13.8kV:I C", ccbm="3"),
+    ))
+    assert len(achados) == 2
+    assert {c.rotulo for c in achados} == {"G1", "G2"}
+
+
+def test_ccbm_de_verdade_continua_mandando():
+    """A correção acima não pode derrubar o campo quando ele vem preenchido do
+    jeito que a norma manda."""
+    achados = conjuntos.de_registro(registro(
+        canal(0, "IA", ccbm="TRAFO T1"), canal(1, "IB", ccbm="TRAFO T1"),
+        canal(2, "IC", ccbm="TRAFO T1"),
+    ))
+    assert len(achados) == 1
+    assert achados[0].origem == conjuntos.OrigemDoConjunto.DECLARADA

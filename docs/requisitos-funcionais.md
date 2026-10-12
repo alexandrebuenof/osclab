@@ -8,7 +8,9 @@ ferramenta precisa ter.
 - **COMTRADE** (edições 1991/1999/2013; `.cfg`+`.dat` e `.cff`; ASCII e binário
   16/32 bits) — base, cobre os sete fabricantes do parque (SEL, Siemens, GE, ABB,
   Schneider, Ingeteam, NOJA).
-- **SEL `.CEV`** — segundo formato; só se valida com arquivos reais do parque.
+- **SEL `.CEV`** — lido desde o marco 0.4. É a metade FILTRADA de uma
+  oscilografia SEL, que quase nunca sai em COMTRADE: um arquivo só, ASCII,
+  com cabeçalho, amostras, digitais e os ajustes do relé dentro.
 - **PL4 (ATP)** — para validar algoritmos de localização de falta contra resposta
   conhecida.
 

@@ -73,6 +73,31 @@ def _digitais(nd: int, n: int) -> np.ndarray:
     return ((idx[None, :] >> np.arange(nd)[:, None]) & 1).astype(np.int8)
 
 
+#: Os terminais de corrente de um relé, na ordem em que ele os grava. São
+#: letras porque é assim num SEL (`IAW`, `IAX`); a fábrica só precisa de um
+#: sufixo que não seja dígito — ver `nome_de_canal`.
+TERMINAIS = "WXYZ"
+
+
+def nome_de_canal(k: int) -> str:
+    """O nome do canal `k` no arquivo: `IAW`, `IBW`, `ICW`, `IAX`, ...
+
+    **Por que não `CH1`, `CH2`, `CH3`.** Era o que a fábrica escrevia, e o nome
+    de um canal não é enfeite: é de onde `formats/conjuntos.py` deduz a que
+    equipamento o canal pertence — tirando a letra da fase do nome e juntando
+    quem sobrou igual. De `CH1`, `CH2`, `CH3` sobram três nomes DIFERENTES,
+    então nenhuma trinca fechava, e todo registro sintético exercitava um
+    caminho que nenhum arquivo de relé percorre. O defeito só apareceu quando a
+    lista do OscLab passou a depender da trinca: treze testes caíram de uma vez,
+    e nenhum deles era sobre o que estava sendo mudado.
+
+    Um relé nomeia os terminais em ordem alfabética, e é isso que se imita aqui:
+    a cada três canais o sufixo anda uma letra, de modo que `na=6` sai com duas
+    trincas — um transformador — e `na=3` com uma.
+    """
+    return f"I{'ABC'[k % 3]}{TERMINAIS[(k // 3) % len(TERMINAIS)]}"
+
+
 def escrever_comtrade(
     pasta: Path,
     *,
@@ -112,9 +137,9 @@ def escrever_comtrade(
     ]
     for k in range(na):
         # An,id,ph,ccbm,uu,a,b,skew,min,max,primary,secondary,PS
-        fase = "ABC"[k % 3]
         linhas.append(
-            f"{k + 1},CH{k + 1},{fase},,A,{ESCALA},0,0,-32767,32767,600.0,5.0,{ps}"
+            f"{k + 1},{nome_de_canal(k)},{'ABC'[k % 3]},,A,"
+            f"{ESCALA},0,0,-32767,32767,600.0,5.0,{ps}"
         )
     for k in range(nd):
         linhas.append(f"{k + 1},D{k + 1},,,0")
@@ -179,3 +204,177 @@ def esperado_analog(na: int, n: int, taxa: float, freq: float) -> np.ndarray:
 
 def esperado_digital(nd: int, n: int) -> np.ndarray:
     return _digitais(nd, n)
+
+
+# ---------------------------------------------------------------------------
+# CEV — o relatório de evento comprimido da SEL
+# ---------------------------------------------------------------------------
+#
+# Mesma razão dos sintéticos de COMTRADE: resposta conhecida e nenhum dado da
+# distribuidora dentro de um repositório público.
+#
+# Duas coisas que só um sintético consegue afirmar, e que são exatamente onde o
+# leitor de CEV pode errar em silêncio:
+#
+# * a amostra no arquivo é EFICAZ e o `Record` tem que sair em valor
+#   instantâneo — aqui a senoide é escrita com `RMS_CEV` de amplitude e o
+#   teste cobra `RMS_CEV * raiz(2)`;
+# * o bit do digital é lido do mais significativo para o menos, na ordem dos
+#   nomes — aqui o padrão é uma DIAGONAL, que um espelhamento de ordem não
+#   consegue imitar.
+
+RMS_CEV = 100.0       #: amplitude eficaz escrita no arquivo sintético
+DC1_CEV = 125.0       #: valor da coluna `ANA03`, que não leva raiz de 2
+
+#: As colunas de onda do CEV sintético, na ordem em que o arquivo as escreve.
+COLUNAS_CEV = ("IA(A)", "IB(A)", "IC(A)", "VA(kV)", "VB(kV)", "VC(kV)",
+               "FREQ(Hz)", "ANA01", "ANA02", "ANA03", "ANA04")
+
+#: O que cada `ANAnn` se chama de verdade, nos campos `ERAQnn` do cabeçalho.
+#: `ERAQ04` fica em branco DE PROPÓSITO: é a vaga não configurada, que o leitor
+#: tem que jogar fora em vez de mostrar uma coluna vazia na tela.
+ERAQ_CEV = ("V1M", "V1A", "DC1", "")
+
+
+def _soma_cev(linha: str) -> str:
+    """A soma de verificação de uma linha de CEV, em hexadecimal de 4 dígitos.
+
+    Escrita aqui de novo, de propósito, em vez de importada do leitor: se as
+    duas contas fossem a mesma função, um erro nela passaria despercebido nos
+    dois lados ao mesmo tempo.
+    """
+    corte = linha.rfind(",")
+    return f"{sum(linha[: corte + 1].encode('latin-1')) % 0x10000:04X}"
+
+
+def _com_soma(campos: list[str]) -> str:
+    """A linha pronta: os campos, a vírgula e a soma entre aspas."""
+    corpo = ",".join(campos) + ","
+    return corpo + f'"{_soma_cev(corpo)}"'
+
+
+def esperado_digital_cev(nd: int, n: int) -> np.ndarray:
+    """A diagonal: o digital `j` está em 1 só nas amostras `k` com `k % nd == j`."""
+    k = np.arange(n)
+    return np.array([(k % nd == j).astype(np.int8) for j in range(nd)])
+
+
+def _tira_de_digitais(coluna: np.ndarray) -> str:
+    """Os bits de uma amostra viram hexadecimal, do mais significativo ao menos."""
+    bits = list(coluna)
+    while len(bits) % 8:
+        bits.append(0)
+    octetos = [int("".join(str(b) for b in bits[i:i + 8]), 2)
+               for i in range(0, len(bits), 8)]
+    return "".join(f"{o:02X}" for o in octetos)
+
+
+def escrever_cev(
+    pasta: Path,
+    *,
+    nome: str = "evento",
+    por_ciclo: int = 8,
+    ciclos: int = 4,
+    disparo: int | None = 8,
+    freq: float = 60.0,
+    nd: int = 8,
+    soma_certa: bool = True,
+    crlf: bool = True,
+    com_ajustes: bool = True,
+    sam_cyc: bool = True,
+    extensao: str = ".CEV",
+    dialeto: str = "rid_sid",
+) -> Path:
+    """Escreve um CEV sintético e devolve o caminho.
+
+    `disparo` é o índice da amostra que leva o `>` na coluna `TRIG`; `None`
+    escreve um arquivo sem marca de disparo nenhuma.
+
+    `dialeto` escolhe o cabeçalho, e os dois existem no parque:
+
+        "rid_sid"  SEL-451, sem versão:    "FID","RID","SID"
+        "cev_ver"  SEL-787, CEV_VER 2.0.1: "FID","CEV_VER"
+
+    Só as duas primeiras linhas e os três primeiros campos do cabeçalho mudam.
+    As colunas e as amostras são as mesmas de propósito: assim o teste do
+    dialeto testa o DIALETO, e não uma segunda oscilografia inteira.
+    """
+    n = por_ciclo * ciclos
+    t = np.arange(n) / (por_ciclo * freq)
+    onda = [RMS_CEV * np.cos(2 * np.pi * freq * t - k * 2 * np.pi / 3)
+            for k in range(3)]
+
+    colunas: list[np.ndarray] = [*onda, *onda]          # 3 correntes + 3 tensões
+    colunas.append(np.full(n, freq))                    # FREQ(Hz)
+    colunas.append(np.full(n, RMS_CEV))                 # ANA01 = V1M
+    colunas.append(np.zeros(n))                         # ANA02 = V1A
+    colunas.append(np.full(n, DC1_CEV))                 # ANA03 = DC1
+    colunas.append(np.full(n, np.nan))                  # ANA04 = vaga vazia
+
+    digitais = esperado_digital_cev(nd, n)
+
+    if dialeto == "cev_ver":
+        # O 787 conta os canais no cabeçalho e não traz LOCATION nem SER_NUM.
+        comeco = [("REC_NUM", "4"), ("NUM_CH_A", str(len(colunas))),
+                  ("NUM_CH_D", str(nd))]
+    else:
+        comeco = [("EVENT_NUM", "1"), ("EVENT", '"AB T"'),
+                  ("LOCATION", "$$$$.$$")]
+    cabecalho = [
+        *comeco,
+        ("FREQ", f"{freq:.2f}"), ("NFREQ", f"{int(freq)}"),
+        ("SAM/CYC_D", str(por_ciclo)),
+        ("NUM_OF_CYC", f"{ciclos:.3f}"),
+        *([] if dialeto == "cev_ver" else [("SER_NUM", '"0000000001"')]),
+        ("PRIM_VAL", '"YES"'),
+        *([("EVENT", '"ER Trigger"')] if dialeto == "cev_ver" else []),
+        ("CTRW", "120"), ("PTRY", "120.0"),
+        *[(f"ERAQ{i + 1:02d}", f'"{e}"' if e else '" "')
+          for i, e in enumerate(ERAQ_CEV)],
+        ("GROUP", "1"), ("BREAKER1", '"OPEN"'),
+    ]
+    if sam_cyc:
+        cabecalho.insert(5, ("SAM/CYC_A", str(por_ciclo)))
+
+    if dialeto == "cev_ver":
+        identificacao = [_com_soma(['"FID"', '"CEV_VER"']),
+                         _com_soma(['"FID=SEL-787-TESTE"', '"2.0.1"'])]
+    else:
+        identificacao = [
+            _com_soma(['"FID"', '"RID"', '"SID"']),
+            _com_soma(['"FID=SEL-000-TESTE"', '"BAIA DE TESTE"', '"SE TESTE"'])]
+    linhas = [
+        *identificacao,
+        _com_soma(['"MONTH"', '"DAY"', '"YEAR"', '"HOUR"', '"MIN"',
+                   '"SEC"', '"MSEC"']),
+        _com_soma(["3", "14", "2026", "10", "20", "30", "500"]),
+        _com_soma([f'"{c}"' for c, _ in cabecalho]),
+        _com_soma([v for _, v in cabecalho]),
+        _com_soma([*[f'"{c}"' for c in COLUNAS_CEV], '"TRIG"',
+                   '"' + " ".join(f"D{j + 1:02d}" for j in range(nd)) + '"']),
+    ]
+    for k in range(n):
+        valores = ["" if np.isnan(c[k]) else f"{c[k]:.4f}" for c in colunas]
+        marca = ">" if disparo is not None and k == disparo else " "
+        linha = _com_soma([*valores, marca,
+                           f'"{_tira_de_digitais(digitais[:, k])}"'])
+        if not soma_certa and k == 0:
+            linha = linha[: linha.rfind(",") + 1] + '"0000"'
+        linhas.append(linha)
+
+    if com_ajustes:
+        # O bloco de ajustes: um campo só, com quebras de linha dentro. Existe
+        # no arquivo real e o leitor tem que parar nele, não engasgar.
+        linhas.append(_com_soma(['"SETTINGS"']))
+        linhas.append('"\nGroup 1\n\nZ1MAG   := 2.14     Z1ANG   := 68.86\n",'
+                      '"0000"')
+
+    fim = "\r\n" if crlf else "\n"
+    pasta = Path(pasta)
+    pasta.mkdir(parents=True, exist_ok=True)
+    caminho = pasta / f"{nome}{extensao}"
+    # Em bytes, e nao `write_text`: no Windows o modo texto trocaria o `\n` do
+    # caso `crlf=False` por `\r\n`, e o teste do fim de linha do Unix passaria
+    # a testar exatamente o contrario do que diz o nome dele.
+    caminho.write_bytes((fim.join(linhas) + fim).encode("latin-1"))
+    return caminho

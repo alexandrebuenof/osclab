@@ -30,12 +30,25 @@ class OrigemDaFase(StrEnum):
 #: Como cada fabricante chama o neutro/residual. Tudo vira "N".
 _NEUTRO = {"N", "G", "E", "0"}
 
-#: `IAW`, `VBY`, `ICX` — o padrão da SEL: grandeza, fase, enrolamento.
-_SEL = re.compile(r"^[IVU]([ABC])[A-Z0-9]?$", re.IGNORECASE)
+#: Quantos caracteres o TERMINAL pode ter depois da letra da fase.
+#:
+#: Era 1 (`IAW`, `VBY`, `ICX` — o padrão de terminal único da SEL) e o `.CEV`
+#: do SEL-787 do parque mostrou que não basta: um diferencial de transformador
+#: nomeia os enrolamentos `IAW1` e `IAW2`, com DOIS. Com o limite em 1, as duas
+#: trincas de corrente daquele arquivo simplesmente não existiam — e nada na
+#: tela dizia isso: os canais apareciam, desenhavam, e só 3I0, I1, I2 e a
+#: localização de falta é que não existiam.
+#:
+#: **Dois, e não `*`.** Com sufixo livre, `VALOR` viraria fase A. O limite é o
+#: que separa "terminal de relé" de "palavra qualquer".
+_TERMINAL = "[A-Z0-9]{0,2}"
+
+#: `IAW`, `VBY`, `ICX`, `IAW1` — o padrão da SEL: grandeza, fase, enrolamento.
+_SEL = re.compile(rf"^[IVU]([ABC]){_TERMINAL}$", re.IGNORECASE)
 
 #: `Current IA`, `J1 -IC`, `Voltage VB` — grandeza colada na fase.
-_GRANDEZA = re.compile(r"(?:^|[^A-Z0-9])[IVU]([ABC])[A-Z0-9]?(?:[^A-Z0-9]|$)",
-                       re.IGNORECASE)
+_GRANDEZA = re.compile(
+    rf"(?:^|[^A-Z0-9])[IVU]([ABC]){_TERMINAL}(?:[^A-Z0-9]|$)", re.IGNORECASE)
 
 #: `Voltage A-G`, `...fase B` — a letra da fase sozinha, cercada de não-letras.
 _FIM = re.compile(r"(?:^|[^A-Z0-9])([ABC])(?:[^A-Z0-9]|$)", re.IGNORECASE)
@@ -47,8 +60,12 @@ _NEUTRO_SOZINHO = re.compile(r"(?:^|[^A-Z0-9])([NGE])(?:[^A-Z0-9]|$)",
 
 #: `3I0`, `3V0`, `IN`, `VNG`, `Ix`, `IG` — residual ou neutro.
 #: O `{1,2}` é por causa do `VNG`: neutro-terra escrito com as duas letras.
-_RESIDUAL = re.compile(r"(?:^|[^A-Z0-9])(3[IVU]0|[IVU][NGE]{1,2}|[IVU]X)"
-                       r"(?:[^A-Z0-9]|$)", re.IGNORECASE)
+#: O `{_TERMINAL}` do fim é pelo mesmo motivo do `_SEL`: o SEL-787 escreve o
+#: neutro de cada enrolamento como `IGW1` e `IGW2`, e o de outro ponto como
+#: `IN1`. Sem ele, três canais de neutro ficavam sem fase nenhuma.
+_RESIDUAL = re.compile(
+    rf"(?:^|[^A-Z0-9])(3[IVU]0|[IVU][NGE]{{1,2}}|[IVU]X){_TERMINAL}"
+    rf"(?:[^A-Z0-9]|$)", re.IGNORECASE)
 
 
 def _normalizar(bruta: str) -> str:

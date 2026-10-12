@@ -1,5 +1,8 @@
 """Testes contra os arquivos REAIS do parque da distribuidora.
 
+Vale para todo formato que o programa le' — COMTRADE e CEV. O nome do arquivo
+ficou do tempo em que so' havia COMTRADE.
+
 Esses arquivos **não entram no repositório**: identificam instalação, data e
 comportamento da rede, e o repositório é público. Então este arquivo de teste
 fica desligado por padrão e só roda quando alguém aponta onde eles estão:
@@ -39,11 +42,16 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+#: As extensoes que abrem um registro sozinhas. `.dat` fica de fora de
+#: proposito: ele e' a segunda metade de um `.cfg`, nao um registro.
+PRINCIPAIS = (".cfg", ".cff", ".cev")
+
+
 def _cfgs() -> list[Path]:
     if AMOSTRAS is None or not AMOSTRAS.is_dir():
         return []
     achados = [p for p in AMOSTRAS.rglob("*")
-               if p.is_file() and p.suffix.lower() in (".cfg", ".cff")]
+               if p.is_file() and p.suffix.lower() in PRINCIPAIS]
     return sorted(achados)
 
 

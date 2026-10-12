@@ -263,3 +263,103 @@ def test_o_limite_e_a_fundamental_sobre_o_rms_da_janela(fracao, esperado):
 ])
 def test_normalizacao_do_angulo(bruto, referencia, esperado):
     assert fasor.em_relacao_a(bruto, referencia) == pytest.approx(esperado)
+
+
+# ---------------------------------------------------------------------------
+# A janela de UM CICLO DE TEMPO — taxa que não fecha em amostra inteira
+# ---------------------------------------------------------------------------
+
+def test_os_pesos_do_ciclo_somam_o_ciclo():
+    for n in (4.0, 16.0, 20.0, 2000 / 60, 10_000 / 60, 1000 / 60):
+        assert fasor.pesos_do_ciclo(n).sum() == pytest.approx(n, rel=1e-12)
+
+
+def test_com_taxa_QUE_FECHA_os_pesos_sao_todos_UM():
+    """Aí a janela É um número inteiro de amostras e a conta é o Fourier de
+    ciclo cheio de sempre — o mesmo que o relé roda por dentro.
+
+    Isto é deliberado e não é detalhe: todo número já conferido contra o SIGRA
+    e contra os relés saiu de arquivo com taxa inteira (MiCOM a 20 amostras por
+    ciclo, `.CEV` a 4 e a 8). Mudar os pesos ali invalidaria a conferência.
+    """
+    for n in (4, 8, 16.0, 20, 96):
+        pesos = fasor.pesos_do_ciclo(n)
+        assert pesos.size == int(n)
+        assert np.all(pesos == 1.0)
+
+
+def test_a_taxa_de_2000_Hz_NAO_fecha_e_a_janela_cresce():
+    """2000 Hz num sistema de 60 Hz dá 33,3333 amostras por ciclo — a taxa de
+    quase todo COMTRADE do parque (SEL-451, SEL-487E, SIPROTEC)."""
+    n = fasor.ciclo_em_amostras(2000.0, 60.0)
+    assert n == pytest.approx(33.3333333, rel=1e-6)
+    assert fasor.amostras_por_ciclo(2000.0, 60.0) == 33      # o arredondado
+    assert fasor.pesos_do_ciclo(n).size == 35                # a janela de medida
+
+
+def test_a_janela_de_um_ciclo_de_tempo_MATA_o_vazamento():
+    """**O teste que dá razão a tudo isto.**
+
+    A média de um ciclo de uma senoide é zero. Com a janela arredondada para
+    33 amostras ela não é: sobra 1,01 % do pico, girando a 60 Hz. Isso vira
+    ondulação de 1,01 % no RMS e na fundamental — e o GRÁFICO INTEIRO na
+    componente contínua, cujo valor verdadeiro é zero.
+    """
+    n = 2000.0 / 60.0
+    arredondada = 33
+
+    pior_novo = pior_velho = 0.0
+    for graus in range(0, 360, 5):
+        # Senoide de período `n` amostras, com a janela terminando no fim.
+        k = np.arange(40)
+        x = np.cos(2 * np.pi * (k - 39) / n + math.radians(graus))
+        pesos = fasor.pesos_do_ciclo(n)
+        pior_novo = max(pior_novo,
+                        abs(np.dot(x[-pesos.size:], pesos) / n))
+        pior_velho = max(pior_velho, abs(np.mean(x[-arredondada:])))
+
+    assert pior_velho > 0.01                 # 1 % do pico, o que se via na tela
+    assert pior_novo < 0.0001                # e some
+
+
+def test_a_curva_e_o_cursor_batem_TAMBEM_com_taxa_fracionaria():
+    """A curva sai de uma passada sobre o registro inteiro e o cursor de uma
+    janela só. Com a janela fracionária são duas implementações da mesma
+    ponderação — exatamente onde elas divergiriam em silêncio."""
+    from osclab.dsp import envoltoria
+
+    n = 2000.0 / 60.0
+    t = np.arange(600) / 2000.0
+    x = (100 * np.cos(2 * np.pi * 60 * t + 0.7) + 37.0
+         + 8 * np.cos(2 * np.pi * 180 * t))
+
+    curva_f = envoltoria.fundamental(x, n)
+    curva_r = envoltoria.rms(x, n)
+    curva_d = envoltoria.continua(x, n)
+    for i in (200, 301, 457, 599):
+        f = fasor.no_instante(x, i, n)
+        assert f is not None
+        assert f.fundamental == pytest.approx(curva_f[i], rel=1e-12)
+        assert f.rms == pytest.approx(curva_r[i], rel=1e-12)
+        assert f.dc == pytest.approx(curva_d[i], rel=1e-12)
+
+
+def test_com_taxa_fracionaria_a_leitura_fica_CERTA():
+    """Resposta conhecida: 100 de pico e 37 de contínua, a 33,3333 am/ciclo."""
+    from osclab.dsp import envoltoria
+
+    n = 2000.0 / 60.0
+    t = np.arange(800) / 2000.0
+    x = 100 * np.cos(2 * np.pi * 60 * t) + 37.0
+
+    janela = slice(200, 700)
+    assert np.nanmean(envoltoria.continua(x, n)[janela]) == pytest.approx(37.0, abs=1e-3)
+    assert np.nanmean(envoltoria.fundamental(x, n)[janela]) == pytest.approx(
+        100 / math.sqrt(2.0), rel=1e-4)
+    # A MÉDIA da janela arredondada também dá 37 — a ondulação se cancela ao
+    # longo do registro. O que ela erra é AMOSTRA A AMOSTRA, que é o que se vê
+    # na tela: a contínua desenha uma senoide de 60 Hz em vez de uma reta.
+    ondula = envoltoria.continua(x, 33)[janela]
+    assert (np.nanmax(ondula) - np.nanmin(ondula)) / 2 > 0.9      # ~1 % de 100
+    certa = envoltoria.continua(x, n)[janela]
+    assert (np.nanmax(certa) - np.nanmin(certa)) / 2 < 0.01

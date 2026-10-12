@@ -11,7 +11,7 @@ import pytest
 from osclab import paths
 from osclab.formats.base import FormatError
 from osclab.library import acervo
-from tests.fabrica import escrever_comtrade
+from tests.fabrica import escrever_cev, escrever_comtrade
 
 
 @pytest.fixture(autouse=True)
@@ -26,6 +26,41 @@ def _par(tmp_path, nome="REGISTRO", **kw) -> list[tuple[str, bytes]]:
     cfg = escrever_comtrade(tmp_path / f"origem-{nome}", nome=nome, **kw)
     dat = cfg.with_suffix(".dat")
     return [(cfg.name, cfg.read_bytes()), (dat.name, dat.read_bytes())]
+
+
+def _cev(tmp_path, nome="EVENTO", **kw) -> list[tuple[str, bytes]]:
+    """Um CEV sozinho — que ja' e' um registro inteiro, sem par nenhum."""
+    arquivo = escrever_cev(tmp_path / f"origem-{nome}", nome=nome, **kw)
+    return [(arquivo.name, arquivo.read_bytes())]
+
+
+# ---------------------------------------------------------------------------
+# Formato de arquivo unico
+# ---------------------------------------------------------------------------
+
+def test_um_CEV_SOZINHO_ja_e_um_registro_inteiro(tmp_path):
+    """Um relatorio de evento da SEL nao tem par. Se o acervo o mandasse para a
+    antessala esperar um `.dat`, ele ficaria la' para sempre."""
+    r = acervo.guardar(_cev(tmp_path))
+
+    assert [i.nome for i in r.aceitos] == ["EVENTO"]
+    assert r.aguardando == []
+    assert acervo.aguardando() == {}
+
+
+def test_o_cev_do_acervo_abre_e_traz_as_amostras(tmp_path):
+    sha = acervo.guardar(_cev(tmp_path)).aceitos[0].sha
+    registro = acervo.ler(sha)
+
+    assert registro.format_name == "cev"
+    assert registro.n_samples > 0
+
+
+def test_cev_e_comtrade_convivem_no_mesmo_envio(tmp_path):
+    r = acervo.guardar([*_cev(tmp_path), *_par(tmp_path)])
+
+    assert sorted(i.nome for i in r.aceitos) == ["EVENTO", "REGISTRO"]
+    assert r.aguardando == []
 
 
 # ---------------------------------------------------------------------------
@@ -310,3 +345,158 @@ def test_vinculo_com_lixo_e_ignorado(tmp_path):
     sha = acervo.guardar(_par(tmp_path, n=64)).aceitos[0].sha
     acervo.gravar_vinculos(sha, {"0": "Z", "nao_e_numero": "A", "1": "b"})
     assert acervo.vinculos(sha) == {1: "B"}
+
+
+# ---------------------------------------------------------------------------
+# O apelido da trinca
+# ---------------------------------------------------------------------------
+#
+# Ja houve aqui a rotulagem manual: o usuario escrevia `alta`/`baixa` e o nome
+# ficava gravado em `rotulos.json`, ao lado do registro. Ela existia para
+# CONSERTAR um palpite do programa, de quando a tela afirmava qual era a alta.
+# O programa nao palpita mais -- diz `G1`, `G2` e mostra de que canais do
+# arquivo aquilo saiu, no rodape do grafico e na coluna da direita do OscLab.
+# Sem palpite nao ha' o que consertar, e o que sobrava era anotacao pessoal,
+# que pertence ao relatorio e nao ao nome do canal.
+#
+# O que fica: o apelido sai do arquivo, deterministicamente, e o acervo nao
+# guarda nada sobre ele.
+
+def _trafo(tmp_path, nome="TRAFO") -> list[tuple[str, bytes]]:
+    """Um COMTRADE com DUAS trincas de corrente, que e' quando ha' apelido."""
+    cfg = escrever_comtrade(tmp_path / f"origem-{nome}", nome=nome, na=6, n=256)
+    dat = cfg.with_suffix(".dat")
+    return [(cfg.name, cfg.read_bytes()), (dat.name, dat.read_bytes())]
+
+
+def _trincas(sha):
+    from osclab.formats import conjuntos
+    return sorted(conjuntos.de_registro(acervo.ler(sha)), key=lambda c: c.abc)
+
+
+def test_as_trincas_do_acervo_sao_numeradas(tmp_path):
+    """A fabrica escreve `IAW`, `IBW`, `ICW`, `IAX`, ...: duas trincas."""
+    sha = acervo.guardar(_trafo(tmp_path)).aceitos[0].sha
+    assert [c.rotulo for c in _trincas(sha)] == ["G1", "G2"]
+
+
+def test_o_acervo_NAO_guarda_apelido_de_trinca(tmp_path):
+    """O apelido e' derivado do arquivo, entao nao ha' o que persistir. Um
+    segundo lugar onde o nome pode divergir e' o defeito que isto evita."""
+    sha = acervo.guardar(_trafo(tmp_path)).aceitos[0].sha
+    guardados = {p.name for p in (acervo._raiz() / sha).iterdir()}
+    assert "rotulos.json" not in guardados
+    assert not hasattr(acervo, "gravar_rotulos")
+
+
+# ---------------------------------------------------------------------------
+# A trinca corrigida pelo usuario
+# ---------------------------------------------------------------------------
+#
+# Quais tres canais formam uma trinca sai do NOME deles. Quando erra, 3I0, I1 e
+# I2 erram junto -- na unidade certa, na ordem de grandeza certa, sem nada na
+# tela denunciando. Por isso a correcao e' gravada ao lado do registro, pelo
+# mesmo motivo da correcao de fase: quem corrigiu corrigiu para sempre.
+
+def test_sem_correcao_a_trinca_e_a_DEDUZIDA(tmp_path):
+    sha = acervo.guardar(_trafo(tmp_path)).aceitos[0].sha
+    assert acervo.trincas(sha) == {}
+    assert [c.abc for c in _trincas(sha)] == [(0, 1, 2), (3, 4, 5)]
+
+
+def test_a_trinca_CORRIGIDA_vale_para_as_componentes(tmp_path):
+    """A fabrica escreve `IAW IBW ICW IAX IBX ICX`. Se o vao real cruza os
+    terminais, o usuario diz quais tres sao e as componentes seguem."""
+    sha = acervo.guardar(_trafo(tmp_path)).aceitos[0].sha
+    chave = _trincas(sha)[0].nome
+
+    acervo.gravar_trincas(sha, {chave: {"A": 0, "B": 4, "C": 5}})
+
+    corrigida = next(c for c in _trincas(sha) if c.nome == chave)
+    assert corrigida.abc == (0, 4, 5)
+
+
+def test_a_correcao_SOBREVIVE_a_reabertura(tmp_path):
+    sha = acervo.guardar(_trafo(tmp_path)).aceitos[0].sha
+    chave = _trincas(sha)[0].nome
+    acervo.gravar_trincas(sha, {chave: {"A": 3, "B": 1, "C": 2}})
+    assert acervo.trincas(sha) == {chave: {"A": 3, "B": 1, "C": 2}}
+    assert next(c for c in _trincas(sha) if c.nome == chave).abc == (3, 1, 2)
+
+
+def test_correcao_VAZIA_apaga_e_volta_a_deducao(tmp_path):
+    sha = acervo.guardar(_trafo(tmp_path)).aceitos[0].sha
+    chave = _trincas(sha)[0].nome
+    acervo.gravar_trincas(sha, {chave: {"A": 3, "B": 1, "C": 2}})
+    acervo.gravar_trincas(sha, {chave: {}})
+    assert acervo.trincas(sha) == {}
+    assert next(c for c in _trincas(sha) if c.nome == chave).abc == (0, 1, 2)
+
+
+def test_correcao_com_lixo_e_ignorada(tmp_path):
+    """A tela manda texto, e o servidor nao confia nela."""
+    sha = acervo.guardar(_trafo(tmp_path)).aceitos[0].sha
+    chave = _trincas(sha)[0].nome
+    acervo.gravar_trincas(sha, {chave: {"A": "nao e numero", "B": 1, "C": 2}})
+    # Sem a fase A nao ha' correcao de A: a deducao dela continua valendo.
+    assert acervo.trincas(sha) == {chave: {"B": 1, "C": 2}}
+    assert next(c for c in _trincas(sha) if c.nome == chave).abc == (0, 1, 2)
+
+
+def test_a_correcao_NAO_MUDA_a_posicao_do_conjunto(tmp_path):
+    """O `q{i}` dos arranjos salvos e' POSICAO nesta lista.
+
+    Se corrigir uma trinca a fizesse trocar de lugar com outra, um grafico
+    salvo passaria a desenhar a corrente de outro equipamento -- sem erro
+    nenhum na tela.
+    """
+    from osclab.formats import conjuntos
+
+    sha = acervo.guardar(_trafo(tmp_path)).aceitos[0].sha
+    # Sem ordenar de novo: e' a ordem que `de_registro` devolve que vira `q{i}`.
+    antes = [c.nome for c in conjuntos.de_registro(acervo.ler(sha))]
+    # A primeira trinca passa a comecar num canal da SEGUNDA: pela ordenacao
+    # antiga ela iria para o fim da lista.
+    acervo.gravar_trincas(sha, {antes[0]: {"A": 5, "B": 4, "C": 3}})
+    depois = [c.nome for c in conjuntos.de_registro(acervo.ler(sha))]
+    assert depois == antes
+
+
+def test_corrigir_trinca_de_registro_que_nao_existe(tmp_path):
+    with pytest.raises(FormatError):
+        acervo.gravar_trincas("naoexiste", {"I*W": {"A": 0, "B": 1, "C": 2}})
+
+
+def test_o_RELATO_do_rele_nao_e_aviso(tmp_path):
+    """Duas coisas diferentes no resumo, e so' uma leva triangulo na tela.
+
+    O AVISO e' do leitor -- o que ele fez, deixou de fora ou nao conseguiu
+    confirmar. O RELATO e' do rele: a classificacao do evento, a distancia que
+    ele calculou. Carimbar triangulo numa frase como "o rele classificou o
+    evento como AB T" ensina o usuario a ignorar o triangulo, e ai o aviso que
+    importa passa despercebido junto.
+    """
+    from tests.fabrica import escrever_cev
+
+    caminho = escrever_cev(tmp_path)   # a fabrica escreve EVENT = "AB T"
+    sha = acervo.guardar([(caminho.name, caminho.read_bytes())]).aceitos[0].sha
+    item = acervo.obter(sha)
+
+    assert any("AB T" in x for x in item.relatos)
+    assert not any("AB T" in x for x in item.avisos)
+
+
+def test_meta_json_ANTIGO_sem_relatos_continua_abrindo(tmp_path):
+    """`meta.json` e' cache e pode ser refeito -- mas nao pode QUEBRAR quem
+    tem um gravado antes de `relatos` existir."""
+    import json
+
+    sha = acervo.guardar(_trafo(tmp_path)).aceitos[0].sha
+    meta = acervo._raiz() / sha / "meta.json"
+    dados = json.loads(meta.read_text(encoding="utf-8"))
+    dados.pop("relatos", None)
+    meta.write_text(json.dumps(dados), encoding="utf-8")
+
+    item = acervo.obter(sha)
+    assert item is not None
+    assert item.relatos == ()

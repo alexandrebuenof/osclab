@@ -48,6 +48,22 @@ não a partir da norma sozinha. O que apareceu e teve que ser tratado:
 | SEL-TWFL | `.dat` termina com 64 bytes `0x1A`, enchimento do DOS |
 | SEL-487E | 5760 canais digitais — a matriz de estados passa de 30 MB |
 | vários | nome de subestação em cp1252, não UTF-8 |
+| Siemens SIPROTEC | escreve o número do canal no campo `ccbm`, que a norma reserva ao equipamento vigiado |
+| SEL-451, SEL-487E | gravam os terminais de TC/TP que ninguém cabeou, lendo ruído do conversor |
+
+E o que apareceu no `.CEV` da SEL (marco 0.4), nenhum deles escrito em campo
+nenhum do arquivo:
+
+| O que o arquivo faz | Por que importa |
+|---|---|
+| a amostra vem em valor **eficaz**, não instantâneo | sem a raiz de 2 o filtrado aparece 41 % menor que o bruto do mesmo evento |
+| a hora do cabeçalho é a do **disparo** | tomá-la como a da primeira amostra desloca o registro inteiro |
+| as colunas `ANAnn` não são onda | são as grandezas que o próprio relé calculou; o nome delas está nos campos `ERAQnn` |
+| o arquivo acaba com os **ajustes do relé** | depois do marcador `SETTINGS` ele deixa de ser CSV |
+
+As três primeiras foram confirmadas contra o COMTRADE **bruto do mesmo evento
+do mesmo relé** — a razão dos picos deu 1,4141, o início bateu em 0,3 ms e o
+`TRIP` bateu dentro de um intervalo de amostragem.
 
 Nenhuma dessas coisas está na norma. É por isso que o leitor não foi escrito
 antes de os arquivos existirem.

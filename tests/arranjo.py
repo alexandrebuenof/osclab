@@ -35,6 +35,20 @@ def digital(indices, *, nome: str = "Digitais",
                           sinais=tuple(str(k) for k in indices))
 
 
+def fasorial(sinais, *, nome: str = "Fasores",
+             identidade: str = "pf") -> paineis.Painel:
+    """Um painel fasorial, pelos ids da BASE de cada linha do catálogo."""
+    return paineis.Painel(id=identidade, tipo=paineis.FASORIAL, nome=nome,
+                          sinais=tuple(sinais))
+
+
+def harmonicos(sinais, *, nome: str = "Harmônicos",
+               identidade: str = "ph") -> paineis.Painel:
+    """Um painel de harmônicos, pelos ids da BASE de cada linha do catálogo."""
+    return paineis.Painel(id=identidade, tipo=paineis.HARMONICOS, nome=nome,
+                          sinais=tuple(sinais))
+
+
 def ids_dos_canais(registro, unidade: str | None = None) -> list[str]:
     """Os ids de catálogo dos canais do IED, crus, na ordem do arquivo."""
     return [f"c{c.index}:instantaneo" for c in registro.analog_channels

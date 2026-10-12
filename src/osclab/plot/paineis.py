@@ -46,7 +46,11 @@ from osclab.plot import serie, unidades
 
 ANALOGICO = "analogico"
 DIGITAL = "digital"
-TIPOS = (ANALOGICO, DIGITAL)
+#: O diagrama de fasores de um instante. Ver `plot/fasorial.py`.
+FASORIAL = "fasorial"
+#: O espectro de harmônicos de um instante, em barras. Ver `plot/harmonicos.py`.
+HARMONICOS = "harmonicos"
+TIPOS = (ANALOGICO, DIGITAL, FASORIAL, HARMONICOS)
 
 
 @dataclass(frozen=True)
@@ -57,11 +61,21 @@ class Painel:
     tipo: str
     nome: str
     #: Analógico: ids do catálogo (`c0:instantaneo`, `v0:rms`, `q0:0:rms`).
+    #: Fasorial: o id da BASE de cada linha (`c0:instantaneo`, `q0:n:instantaneo`,
+    #: `q0:0:rms`) — o fasor é da linha, não de uma conta dela.
     #: Digital: índices de canal digital, como texto.
     sinais: tuple[str, ...] = ()
     #: Só no analógico: `instantaneo` ou `rms`, e vale para os canais do IED
     #: que estão nele. Ver `plot/sinais.py`.
     medida: str = "instantaneo"
+    #: Só no fasorial: o id do sinal que é o zero dos ângulos DELE, ou vazio
+    #: para a regra automática (a tensão da fase A).
+    #:
+    #: Vem à parte de `sinais` porque ele **não é desenhado**: pode-se querer
+    #: os ângulos das correntes a partir de `VAY` sem ter `VAY` no diagrama. E
+    #: vem ao servidor, ao contrário do nome e da ordem, porque muda o que o
+    #: servidor CALCULA — aquele sinal precisa entrar na leitura do cursor.
+    referencia: str = ""
     #: Marca o painel cujo nome ainda é o que o servidor deu. Enquanto for
     #: verdade, o nome é recalculado a cada janela — é assim que ele acompanha
     #: a troca de primário para secundário. Renomear apaga a marca, e a partir
@@ -70,21 +84,99 @@ class Painel:
     avisos: list[str] = field(default_factory=list)
 
 
+def _por_trinca(registro: Record) -> list[tuple[str, str, list[int]]] | None:
+    """`(unidade, lado, canais)` de cada painel, ou `None` se não houver trinca.
+
+    **Só corrente e tensão.** Um relé grava muito mais que isso — a tensão da
+    bateria, a frequência, os ângulos que ele mesmo calculou, a corrente
+    diferencial em pu — e cada unidade dessas virava um gráfico na abertura. O
+    que se olha primeiro num evento é corrente e tensão; o resto é escolha de
+    quem analisa, e está a um clique no «+ sinal».
+
+    A separação não é por unidade e sim por TRINCA, e é isso que tira a tensão
+    da bateria do caminho: ela é volt, mas não é uma das três fases de nada.
+    """
+    from osclab.formats import conjuntos
+
+    achados = [c for c in conjuntos.de_registro(registro)
+               if not c.sem_sinal and c.grandeza in ("I", "V")]
+    if not achados:
+        return None
+
+    canais: list[list[int]] = [sorted(c.canais.values()) for c in achados]
+    usados = {i for grupo in canais for i in grupo}
+    for solto, alvo in conjuntos.residuais_soltos(registro).items():
+        if 0 <= alvo < len(canais) and solto not in usados:
+            canais[alvo].append(solto)
+
+    # O LADO de um conjunto é a posição dele dentro da grandeza — a primeira
+    # trinca de corrente e a primeira de tensão são do mesmo lado do
+    # equipamento, e é isso que põe `IA/IB/IC` e `VA/VB/VC` da alta um em cima
+    # do outro na abertura. É o campo `ordem`, e não o nome do grupo: com `G1`
+    # contado entre TODOS os conjuntos, a corrente é `G1` e a tensão do mesmo
+    # lado é `G2`, e comparar os dois nomes nunca casaria par nenhum.
+    #
+    # Corrente e tensão só se intercalam quando os lados de um CORRESPONDEM aos
+    # do outro. Num relé com duas trincas de corrente e uma de tensão não há
+    # par que fazer, e intercalar só quebraria a sequência das correntes: ali
+    # vão todas as correntes e depois todas as tensões.
+    lados = {g: {c.ordem for c in achados if c.grandeza == g} for g in ("I", "V")}
+    emparelha = bool(lados["I"]) and lados["I"] == lados["V"]
+
+    def chave(i: int) -> tuple:
+        # Pelo NÚMERO, não como texto: com dez conjuntos, `G10` viria antes de
+        # `G2` no alfabeto.
+        lado = achados[i].ordem
+        grandeza = 0 if achados[i].grandeza == "I" else 1
+        return (lado, grandeza) if emparelha else (grandeza, lado)
+
+    ordem = sorted(range(len(achados)), key=chave)
+    return [(achados[i].unidade, achados[i].rotulo, sorted(canais[i]))
+            for i in ordem]
+
+
+def _por_unidade(registro: Record,
+                 fora: frozenset[int]) -> list[tuple[str, str, list[int]]]:
+    """O arranjo antigo: um painel por unidade do arquivo, sem lado nenhum.
+
+    Só entra quando o programa não reconheceu trinca nenhuma. Aí ele não tem
+    com que escolher, e uma tela vazia seria pior que uma tela cheia demais.
+    """
+    por_unidade: dict[str, list[int]] = {}
+    for canal in registro.analog_channels:
+        if canal.index in fora:
+            continue
+        por_unidade.setdefault(canal.unit.strip(), []).append(canal.index)
+    return [(unidade, "", indices) for unidade, indices in por_unidade.items()]
+
+
 def padrao(registro: Record, lado: str = "arquivo") -> list[Painel]:
     """O arranjo com que uma oscilografia abre.
 
-    É o de sempre: um painel por unidade do arquivo, na ordem em que as
-    unidades aparecem, e um painel com os digitais que mudaram. Quem abre um
-    registro pela primeira vez não escolheu nada ainda, e a tela não pode
-    esperar escolha para mostrar alguma coisa.
-    """
-    escalas = unidades.por_unidade(registro, lado)
-    saida: list[Painel] = []
-    por_unidade: dict[str, list[int]] = {}
-    for canal in registro.analog_channels:
-        por_unidade.setdefault(canal.unit.strip(), []).append(canal.index)
+    Um painel por trinca de corrente e de tensão, na ordem em que se conta um
+    evento: **corrente e tensão da alta, depois corrente e tensão da baixa**.
+    Quem abre um registro pela primeira vez não escolheu nada ainda, e a tela
+    não pode esperar escolha para mostrar alguma coisa.
 
-    for i, (unidade, indices) in enumerate(por_unidade.items(), start=1):
+    Fecha com um painel dos digitais que mudaram.
+
+    **A trinca de reserva fica de fora.** Um relé tem mais entradas do que a
+    instalação usa, e o registro grava as vazias igual: sem isto, um SEL-451 de
+    alimentador abre com seis correntes, três delas sendo uma reta em zero. Só
+    sai do desenho — os canais continuam inteiros no catálogo, e o cabeçalho diz
+    quantos ficaram de fora. Ver `formats/conjuntos.py` e `analysis/presenca.py`.
+    """
+    from osclab.formats import conjuntos
+
+    escalas = unidades.por_unidade(registro, lado)
+    grupos = _por_trinca(registro)
+    if grupos is None:
+        grupos = _por_unidade(registro, conjuntos.canais_sem_sinal(registro))
+
+    saida: list[Painel] = []
+    for i, (unidade, _do_lado, indices) in enumerate(grupos, start=1):
+        if not indices:
+            continue
         _, mostrada = escalas.get(unidade, (1.0, unidade))
         saida.append(Painel(
             id=f"p{i}",
@@ -132,12 +224,14 @@ def de_json(cru) -> list[Painel] | None:
         brutos = item.get("sinais")
         sinais = tuple(str(x) for x in brutos) if isinstance(brutos, list) else ()
         medida = str(item.get("medida", "instantaneo"))
+        referencia = str(item.get("referencia", "") or "")
         saida.append(Painel(
             id=identidade,
             tipo=tipo,
             nome=str(item.get("nome", "") or ""),
             sinais=sinais,
             medida=medida if medida in ("instantaneo", "rms") else "instantaneo",
+            referencia=referencia,
             # A tela devolve esta marca para os painéis que nunca foram
             # renomeados, e o servidor então reescreve o nome deles. É o que
             # faz `Correntes (A)` virar `Correntes (kA)` quando se troca para

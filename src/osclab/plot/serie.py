@@ -12,6 +12,13 @@ por pixel e, em cada coluna, guardar o **mínimo e o máximo**. Desenhando os do
 sai um traço vertical que cobre exatamente o que aconteceu ali. Nenhum pico some,
 e o volume de dados cai para duas amostras por pixel.
 
+## E por que ela só entra quando a coluna está cheia
+
+Porque reduzir move amostras no tempo: as da mesma coluna saem todas no instante
+em que a coluna começa. Com a coluna cheia isso é meio pixel e ninguém vê; com
+uma amostra e meia por coluna, é 10,8° de uma onda de 60 Hz, e o traço ondula.
+Ver `LIMITE_SEM_REDUZIR`.
+
 ## Por que no servidor, e não no navegador
 
 Porque aqui isto tem teste. E porque o navegador nunca precisa segurar 250 mil
@@ -29,8 +36,28 @@ import numpy as np
 from osclab.formats.base import Record
 from osclab.plot import escala
 
-#: Acima disso por coluna, a redução compensa. Abaixo, manda-se as amostras.
-LIMITE_SEM_REDUZIR = 2
+#: Quantas amostras por coluna a redução espera antes de entrar.
+#:
+#: **A redução move amostras no tempo.** As que caem na mesma coluna são todas
+#: desenhadas no instante em que a coluna começa — é o que permite um eixo de
+#: tempo só para todos os canais. O deslocamento é sempre menor que uma coluna,
+#: e é por isso que ele é invisível quando a coluna é estreita perto do ciclo.
+#: Quando NÃO é, ele deforma a onda: medido num registro de 2000 Hz com 2000
+#: amostras em 1550 colunas (1,29 amostra por coluna), a amostra atrasada é
+#: desenhada 0,78 coluna antes da hora — **10,8° de onda**, com o ciclo
+#: ocupando 26 px. O traço fica ondulado, e some ao ampliar: ampliando sobra
+#: menos de uma amostra por coluna e nada é movido.
+#:
+#: Daí o limite ser 4, e não 1. Com menos de quatro amostras por coluna o
+#: registro vai cru — são no máximo quatro pontos por pixel, que o traçador
+#: desenha sem suar, e cada um no instante exato em que foi medido. Acima
+#: disso, a coluna cobre um quarto de ciclo ou mais: o par mínimo-máximo vira
+#: uma barra alta, as barras vizinhas se encostam, e o desenho já é uma FAIXA —
+#: onde um deslocamento de meio pixel não tem como aparecer.
+#:
+#: O que a redução resolve continua valendo acima do limite: num registro de
+#: 250 mil amostras, pegar uma a cada 160 apagaria o pico da falta.
+LIMITE_SEM_REDUZIR = 4
 
 
 @dataclass(frozen=True)
@@ -108,6 +135,15 @@ _TITULOS = {
 
 
 def titulo_do_grupo(unidade: str) -> str:
+    """`Correntes (A)`, `Tensões (kV)`.
+
+    **Só a unidade.** O título já levou o apelido do conjunto — `Correntes [1]`,
+    `Correntes [2]` num trafo. Saiu junto com o apelido dos canais: o nome do
+    grupo agora aparece só no que sai de uma trinca (`3I0 G1`, `IN G1`), que é a
+    única coisa sem nome de arquivo a herdar. Num trafo os dois painéis de
+    corrente se chamam igual, e quem os distingue é o nome dos canais dentro
+    deles — `IAW` num, `IAX` no outro; o grupo de cada um está no rodapé.
+    """
     nome = _TITULOS.get(unidade.strip().upper())
     limpa = unidade.strip() or "sem unidade"
     return f"{nome} ({limpa})" if nome else limpa

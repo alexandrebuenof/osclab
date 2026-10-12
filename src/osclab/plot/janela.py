@@ -16,13 +16,15 @@ from __future__ import annotations
 import numpy as np
 
 from osclab.dsp import fasor
-from osclab.formats import fases
+from osclab.formats import conjuntos, fases
 from osclab.formats.base import Record, Trecho
 from osclab.plot import (
     catalogo,
     conversao,
     digitais,
     escala,
+    fasorial,
+    harmonicos as harmonicos_mod,
     imas,
     navegacao,
     paineis,
@@ -34,7 +36,7 @@ from osclab.plot.conversao import LADOS
 
 #: Versão do formato do pacote da janela. Sobe quando a tela passa a depender
 #: de um campo novo. Ver o comentário em `montar`.
-CONTRATO = 8
+CONTRATO = 20
 
 
 def montar(registro: Record, *, de: float | None = None, ate: float | None = None,
@@ -72,7 +74,13 @@ def montar(registro: Record, *, de: float | None = None, ate: float | None = Non
     trechos = registro.trechos
     por_ciclo = max((fasor.amostras_por_ciclo(t.taxa_hz, registro.line_frequency)
                      for t in trechos), default=0)
-    margem = (por_ciclo - 1) if por_ciclo > 0 else 0
+    # A margem conta a janela DE MEDIDA, que com taxa fracionária traz uma ou
+    # duas amostras a mais que `por_ciclo` — ver `fasor.pesos_do_ciclo`.
+    # Sobrar história é de graça; faltar deixa buraco na tela.
+    largura = max((fasor.pesos_do_ciclo(
+        fasor.ciclo_em_amostras(t.taxa_hz, registro.line_frequency)).size
+        for t in trechos if t.taxa_hz > 0), default=0)
+    margem = max(largura, por_ciclo) - 1 if por_ciclo > 0 else 0
     j0 = max(i0 - margem, 0)
     janela_de_trechos = _trechos_recortados(trechos, j0, i1)
 
@@ -90,6 +98,15 @@ def montar(registro: Record, *, de: float | None = None, ate: float | None = Non
     for painel in arranjo:
         if painel.tipo == paineis.DIGITAL:
             saida.append(_painel_digital(registro, painel, i0, i1, colunas))
+        elif painel.tipo == paineis.FASORIAL:
+            # Sem série nenhuma: o diagrama é de UM instante, e os números dele
+            # vêm da leitura do cursor. Ver `plot/fasorial.py`.
+            saida.append(fasorial.montar(registro, painel, por_id, escalas,
+                                         lado))
+        elif painel.tipo == paineis.HARMONICOS:
+            # Idem: as barras são de UM instante e vêm da leitura do cursor.
+            saida.append(harmonicos_mod.montar(registro, painel, por_id,
+                                               escalas, lado))
         else:
             saida.append(_painel_analogico(
                 registro, painel, por_id, escalas, lado, filtro,
@@ -149,19 +166,49 @@ def montar(registro: Record, *, de: float | None = None, ate: float | None = Non
         # `plot/imas.py`. `None` quando não há pré-falta com que calibrar.
         "inicio_da_perturbacao": _instante(registro,
                                            imas.inicio_da_perturbacao(registro)),
+        # A frequência NOMINAL do registro. A tela escreve `60 Hz` em alguns
+        # rótulos, e num arquivo de 50 Hz esses rótulos estariam errados.
+        "frequencia_hz": float(registro.line_frequency),
+        # Os canais que o arranjo padrão NÃO desenhou por estarem sem sinal.
+        # Vão para a tela porque esconder tem que ser visível e reversível: um
+        # trafo energizado por um lado só tem a outra trinca em zero
+        # legitimamente, e esse zero é informação. Ver `analysis/presenca.py`.
+        "sem_sinal": _sem_sinal(registro, saida),
         "paineis": saida,
         # Tudo que se PODE acrescentar, para a tela montar a busca sem precisar
         # de outra chamada. O nome de cada sinal nasce aqui, no Python, porque
         # é identidade: o mesmo nome tem que valer na legenda, na tabelinha e
         # no relatório. Ver `plot/catalogo.py`.
-        "catalogo": [{"id": x.id, "nome": x.nome, "unidade": x.unidade,
+        "catalogo": [{"id": x.id, "nome": x.nome,
+                      # O que o botão do filtro faz com ESTE sinal: o id que
+                      # o gráfico desenha no lugar dele. Vem calculado daqui
+                      # para a tela poder marcar a caixinha na coluna em que o
+                      # sinal realmente está e escrever o nome que a legenda
+                      # escreve — sem repetir a conta no JavaScript, que é
+                      # como as duas divergiriam. Ver `catalogo.efetivo`.
+                      #
+                      # Um por MEDIDA, porque a medida é de cada painel: num
+                      # gráfico em RMS o canal `IAW` desenha `IAW · 60Hz RMS`,
+                      # e a lista daquele gráfico tem que dizer isso.
+                      "efetivo": {m: catalogo.efetivo(x.id, m, filtro, por_id).id
+                                  for m in sinais.MEDIDAS},
+                      "unidade": x.unidade,
                       "unidade_mostrada": x.unidade_mostrada,
                       "familia": x.familia, "grandeza": x.grandeza,
                       "descricao": x.descricao, "origem": x.origem,
                       "fundamental": x.fundamental,
                       "fundamental_origem": x.fundamental_origem,
                       "canal": x.canal,
-                      "grandeza_do_canal": x.grandeza_do_canal}
+                      "grandeza_do_canal": x.grandeza_do_canal,
+                      "sem_sinal": bool(x.sem_sinal),
+                      # A LINHA e o BLOCO: é com estes três que a tela monta a
+                      # matriz de canais × contas e os blocos dela, em vez de
+                      # uma lista de cento e vinte nomes. Ver `plot/catalogo`.
+                      "linha": x.linha, "grupo": x.grupo, "coluna": x.coluna,
+                      "bloco": x.bloco, "motivo": x.motivo, "nota": x.nota,
+                      # Só a componente simétrica traz isto: é o único sinal
+                      # cuja origem é palpite, e o único que a tela corrige.
+                      "conjunto": x.conjunto}
                      for x in disponiveis],
         # Os digitais do REGISTRO — a lista inteira, para a busca. Quais estão
         # na tela é assunto de cada painel.
@@ -206,10 +253,17 @@ def _painel_analogico(registro: Record, painel, por_id: dict, escalas: dict,
     a tela tem dois lados e o terceiro seria desenhado numa escala que não
     está escrita em lugar nenhum.
     """
+    # Dois pedidos que os botões resolvem no MESMO sinal são uma curva só, e
+    # desenhá-la duas vezes daria dois traços de cores diferentes exatamente em
+    # cima um do outro — com duas entradas na legenda e duas linhas na
+    # tabelinha do cursor, dizendo o mesmo número. Acontece de verdade: com o
+    # filtro aceso, `IAW` e `IAW · 60Hz` são o mesmo traço.
     pedidos = []
+    desenhados = set()
     for identidade in painel.sinais:
         alvo = catalogo.efetivo(identidade, painel.medida, filtro, por_id)
-        if alvo is not None:
+        if alvo is not None and alvo.id not in desenhados:
+            desenhados.add(alvo.id)
             pedidos.append((identidade, alvo))
 
     unidade_esq = pedidos[0][1].unidade if pedidos else ""
@@ -290,12 +344,16 @@ def _painel_analogico(registro: Record, painel, por_id: dict, escalas: dict,
             # O nome do ARQUIVO, quando há canal por trás; e o nome NOSSO. Os
             # dois aparecem na tela, para ficar claro o que é qual.
             "nome": canal.name if canal is not None else "",
-            # O nome NOSSO: para um canal do IED é a fundamental que
-            # vinculamos (`IA`); para uma conta nossa é o nome dela
-            # (`IA RMS`, `3I0`). Vazio quando não reconhecemos o canal — o
-            # OscLab não batiza o que não conseguiu identificar.
-            "sinal": (alvo.fundamental if alvo.familia == "canal" else alvo.nome),
-            "padrao": (alvo.fundamental if alvo.familia == "canal" else alvo.nome),
+            # O nome do SINAL: o do canal quando é o canal cru (`IAW`), e o
+            # do canal mais a conta quando algum botão pegou (`IAW · 60Hz`).
+            # Componente de sequência traz o próprio (`3I0 [1]`).
+            #
+            # Havia um `padrao` ao lado, com o nome NOSSO (`IA`) — a legenda
+            # escrevia os dois, o do arquivo e o nosso. Desde que o nome do
+            # sinal passou a ser o do arquivo, os dois campos carregavam a
+            # mesma palavra, e dois campos com o mesmo valor é o começo de dois
+            # campos com valores diferentes.
+            "sinal": alvo.nome,
             "descricao": alvo.descricao,
             "indice": canal.index if canal is not None else None,
             "fase": fase,
@@ -331,6 +389,8 @@ def _painel_analogico(registro: Record, painel, por_id: dict, escalas: dict,
         "casas": escala.casas_decimais(intervalo),
         "eixo_dir": eixo_dir,
         "avisos": avisos,
+        # De que canais do arquivo saiu o que está aqui. Ver `_rodape`.
+        "rodape": _rodape(registro, pedidos),
         "sinais": sinais_json,
     }
 
@@ -347,17 +407,178 @@ def _medida_aplicavel(painel, por_id: dict) -> bool:
     Painel VAZIO é o único caso em que ele continua solto mesmo sem ninguém
     para mandar: ali ainda não há contradição nenhuma, e travar um controle
     antes de haver conteúdo é dizer "não pode" sem ter por quê.
+
+    Canal CONTÍNUO também não conta. Um painel só com a tensão da bateria não
+    tem eficaz nenhum para mostrar — o catálogo nem oferece a variante —, e o
+    botão aceso prometeria uma troca que não vai acontecer.
     """
     if not painel.sinais:
         return True
-    return any(identidade in por_id and por_id[identidade].familia == "canal"
-               for identidade in painel.sinais)
+    for identidade in painel.sinais:
+        alvo = por_id.get(identidade)
+        if alvo is None or alvo.familia != "canal":
+            continue
+        if any(f"v{alvo.canal}:{g}" in por_id for g in ("rms", "fundamental")):
+            return True
+    return False
 
 
 def _instantes(tempo, amostras, colunas: int) -> list[float]:
     """Os instantes de uma lista de amostras, afinada por coluna de pixel."""
     return [round(float(tempo[k]), 9)
             for k in imas.afinar(amostras, 0, tempo.size, colunas)]
+
+
+#: O fecho do rodapé, quando o painel tem componente simétrica. Uma vez, no
+#: fim — e não em cada linha, que era o molde `IA + IB + IC` da primeira
+#: versão. Aquele molde mentia duas vezes: o `+` entre eficazes sugere soma de
+#: módulos (três fases de 400 A somariam 1200 A, quando o 3I0 verdadeiro é
+#: zero), e para `I1` e `I2` a conta nem é soma — exige girar duas fases de
+#: 120°, que é multiplicar por complexo.
+NOTA_DAS_COMPONENTES = ("componentes simétricas: módulo do fasor de um ciclo, "
+                        "em eficaz")
+
+#: O fecho do rodapé quando o painel tem resíduo. Vem separado da nota das
+#: componentes, e só quando há resíduo: dizer "módulo do fasor de um ciclo"
+#: embaixo de uma senoide somada no tempo seria descrever a conta errada, e é
+#: justamente a diferença entre as duas que faz o resíduo existir.
+#:
+#: O `{nomes}` é preenchido com o que está NO PAINEL — `IN`, `VN`, ou os dois.
+#: Citar o que não está na tela cobraria do leitor a decisão de descobrir qual
+#: dos dois é o dele.
+MOLDE_DO_RESIDUO = ("{nomes}: soma das três fases amostra a amostra — "
+                    "leva a DC e os harmônicos")
+
+#: O mesmo, para o resíduo que está na tela FILTRADO — `IN G1 · 60Hz` com o
+#: filtro aceso, ou o `IN G1` de um registro que o relé já gravou filtrado.
+#: Dizer "leva a DC e os harmônicos" embaixo dele seria descrever o que o
+#: filtro acabou de tirar.
+MOLDE_DO_RESIDUO_FILTRADO = ("{nomes}: soma das três fases, só a componente "
+                             "de {f} Hz")
+
+
+def nota_do_residuo(nomes, filtrado: bool = False,
+                    frequencia: float = sinais.FREQUENCIA_PADRAO) -> str:
+    """A nota do rodapé para os resíduos presentes no painel."""
+    juntos = ", ".join(sorted(nomes))
+    if filtrado:
+        return MOLDE_DO_RESIDUO_FILTRADO.format(
+            nomes=juntos, f=sinais.frequencia_no_nome(frequencia))
+    return MOLDE_DO_RESIDUO.format(nomes=juntos)
+
+
+def _rodape(registro: Record, pedidos: list,
+            sempre_filtrado: bool = False) -> list[str]:
+    """De que canais do arquivo saiu o que está neste painel.
+
+    `sempre_filtrado` é para o diagrama fasorial: lá tudo é fasor de 60 Hz —
+    não há onda bruta a desenhar —, então a nota do resíduo é a do filtrado
+    qualquer que seja a coluna em que o sinal foi pedido.
+
+    É a contrapartida do `G1`. O nome do grupo não depende de fabricante
+    nenhum — e é justamente por não depender que ele não DIZ nada sozinho. Esta
+    linha é onde o programa responde "`G1` é qual?", citando os nomes do
+    arquivo entre aspas: sem as aspas, um `TC BUC 69kV:I A` no meio de uma
+    lista com espaços e dois-pontos vira sopa, e um `J1 -IA` parece subtração.
+
+Aparece **só** quando o painel tem algo que saiu de uma trinca:
+    componente simétrica (`3I0 G1`, `I1 G1`) ou resíduo (`IN G1`, `VN G2`).
+    São as únicas coisas na tela sem nome de arquivo a herdar — saem de TRÊS
+    canais —, e por isso as únicas que precisam citar o grupo. Num painel só
+    com `IAW`, `IBW` e `ICW` a linha repetiria o que a legenda já diz, e o
+    grupo deles se pergunta no editor de grupos ou no catálogo.
+
+    E só os grupos cujo CALCULADO está na tela: um painel com `3I0 G1` e os
+    canais de `G2` cita `G1`, não os dois. O canal não precisa de tradução; a
+    conta precisa.
+
+    A linha de origem é a mesma para os dois, porque os três canais que entram
+    na conta são os mesmos. O que muda é a nota do fim, que diz QUE conta foi
+    feita — e são contas diferentes.
+    """
+    achados = conjuntos.de_registro(registro)
+    nomes = {c.index: c.name for c in registro.analog_channels}
+
+    posicoes: list[int] = []
+    tem_componente = False
+    #: `(nome, filtrado)` de cada resíduo na tela. A COLUNA do sinal diz se
+    #: ele está filtrado: num `.CEV` o `IN G1` cru já mora em `filtrado.onda`.
+    #: Par, e não dicionário: `IN G1` e `IN G1 · 60Hz` no mesmo painel são as
+    #: duas coisas ao mesmo tempo, e cada uma leva a sua nota.
+    residuos: set[tuple[str, bool]] = set()
+    for _identidade, alvo in pedidos:
+        if alvo.id.startswith("q"):
+            partes = alvo.id.split(":")
+            posicao = int(partes[0][1:])
+            if partes[1:2] == [catalogo.RESIDUAL]:
+                # `IN G1`, `VN G2` — o nome INTEIRO, que é o mesmo da legenda.
+                # Já foi só `IN`: com dois grupos no mesmo painel a nota dizia
+                # "IN: soma das três fases" sem dizer de quais três.
+                if 0 <= posicao < len(achados):
+                    trinca = achados[posicao]
+                    residuos.add((conjuntos.juntar(f"{trinca.grandeza}N",
+                                                   trinca.rotulo),
+                                  sempre_filtrado
+                                  or alvo.coluna.startswith("filtrado.")))
+            else:
+                tem_componente = True
+        else:
+            # Canal do arquivo não entra na conta das posições: ele já se
+            # apresenta pelo nome na legenda.
+            continue
+        if 0 <= posicao < len(achados) and posicao not in posicoes:
+            posicoes.append(posicao)
+
+    if not posicoes:
+        return []
+
+    linhas = []
+    for posicao in posicoes:
+        trinca = achados[posicao]
+        # **Só A, B e C.** É a lista dos canais que ENTRAM na conta, não a dos
+        # canais do conjunto: o residual (`TC BUC 69kV:3I0` no SIPROTEC, `IG`
+        # num SEL) pertence ao mesmo vão e está no mesmo painel, mas não entra
+        # em Fortescue. Citá-lo aqui prometeria que ele foi somado.
+        canais = ", ".join(f'"{nomes.get(i, i)}"' for i in trinca.abc)
+        # O nome do grupo abre a linha: é a etiqueta que aparece no catálogo,
+        # no editor de grupos e no nome dos sinais deste painel, e esta linha é
+        # o que a traduz para os canais do arquivo.
+        # Sem a palavra «de»: a linha é uma legenda, não uma frase, e o que
+        # se lê dela é `G1` e os três nomes. Pedido do usuário (out/2026).
+        linhas.append(f"{trinca.rotulo} — {canais}")
+    if linhas:
+        # Separados: o mesmo painel pode ter `IN G1` bruto e `VN G2 · 60Hz`.
+        for filtrado in (False, True):
+            quais = {n for n, f in residuos if f == filtrado}
+            if quais:
+                linhas.append(nota_do_residuo(quais, filtrado,
+                                              registro.line_frequency))
+        if tem_componente:
+            linhas.append(NOTA_DAS_COMPONENTES)
+    return linhas
+
+
+def _sem_sinal(registro: Record, paineis_montados: list[dict]) -> list[dict]:
+    """Os canais sem sinal que NÃO estão em nenhum gráfico agora.
+
+    É o que o aviso do cabeçalho conta. A lista tem que encolher quando o
+    usuário traz um deles de volta — senão o aviso ficaria repetindo que há
+    canais escondidos depois de eles já estarem na tela, e um aviso que não
+    acompanha o que se vê deixa de ser lido.
+
+    Vão com o id de catálogo e a unidade, que é tudo de que a tela precisa para
+    devolvê-los ao gráfico da unidade certa num clique.
+    """
+    mortos = conjuntos.canais_sem_sinal(registro)
+    if not mortos:
+        return []
+    na_tela = {s.get("indice") for p in paineis_montados
+               if p.get("tipo") == paineis.ANALOGICO
+               for s in p.get("sinais", ())}
+    return [{"id": f"c{c.index}:instantaneo", "nome": c.name,
+             "unidade": c.unit.strip()}
+            for c in registro.analog_channels
+            if c.index in mortos and c.index not in na_tela]
 
 
 def _instante(registro: Record, amostra: int | None) -> float | None:

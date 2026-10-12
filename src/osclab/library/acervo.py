@@ -58,7 +58,7 @@ import hashlib
 import json
 import shutil
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -66,11 +66,16 @@ from osclab import paths
 from osclab.formats import registry
 from osclab.formats.base import FormatError, Record
 
-#: O que faz parte de um registro COMTRADE. O resto é ignorado.
-EXTENSOES = {".cfg", ".cff", ".dat", ".hdr", ".inf"}
+#: O que faz parte de um registro. O resto é ignorado.
+EXTENSOES = {".cfg", ".cff", ".dat", ".hdr", ".inf", ".cev"}
 
-#: As que sozinhas já formam um registro.
-PRINCIPAIS = {".cfg", ".cff"}
+#: As que sozinhas já formam um registro — `.cev` entra aqui porque um relatório
+#: de evento da SEL é um arquivo só, e não um par como o COMTRADE clássico.
+#: A ordem importa: é a ordem em que o principal do grupo é escolhido.
+PRINCIPAIS = (".cff", ".cev", ".cfg")
+
+#: A única que sozinha NÃO forma um registro: `.cfg` precisa do `.dat`.
+PRECISA_DE_PAR = {".cfg": ".dat"}
 
 
 @dataclass(frozen=True)
@@ -78,9 +83,16 @@ class Item:
     """Um registro no acervo, com o resumo já calculado."""
 
     sha: str
+    #: Como o registro se chama NA TELA. É o nome do arquivo, até alguém
+    #: renomeá-lo aqui dentro — ver `apelido`.
     nome: str
-    arquivos: tuple[str, ...]
-    adicionado_em: str
+    #: Como ele se chama no DISCO. Os dois são iguais enquanto ninguém
+    #: renomeia, e a tela mostra este quando são diferentes: o arquivo na pasta
+    #: continua com o nome que o relé deu, e quem for procurá-lo lá precisa
+    #: saber disso.
+    nome_do_arquivo: str = ""
+    arquivos: tuple[str, ...] = ()
+    adicionado_em: str = ""
 
     formato: str = ""
     estacao: str = ""
@@ -93,7 +105,19 @@ class Item:
     frequencia: float = 60.0
     inicio: str = ""
     disparo: str = ""
+    #: O que o LEITOR avisa: o que ele fez, deixou de fora ou nao conseguiu
+    #: confirmar. E' so' isto que a tela marca com triangulo.
     avisos: tuple[str, ...] = ()
+    #: O que o RELE' concluiu sozinho e gravou no arquivo. Informacao, nao
+    #: aviso -- ver `formats/base.py`.
+    relatos: tuple[str, ...] = ()
+    #: O que o arquivo diz do RELOGIO: em que fuso estao os carimbos, qual e'
+    #: a hora local da instalacao e quanto o rele' confia no proprio relogio.
+    #:
+    #: Fica no cabecalho ao lado do disparo porque a hora sozinha NAO se
+    #: interpreta: no parque, o SEL-421 carimba em UTC e o SIPROTEC carimba em
+    #: hora local, e o mesmo curto aparece com quatro horas de diferenca.
+    relogio: str = ""
 
     def como_dicionario(self) -> dict:
         return asdict(self)
@@ -172,9 +196,15 @@ def _sha_do_grupo(arquivos: dict[str, bytes]) -> str:
 
 
 def _principal(pasta: Path) -> Path | None:
-    for arquivo in sorted(pasta.iterdir()):
-        if arquivo.suffix.lower() in PRINCIPAIS:
-            return arquivo
+    """O arquivo da pasta que abre o registro, na precedencia de `PRINCIPAIS`.
+
+    A ordem e' a de `PRINCIPAIS`, e nao a da pasta: se um dia caírem um `.cff` e
+    um `.cfg` no mesmo lugar, o que manda e' o formato, nao o alfabeto.
+    """
+    for extensao in PRINCIPAIS:
+        for arquivo in sorted(pasta.iterdir()):
+            if arquivo.suffix.lower() == extensao:
+                return arquivo
     return None
 
 
@@ -182,6 +212,7 @@ def _resumir(sha: str, nome: str, arquivos: list[str], registro: Record) -> Item
     return Item(
         sha=sha,
         nome=nome,
+        nome_do_arquivo=nome,
         arquivos=tuple(sorted(arquivos)),
         adicionado_em=datetime.now().isoformat(timespec="seconds"),
         formato=registro.format_name,
@@ -194,8 +225,11 @@ def _resumir(sha: str, nome: str, arquivos: list[str], registro: Record) -> Item
         amostras_por_ciclo=round(registro.samples_per_cycle, 2),
         frequencia=registro.line_frequency,
         inicio=registro.start_time.isoformat(sep=" ") if registro.start_time else "",
-        disparo=registro.trigger_time.isoformat(sep=" ") if registro.trigger_time else "",
+        disparo=(registro.trigger_time.isoformat(sep=" ")
+                 if registro.trigger_time else ""),
         avisos=tuple(registro.notes),
+        relatos=tuple(registro.relatos),
+        relogio=registro.time_quality,
     )
 
 
@@ -277,8 +311,8 @@ def guardar(enviados: Sequence[tuple[str, bytes]]) -> Resultado:
     })
     if ignorados:
         resultado.problemas.append(
-            f"Ignorei arquivos {', '.join(ignorados)} — nao fazem parte do "
-            f"COMTRADE."
+            f"Ignorei arquivos {', '.join(ignorados)} — nao sao formato "
+            f"de oscilografia que eu leia."
         )
 
     for base, por_extensao in sorted(grupos.items()):
@@ -288,16 +322,18 @@ def guardar(enviados: Sequence[tuple[str, bytes]]) -> Resultado:
 
         arquivos = {n: conteudos[n] for n in uteis.values()}
 
-        principal = next((uteis[e] for e in (".cff", ".cfg") if e in uteis), None)
+        principal = next((uteis[e] for e in PRINCIPAIS if e in uteis), None)
         se_falta = None
         if principal is None:
             se_falta = (f"'{base}': guardei o .dat e estou esperando o .cfg. "
                         f"Sem ele nao da' para saber o que cada numero significa "
                         f"— mande o .cfg e o par se forma sozinho.")
-        elif ".cff" not in uteis and ".dat" not in uteis:
-            se_falta = (f"'{base}': guardei o .cfg e estou esperando o .dat, que "
-                        f"e' onde estao as amostras. Mande o .dat e o par se "
-                        f"forma sozinho.")
+        else:
+            par = PRECISA_DE_PAR.get(Path(principal).suffix.lower())
+            if par is not None and par not in uteis:
+                se_falta = (f"'{base}': guardei o .cfg e estou esperando o .dat, "
+                            f"que e' onde estao as amostras. Mande o .dat e o "
+                            f"par se forma sozinho.")
 
         if se_falta is not None:
             _guardar_na_antessala(arquivos)
@@ -351,7 +387,22 @@ def obter(sha: str) -> Item | None:
         return None
     dados["arquivos"] = tuple(dados.get("arquivos", ()))
     dados["avisos"] = tuple(dados.get("avisos", ()))
-    return Item(**dados)
+    # `relatos` e' mais novo que alguns `meta.json` ja' gravados. O cache pode
+    # ser refeito a qualquer momento, mas nao pode QUEBRAR quem tem um antigo.
+    dados["relatos"] = tuple(dados.get("relatos", ()))
+    dados["relogio"] = dados.get("relogio", "")
+    # Um `meta.json` gravado por uma versao MAIS NOVA pode trazer campo que
+    # esta versao nao conhece. Ignorar o que sobra e' melhor que estourar: o
+    # cache e' refazivel, o acervo do usuario nao.
+    conhecidos = {c.name for c in fields(Item)}
+    item = Item(**{k: v for k, v in dados.items() if k in conhecidos})
+    # O `meta.json` é CACHE e pode ser refeito a qualquer momento; o apelido é
+    # decisão humana e vive num arquivo só dele. Por isso ele é aplicado aqui,
+    # na leitura, e não gravado no resumo.
+    do_arquivo = item.nome_do_arquivo or item.nome
+    escolhido = apelido(sha)
+    return replace(item, nome=escolhido or do_arquivo,
+                   nome_do_arquivo=do_arquivo)
 
 
 def listar() -> list[Item]:
@@ -363,6 +414,11 @@ def listar() -> list[Item]:
             if item is not None:
                 itens.append(item)
     return sorted(itens, key=lambda i: i.adicionado_em, reverse=True)
+
+
+def pasta_do_registro(sha: str) -> Path:
+    """A pasta deste registro no acervo, com os arquivos como entraram."""
+    return _raiz() / sha
 
 
 def caminho_principal(sha: str) -> Path | None:
@@ -449,13 +505,168 @@ def gravar_vinculos(sha: str, escolhas: dict) -> dict[int, str]:
     return atuais
 
 
+# ---------------------------------------------------------------------------
+# O apelido: como o registro se chama NA TELA
+# ---------------------------------------------------------------------------
+#
+# Todo fabricante exporta com o nome padrao dele, e
+# `UPC1 ALIMENTADOR 11SEL-451-521_09_202613_36_57_649_000` nao diz a ninguem
+# que evento e' aquele. Quem analisa quer chamar o registro de "curto na
+# SE Barra do Garcas, 19/01" -- e quer que esse nome esteja la' na proxima vez
+# que abrir, e no relatorio.
+#
+# **O arquivo no disco nao muda.** O acervo guarda os arquivos com o nome
+# original de proposito: e' assim que o leitor acha o `.dat` a partir do `.cfg`,
+# e e' assim que o registro continua sendo o que o rele' gravou. O apelido e'
+# uma camada por cima, num arquivo separado -- como os vinculos e as trincas,
+# e pelo mesmo motivo: `meta.json` e' cache, isto e' decisao humana.
+#
+# Quem quiser o arquivo COM o nome novo exporta (`web/server.py`), e ai' a
+# copia sai renomeada sem que o original seja tocado.
+
+APELIDO = "apelido.json"
+
+#: Teto do apelido. Nao e' limitacao de disco: um nome que nao cabe na barra do
+#: titulo deixa de ser nome e vira paragrafo.
+APELIDO_MAXIMO = 120
+
+
+def apelido(sha: str) -> str:
+    """Como o usuario chamou este registro, ou `""` se nao chamou de nada."""
+    arquivo = _raiz() / sha / APELIDO
+    if not arquivo.is_file():
+        return ""
+    try:
+        cru = json.loads(arquivo.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    return str((cru or {}).get("nome", "")).strip()[:APELIDO_MAXIMO]
+
+
+def gravar_apelido(sha: str, nome: str) -> str:
+    """Grava o apelido. Devolve o nome que ficou valendo.
+
+    Apelido vazio APAGA o apelido e devolve o nome do arquivo: e' assim que se
+    desfaz, sem precisar lembrar qual era o nome original.
+    """
+    item = obter(sha)
+    if item is None:
+        raise FormatError("Este registro nao esta' no acervo.")
+    # Uma linha so', e sem os caracteres que estragam nome de arquivo na
+    # exportacao -- o apelido vira nome de arquivo la'.
+    limpo = " ".join(str(nome or "").split())
+    for proibido in '\\/:*?"<>|':
+        limpo = limpo.replace(proibido, "-")
+    limpo = limpo.strip(" .")[:APELIDO_MAXIMO]
+
+    arquivo = _raiz() / sha / APELIDO
+    if limpo and limpo != item.nome_do_arquivo:
+        arquivo.write_text(json.dumps({"nome": limpo}, ensure_ascii=False,
+                                      indent=2), encoding="utf-8")
+        return limpo
+    if arquivo.is_file():
+        arquivo.unlink()
+    return item.nome_do_arquivo
+
+
+# ---------------------------------------------------------------------------
+# As trincas: quais tres canais formam um conjunto trifasico
+# ---------------------------------------------------------------------------
+#
+# Quais tres canais formam uma trinca sai do NOME deles, e nome de canal cada
+# fabricante escreve como quer. Quando a deducao erra, 3I0, I1, I2 e a
+# localizacao de falta erram junto -- na unidade certa, na ordem de grandeza
+# certa, sem nada na tela denunciando.
+#
+# A chave e' o NOME do conjunto (`I*W`, `CURRENT I*`), e nao a posicao dele: a
+# posicao e' o `q{i}` que os arranjos salvos usam, e amarrar a correcao a ela
+# faria uma correcao mudar o alvo de outra.
+
+TRINCAS = "trincas.json"
+
+
+def trincas(sha: str) -> dict[str, dict[str, int]]:
+    """As trincas que o usuario corrigiu neste registro. Vazio e' o normal."""
+    arquivo = _raiz() / sha / TRINCAS
+    if not arquivo.is_file():
+        return {}
+    try:
+        cru = json.loads(arquivo.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    saida: dict[str, dict[str, int]] = {}
+    for chave, valor in (cru or {}).items():
+        limpo = _fases_validas(valor)
+        if limpo:
+            saida[str(chave)] = limpo
+    return saida
+
+
+def _fases_validas(valor) -> dict[str, int]:
+    """`{"A": 3, "B": 4, "C": 5}` a partir do que a tela mandou.
+
+    A tela manda texto, e o servidor nao confia nela: fase que nao e' A, B ou C
+    some, e indice que nao e' inteiro tambem.
+    """
+    if not isinstance(valor, dict):
+        return {}
+    saida: dict[str, int] = {}
+    for fase in ("A", "B", "C"):
+        try:
+            indice = int(valor[fase])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if indice >= 0:
+            saida[fase] = indice
+    return saida
+
+
+def gravar_trincas(sha: str, escolhas: dict) -> dict[str, dict[str, int]]:
+    """Grava as correcoes de trinca. Devolve o que ficou gravado.
+
+    Escolha vazia para um conjunto APAGA a correcao dele, e a deducao volta a
+    valer. E' como se desfaz, e por isso nao ha' botao de apagar em separado.
+    """
+    if obter(sha) is None:
+        raise FormatError("Este registro nao esta' no acervo.")
+    atuais = trincas(sha)
+    for chave, valor in (escolhas or {}).items():
+        limpo = _fases_validas(valor)
+        if limpo:
+            atuais[str(chave)] = limpo
+        else:
+            atuais.pop(str(chave), None)
+
+    arquivo = _raiz() / sha / TRINCAS
+    if atuais:
+        arquivo.write_text(json.dumps(dict(sorted(atuais.items())),
+                                      ensure_ascii=False, indent=2),
+                           encoding="utf-8")
+    elif arquivo.is_file():
+        arquivo.unlink()
+    return atuais
+
+
 def _com_vinculos(registro: Record, sha: str) -> Record:
-    """Aplica as correcoes do usuario aos canais do registro."""
+    """Aplica ao registro a correcao de fase que o usuario gravou.
+
+    Mora aqui porque e' decisao humana gravada ao lado do registro, e precisa
+    chegar ao `Record` antes de qualquer conta -- senao metade do programa
+    veria a correcao e a outra metade nao.
+
+    Ja houve uma segunda correcao aqui: o apelido que o usuario dava a cada
+    trinca (`alta`, `baixa`), gravado em `rotulos.json`. Ela existia para
+    CONSERTAR um palpite do programa, de quando a tela dizia qual era a alta.
+    O programa nao palpita mais -- diz `[1]`, `[2]` e mostra de que canais
+    aquilo saiu --, entao nao ha' o que consertar. O que sobraria era anotacao
+    pessoal, que pertence ao relatorio e nao ao nome do canal.
+    """
+    registro.trincas_escolhidas = trincas(sha)
     escolhas = vinculos(sha)
     if not escolhas:
         return registro
     registro.analog_channels = tuple(
-        replace(c, phase_escolhida=escolhas[c.index]) if c.index in escolhas else c
+        replace(c, phase_escolhida=escolhas.get(c.index, c.phase_escolhida))
         for c in registro.analog_channels
     )
     return registro

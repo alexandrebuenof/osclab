@@ -75,15 +75,18 @@ VARIACAO_DE_REGIME = 0.01
 CICLOS_PARADOS_MINIMOS = 2
 
 
-def _distorcoes_em_regime(sinal: np.ndarray, por_ciclo: int) -> np.ndarray:
+def _distorcoes_em_regime(sinal: np.ndarray, por_ciclo: float) -> np.ndarray:
     """A distorção do canal, só nas amostras em que a amplitude está parada."""
     f = envoltoria.fundamental(sinal, por_ciclo)
     r = envoltoria.rms(sinal, por_ciclo)
 
     parado = np.zeros(f.shape, dtype=bool)
-    if f.size > por_ciclo:
-        anterior, agora = f[:-por_ciclo], f[por_ciclo:]
-        parado[por_ciclo:] = np.abs(agora - anterior) <= VARIACAO_DE_REGIME * agora
+    # O passo de "um ciclo atrás" é de ÍNDICE, então é inteiro; a janela de
+    # medida é que é de um ciclo de tempo. Ver `fasor.pesos_do_ciclo`.
+    passo = int(round(por_ciclo))
+    if passo > 0 and f.size > passo:
+        anterior, agora = f[:-passo], f[passo:]
+        parado[passo:] = np.abs(agora - anterior) <= VARIACAO_DE_REGIME * agora
 
     # A mesma guarda de `fasor.MINIMO_FUNDAMENTAL`: percentual DA fundamental só
     # significa algo quando há fundamental. Ela também exclui, de graça, os
@@ -113,7 +116,7 @@ def diagnosticar(registro: Record) -> tuple[Filtering, FilteringSource]:
     medidas = []
     por_ciclo = 0
     for trecho in registro.trechos:
-        n = fasor.amostras_por_ciclo(trecho.taxa_hz, registro.line_frequency)
+        n = fasor.ciclo_em_amostras(trecho.taxa_hz, registro.line_frequency)
         if n < fasor.MINIMO_POR_CICLO:
             continue
         por_ciclo = max(por_ciclo, n)
