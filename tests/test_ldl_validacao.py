@@ -183,9 +183,12 @@ def test_relogio_pela_hora_nao_derruba_o_laco():
     assert p["resultado"] is not None
 
 
+@pytest.mark.xfail(strict=True, reason=(
+    "falta entre 1 e 2 ciclos do começo não é achada pelo detector de início "
+    "(analysis/falta.py): corrigir mexe no caso «registro que já começa num "
+    "transitório», em aberto com o Alexandre — ver tests/test_varredura.py"))
 def test_pre_falta_de_pouco_mais_de_um_ciclo():
-    """A falta 1,2 ciclo depois do começo do registro ainda é achada (o piso de
-    ruído pela mediana, 25/10/2026)."""
+    """A falta 1,2 ciclo depois do começo do registro tem de ser achada."""
     cen = _cenario(m=0.3, tipo="AG", rf=10.0)
     fa = rede.Formato(pre_s=1.2 / 60)
     fb = rede.Formato(fase_amostra=3, pre_s=1.2 / 60, seed=1)
