@@ -1236,7 +1236,17 @@ def montar(registro: Record, painel, ajustes_do_registro: dict,
     else:
         entradas = {z.nome: None for z in zonas}
 
-    if zonas and all(z.alcance.origem == "sugerido" for z in zonas):
+    # A distância DESLIGADA no relé (`E21MP := N` …, o 411L do parque que só
+    # faz 87L) não é «o arquivo não traz»: é o relé dizendo que não tem zona.
+    # O plano continua — a trajetória vale —, e a tela diz o porquê certo.
+    if (zonas and all(z.alcance.origem == "sugerido" for z in zonas)
+            and forma_lida["lida"] and not forma_lida["mho"] and not forma_lida["quad"]):
+        avisos.append(_aviso(
+            "distância desligada no relé",
+            f"O relé não tem zona de distância habilitada ({forma_lida['variaveis']}). "
+            "As zonas desenhadas são o padrão do OscLab sobre os parâmetros da "
+            "linha, só para situar a falta; o relé não as usou."))
+    elif zonas and all(z.alcance.origem == "sugerido" for z in zonas):
         avisos.append(_aviso(
             "zonas sugeridas, nenhuma do relé",
             "Nenhuma destas zonas saiu do relé: são o padrão do OscLab sobre "

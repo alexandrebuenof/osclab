@@ -858,3 +858,16 @@ def test_com_uma_tensao_e_varias_correntes_o_nome_correspondente_decide():
                analog=np.ones((9, 10)), time=np.arange(10) / 1200.0)
     corrente, tensao = impedancia._par_unico(r)
     assert corrente is not None and corrente.abc == (0, 1, 2) and tensao.abc == (6, 7, 8)
+
+
+def test_distancia_desligada_no_rele_e_dita_assim():
+    """O 411L do parque que só faz 87L escreve `E21MP := N` …: não é «o
+    arquivo não traz», é o relé sem zona. O plano sai do mesmo jeito."""
+    r = _registro(lado_primario=False)
+    ajustes = {"ajustes": [["Z1MAG", "2.08"], ["Z1ANG", "75.96"], ["Z0MAG", "6.23"],
+                           ["Z0ANG", "71.96"], ["E21MG", "N"], ["E21XG", "N"]]}
+    pacote = impedancia.montar(r, _PainelFalso(), ajustes, "secundario", 0,
+                               r.analog.shape[1] - 1)
+    assert pacote["pontos"]
+    assert any("desligada no relé" in a for a in _avisos(pacote))
+    assert not any("nenhuma do relé" in a for a in _avisos(pacote))

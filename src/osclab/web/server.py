@@ -812,7 +812,8 @@ def _ajustes_do_registro(sha: str, registro, arranjo) -> dict | None:
     resto da tela isto seria um arquivo aberto a cada arrasto, sem nenhum
     efeito no que aparece.
     """
-    if not arranjo or not any(p.tipo in (paineis.IMPEDANCIA, paineis.DIFERENCIAL)
+    if not arranjo or not any(p.tipo in (paineis.IMPEDANCIA, paineis.DIFERENCIAL,
+                                         paineis.ALFA)
                               for p in arranjo):
         return None
     item = acervo.obter(sha)

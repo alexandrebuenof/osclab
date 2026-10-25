@@ -631,8 +631,11 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
           // da característica. Mudam o `k` e a decisão, que são conta do
           // servidor. Ver `plot/alfa.py`.
           vista: x.vista || "local",
-          r87: x.r87 ?? 6,
-          ang87: x.ang87 ?? 195,
+          // O que o servidor devolveu (lido do relé, digitado ou o típico).
+          // Sem valor, vai `null` e o servidor decide — um 6 posto aqui se
+          // confundiria com um 6 digitado.
+          r87: x.r87 ?? null,
+          ang87: x.ang87 ?? null,
           // Qual trinca é o local e qual é o remoto (`G1`, `G2`). Vazio é
           // «a ordem do arquivo». Do servidor ela volta como objeto.
           local: typeof x.local === "string" ? x.local : (x.local && x.local.rotulo) || "",
@@ -1491,8 +1494,9 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
                    // Só no plano complexo: a referência nasce FIXA (é o que
                    // mostra o desvio de frequência) e o desenho em pu.
                    fixa: true, unidade: "pu",
-                   // Só no plano alfa: visto do local, com os típicos da SEL.
-                   vista: "local", r87: 6, ang87: 195,
+                   // Só no plano alfa: visto do local; a região sai do relé
+                   // (ou do típico, quando o arquivo não traz) — o servidor diz.
+                   vista: "local", r87: null, ang87: null,
                    // Só no diferencial: o digitado e os suspeitos aceitos.
                    ajustes87: {} });
     carregar();

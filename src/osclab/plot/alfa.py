@@ -81,10 +81,45 @@ CORES = {"A": "--fase-a", "B": "--fase-b", "C": "--fase-c",
 #: Até três por painel: mais que isso vira um novelo no plano.
 MAXIMO_DE_SINAIS = 3
 
-#: Os ajustes que nascem com o painel: os típicos da SEL. NÃO são lidos do
-#: arquivo — o rodapé diz isso.
+#: Os típicos da SEL, para quando o arquivo não traz o ajuste — um relé de
+#: outro fabricante, ou um COMTRADE sem `.HDR`. A tela diz a origem.
 R87_PADRAO = 6.0
 ANG87_PADRAO = 195.0
+
+#: Onde o relé escreve a região: o 411L por elemento — o de FASE é o que vale
+#: para as correntes de fase do plano —, o 311L num par só. Os valores do
+#: parque (25/10/2026) são 6 e 195 nos dois, com o mesmo significado do
+#: nosso raio e da nossa abertura: o plano generalizado do 411L (|k| ≤ 1) é
+#: o mesmo setor dobrado sobre si, porque a coroa de 1/R a R é simétrica.
+NOMES_DO_RAIO = ("87LPR", "87LR")
+NOMES_DO_ANGULO = ("87LPA", "87LANG")
+
+
+def ajuste_lido(ajustes: dict | None, nomes) -> tuple[float, str] | None:
+    """`(valor, nome)` do primeiro ajuste que existir e for número."""
+    pares = {str(n).strip().upper(): str(v).strip()
+             for n, v, *_ in ((ajustes or {}).get("ajustes") or ())}
+    for nome in nomes:
+        try:
+            return float(pares[nome].replace(",", ".")), nome
+        except (KeyError, ValueError):
+            continue
+    return None
+
+
+def _valor_e_origem(do_painel, lido, padrao):
+    """O que vale e por quê: o digitado manda; depois o lido; depois o típico.
+
+    A tela devolve o valor que recebeu, então «digitado» é o que DIFERE do
+    lido (ou do típico, sem lido) — igual a ele, a origem continua a dele.
+    """
+    if do_painel is not None:
+        referencia = lido[0] if lido else padrao
+        if abs(float(do_painel) - referencia) > 1e-9:
+            return float(do_painel), "digitado", ""
+    if lido:
+        return lido[0], "lido", lido[1]
+    return padrao, "padrão", ""
 
 #: Abaixo de 5 % da nominal do TC do denominador não há ponto: a razão de
 #: dois ruídos não é medida. É a ordem do limiar da SEL para o 87L.
@@ -235,14 +270,17 @@ def _refino(base: Record, indices: np.ndarray, loc: dict, rem: dict) -> dict:
             "giro": complex(np.exp(1j * correcao))}
 
 
-def montar(registro: Record, painel, outros: list | None = None) -> dict:
+def montar(registro: Record, painel, outros: list | None = None,
+           ajustes: dict | None = None) -> dict:
     """O pacote de um plano alfa: trincas, ajustes e a trajetória de cada sinal.
 
     `outros` é `[(letra, registro, deslocamento)]` — os outros registros da
     aba, com o deslocamento que `plot/alinhamento.deslocamento` deu.
     """
-    r87 = float(getattr(painel, "r87", R87_PADRAO) or R87_PADRAO)
-    ang87 = float(getattr(painel, "ang87", ANG87_PADRAO) or ANG87_PADRAO)
+    r87, r87_origem, r87_var = _valor_e_origem(
+        getattr(painel, "r87", None), ajuste_lido(ajustes, NOMES_DO_RAIO), R87_PADRAO)
+    ang87, ang87_origem, ang87_var = _valor_e_origem(
+        getattr(painel, "ang87", None), ajuste_lido(ajustes, NOMES_DO_ANGULO), ANG87_PADRAO)
     vista = "remoto" if getattr(painel, "vista", "local") == "remoto" else "local"
     escolhidos = [s for s in (painel.sinais or ()) if s in SINAIS]
     escolhidos = list(dict.fromkeys(escolhidos))[:MAXIMO_DE_SINAIS]
@@ -257,6 +295,8 @@ def montar(registro: Record, painel, outros: list | None = None) -> dict:
         "vista": vista,
         "r87": r87,
         "ang87": ang87,
+        "r87_origem": r87_origem,
+        "ang87_origem": ang87_origem,
         "sinais": [{"id": s, "sinal": NOMES[s], "cor": CORES[s]}
                    for s in escolhidos],
         "local": None,
@@ -386,11 +426,17 @@ def montar(registro: Record, painel, outros: list | None = None) -> dict:
         f"remoto {pacote['remoto']['rotulo']} — {canais_de(remoto)}",
         f"1 pu: {base_l:.4g} A no local ({origem_l}) · {base_r:.4g} A no "
         f"remoto ({origem_r})",
-        f"87LR {r87:g} · 87LANG {ang87:g}° — os típicos da SEL, NÃO lidos do "
-        "arquivo; mude na engrenagem",
+        _rodape_da_regiao(r87, r87_origem, r87_var, ang87, ang87_origem, ang87_var),
         f"sem ponto onde a corrente do denominador fica abaixo de "
         f"{PISO_EM_PU:.0%} da nominal",
     ]
+    desligado = any(
+        str(n).strip().upper() == "E87L" and str(v).strip().upper().startswith("N")
+        for n, v, *_ in ((ajustes or {}).get("ajustes") or ()))
+    if desligado:
+        rodape.insert(0, "E87L := N — o diferencial de linha está DESLIGADO neste "
+                         "relé: a região desenhada é a do ajuste, mas o relé não "
+                         "a usou para decidir nada")
     if entre:
         if refino.get("aplicado"):
             rodape.insert(0, f"ângulo entre os dois registros refinado pela "
@@ -434,3 +480,16 @@ def montar(registro: Record, painel, outros: list | None = None) -> dict:
         "rodape": rodape,
     })
     return pacote
+
+
+def _rodape_da_regiao(r87, r_origem, r_var, ang87, a_origem, a_var) -> str:
+    """De onde saiu a região de restrição, sem depender do hover."""
+    def um(nome, valor, origem, variavel, sufixo=""):
+        if origem == "lido":
+            return f"{variavel} {valor:g}{sufixo} (do relé)"
+        if origem == "digitado":
+            return f"{nome} {valor:g}{sufixo} (digitado)"
+        return f"{nome} {valor:g}{sufixo} (típico da SEL — o arquivo não traz)"
+    return (um("raio", r87, r_origem, r_var) + " · "
+            + um("abertura", ang87, a_origem, a_var, "°")
+            + "; mude na engrenagem")

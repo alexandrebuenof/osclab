@@ -130,7 +130,7 @@ def montar(registro: Record, *, de: float | None = None, ate: float | None = Non
         elif painel.tipo == paineis.ALFA:
             # Também do registro inteiro, pela mesma razão do complexo: o
             # ponto anda até o cursor sem ida ao servidor. Ver `plot/alfa.py`.
-            saida.append(alfa_mod.montar(registro, painel, outros))
+            saida.append(alfa_mod.montar(registro, painel, outros, ajustes))
         elif painel.tipo == paineis.DIFERENCIAL:
             # Do registro inteiro, como o alfa, e com os ajustes do relé: o
             # gráfico só sai quando todos têm valor. Ver `plot/diferencial.py`.

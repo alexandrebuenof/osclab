@@ -166,7 +166,7 @@ def test_no_maximo_tres_sinais():
 def test_os_ajustes_da_tela_sao_peneirados():
     lido = paineis.de_json([{"id": "x", "tipo": "alfa", "r87": "abc",
                              "ang87": 999, "vista": "remoto"}])[0]
-    assert lido.r87 == 6.0
+    assert lido.r87 == 6.0      # número inválido vira o típico; ausente vira None
     assert lido.ang87 == 270.0
     assert lido.vista == "remoto"
 
@@ -183,3 +183,39 @@ def test_o_usuario_escolhe_qual_trinca_e_local_e_qual_e_remota():
     a = _no_instante(padrao, "A", 0.200)
     b = _no_instante(trocado, "A", 0.200)
     assert abs(b["modulo"] - 1.0 / a["modulo"]) < 1e-3
+
+
+def _montado_com(registro, painel, pares) -> dict:
+    ajustes = {"ajustes": [[n, v] for n, v in pares]}
+    return janela.montar(registro, colunas=200, layout=[painel], ajustes=ajustes)["paineis"][0]
+
+
+def test_a_regiao_sai_do_rele_quando_o_arquivo_traz():
+    """411L: `87LPR`/`87LPA` (o elemento de fase); 311L: `87LR`/`87LANG`."""
+    r = _registro(interna=False)
+    p = _montado_com(r, _plano(), [("87LPR", "4.00"), ("87LPA", "170")])
+    assert (p["r87"], p["ang87"]) == (4.0, 170.0)
+    assert p["r87_origem"] == p["ang87_origem"] == "lido"
+    assert any("87LPR 4 (do relé)" in linha for linha in p["rodape"])
+    p = _montado_com(r, _plano(), [("87LR", "5.0"), ("87LANG", "180")])
+    assert (p["r87"], p["ang87"], p["r87_origem"]) == (5.0, 180.0, "lido")
+
+
+def test_sem_ajuste_no_arquivo_vale_o_tipico_e_a_tela_diz():
+    """Um relé que nunca vimos: o plano sai do mesmo jeito, com o típico."""
+    p = _montado(_registro(interna=False), _plano())
+    assert (p["r87"], p["ang87"]) == (alfa.R87_PADRAO, alfa.ANG87_PADRAO)
+    assert p["r87_origem"] == "padrão"
+    assert any("arquivo não traz" in linha for linha in p["rodape"])
+
+
+def test_o_digitado_vence_o_lido():
+    r = _registro(interna=False)
+    p = _montado_com(r, _plano(r87=8.0), [("87LPR", "6.00"), ("87LPA", "195")])
+    assert p["r87"] == 8.0 and p["r87_origem"] == "digitado"
+    assert p["ang87_origem"] == "lido"
+
+
+def test_87l_desligado_no_rele_e_avisado():
+    p = _montado_com(_registro(interna=False), _plano(), [("E87L", "N"), ("87LPR", "6")])
+    assert "DESLIGADO" in p["rodape"][0]

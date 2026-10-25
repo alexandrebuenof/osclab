@@ -135,8 +135,8 @@ class Painel:
     vista: str = "local"
     local: str = ""
     remoto: str = ""
-    r87: float = 6.0
-    ang87: float = 195.0
+    r87: float | None = None
+    ang87: float | None = None
     #: Só no diferencial: o que o usuário digitou e os suspeitos que ele
     #: aceitou — `{"valores": {id: valor}, "aceitos": [id]}`. Vem ao servidor
     #: porque muda tudo o que ele calcula. Os lados 1 e 2 usam `local` e
@@ -310,9 +310,13 @@ def de_json(cru) -> list[Painel] | None:
         # Os dois ajustes do plano alfa, presos a faixas que um 87L aceita:
         # um raio abaixo de 1 inverteria a coroa, e um ângulo fora de
         # 90°…270° não é setor de bloqueio de ninguém.
-        r87 = _numero_entre(item.get("r87"), 6.0, 1.5, 20.0)
+        # SEM valor, `None`: aí vale o ajuste lido do relé, ou o típico. Um
+        # 6 posto aqui por padrão se confundiria com um 6 digitado.
+        r87 = (None if item.get("r87") is None
+               else _numero_entre(item.get("r87"), 6.0, 1.5, 20.0))
         from osclab.plot.diferencial import manuais_de as ajustes87_de
-        ang87 = _numero_entre(item.get("ang87"), 195.0, 90.0, 270.0)
+        ang87 = (None if item.get("ang87") is None
+                 else _numero_entre(item.get("ang87"), 195.0, 90.0, 270.0))
         saida.append(Painel(
             id=identidade,
             tipo=tipo,

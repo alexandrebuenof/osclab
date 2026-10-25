@@ -10,6 +10,18 @@ Conhece proteção de sistemas elétricos a fundo; está aprendendo programaçã
 Git agora. Parque de IEDs da empresa: SEL, Siemens, GE, ABB, Schneider, Ingeteam
 e NOJA.
 
+## O leitor é universal (decidido em 25/10/2026)
+
+O OscLab tem que servir a **qualquer relé**, inclusive um modelo que nunca
+abrimos — o de outra distribuidora, o de um fabricante que nunca vimos.
+Abrir, desenhar e analisar não dependem de reconhecer o fabricante. O que o
+arquivo não disser (ajuste, relação, fase, trinca) vira **campo para
+digitar**, nunca barreira. Os relés do parque da Energisa MT ficam mais
+otimizados — mais coisa lida sozinha —, mas nada específico deles pode virar
+condição para uma função existir. Ao escrever ou revisar código: todo ajuste
+lido por nome de fabricante é um ATALHO com o caminho manual ao lado, e a
+tela diz a origem (lido, digitado, sugerido).
+
 ## Regras de trabalho — valem sempre
 
 1. **Não escrever código sem pedido explícito.** Discutir, analisar e propor
