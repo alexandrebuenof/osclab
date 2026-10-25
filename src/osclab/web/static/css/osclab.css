@@ -62,9 +62,9 @@
   --energia-harm: #8a72d8;
   --energia-dc: #cc6a7a;
 
-  --calculado-1: #b07ae0;
-  --calculado-2: #e86aa8;
-  --calculado-3: #8aa0a6;
+  --calculado-1: #c499ff;
+  --calculado-2: #ff70ac;
+  --calculado-3: #7c1fff;
 
   /* As cores de SOBRA. Entram quando um gráfico tem mais sinais do que as
      nomeadas acima — e um gráfico nunca repete cor: duas curvas da mesma cor
@@ -73,11 +73,13 @@
 
      Escolhidas com `tools/paleta.py`, não a olho: ΔE2000 mínimo de 15 na visão
      normal e de 9 sob protanopia e deuteranopia, contra TODAS as cores acima,
-     nos DOIS temas — e o mesmo código serve os dois, porque passou no
-     contraste contra os dois fundos. */
-  --traco-1: #50a824;
-  --traco-2: #e65d19;
-  --traco-3: #75783a;
+     Escolhidas de novo em 25/10/2026, olhando, depois que o validador passou
+     a simular o daltonismo do jeito certo (no espaço LMS): o laranja de antes
+     ficava IDÊNTICO ao âmbar da fase B sob deuteranopia. O tema claro tem as
+     suas, no bloco dele. */
+  --traco-1: #49760a;
+  --traco-2: #e2128c;
+  --traco-3: #1fecff;
 
   --bom: #2c9b75;
   --atencao: #b8860b;

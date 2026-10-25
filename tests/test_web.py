@@ -2663,3 +2663,19 @@ def test_a_paleta_das_tiras_tem_VERMELHO():
     trecho = trecho[:trecho.index("];")]
     assert '"--ruim"' in trecho
     assert '"--fase-c"' not in trecho      # duas vermelhas ninguém distingue
+
+
+def test_a_simulacao_de_daltonismo_deixa_o_cinza_cinza():
+    """As matrizes de Viénot valem no espaço LMS, não no RGB. Aplicadas ao RGB
+    (como foi até 25/10/2026), o branco saía CIANO na protanopia — e toda a
+    conferência de daltonismo da paleta saía de uma conta errada."""
+    import importlib.util
+    import pathlib
+    caminho = pathlib.Path(__file__).resolve().parents[1] / "tools" / "paleta.py"
+    spec = importlib.util.spec_from_file_location("paleta", caminho)
+    paleta = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(paleta)
+    for cinza in ("#ffffff", "#808080", "#202020"):
+        for visao in ("protanopia", "deuteranopia", "tritanopia"):
+            r, g, b = paleta.como_daltonico(paleta.de_hex(cinza), visao)
+            assert max(r, g, b) - min(r, g, b) < 0.01, (cinza, visao, (r, g, b))

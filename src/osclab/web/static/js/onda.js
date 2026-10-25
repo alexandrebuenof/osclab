@@ -6517,9 +6517,9 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   //: Nenhuma delas se confunde com cor de fase: a mais próxima guarda ΔE 16,2
   //: do vermelho da fase C. Conferido com `tools/paleta.py`.
   const CORES_NEUTRAS = [
-    "--traco-2",      // laranja  croma 78,6
-    "--traco-1",      // verde    croma 74,0
-    "--calculado-1",  // roxo     croma 59,7
+    "--traco-2",      // magenta  croma 78,6 (o menor dos dois temas)
+    "--calculado-1",  // lilás    croma 57,4
+    "--traco-1",      // verde    croma 57,1
     "--calculado-2",  // rosa     croma 53,7
     "--traco-3",      // oliva    croma 35,0
     "--calculado-3",  // cinza    croma  7,1

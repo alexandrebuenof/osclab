@@ -49,12 +49,12 @@ TEMAS = {
             "--fase-b": "#b8860b",
             "--fase-c": "#d45560",
             "--fase-n": "#2c9b75",
-            "--calculado-1": "#b07ae0",
-            "--calculado-2": "#e86aa8",
-            "--calculado-3": "#8aa0a6",
-            "--traco-1": "#50a824",
-            "--traco-2": "#e65d19",
-            "--traco-3": "#75783a",
+            "--calculado-1": "#c499ff",
+            "--calculado-2": "#ff70ac",
+            "--calculado-3": "#7c1fff",
+            "--traco-1": "#49760a",
+            "--traco-2": "#e2128c",
+            "--traco-3": "#1fecff",
         },
     },
     "claro": {
@@ -211,10 +211,34 @@ def delta_e(rgb1, rgb2) -> float:
                      + rt * (dc / sc) * (dhl / sh))
 
 
-#: Matrizes de Viénot–Brettel–Mollon (1999) sobre RGB LINEAR. São a
-#: aproximação padrão para protanopia e deuteranopia; para tritanopia a
+#: Matrizes de Viénot–Brettel–Mollon (1999), no espaço **LMS** dos cones —
+#: não no RGB. Aplicá-las direto ao RGB linear, como este validador fez até
+#: 25/10/2026, pintava o BRANCO de ciano na protanopia e de amarelo na
+#: tritanopia: toda conferência de daltonismo da paleta saiu dessa conta
+#: errada. O caminho certo é RGB linear → LMS → matriz → RGB linear.
+#: São a aproximação padrão para protanopia e deuteranopia; para tritanopia a
 #: aproximação linear é mais grosseira, e por isso ela entra aqui como aviso,
 #: não como reprovação.
+RGB_PARA_LMS = ((17.8824, 43.5161, 4.11935),
+                (3.45565, 27.1554, 3.86714),
+                (0.0299566, 0.184309, 1.46709))
+
+
+def _inversa(m):
+    (a, b, c), (d, e, f), (g, h, i) = m
+    det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
+    return (((e * i - f * h) / det, (c * h - b * i) / det, (b * f - c * e) / det),
+            ((f * g - d * i) / det, (a * i - c * g) / det, (c * d - a * f) / det),
+            ((d * h - e * g) / det, (b * g - a * h) / det, (a * e - b * d) / det))
+
+
+LMS_PARA_RGB = _inversa(RGB_PARA_LMS)
+
+
+def _vezes(m, v):
+    return tuple(m[i][0] * v[0] + m[i][1] * v[1] + m[i][2] * v[2] for i in range(3))
+
+
 DICROMACIAS = {
     "protanopia": ((0.0, 2.02344, -2.52581), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)),
     "deuteranopia": ((1.0, 0.0, 0.0), (0.494207, 0.0, 1.24827), (0.0, 0.0, 1.0)),
@@ -223,9 +247,8 @@ DICROMACIAS = {
 
 
 def como_daltonico(rgb, tipo: str):
-    r, g, b = (linear(c) for c in rgb)
-    m = DICROMACIAS[tipo]
-    saida = [m[i][0] * r + m[i][1] * g + m[i][2] * b for i in range(3)]
+    lms = _vezes(RGB_PARA_LMS, tuple(linear(c) for c in rgb))
+    saida = _vezes(LMS_PARA_RGB, _vezes(DICROMACIAS[tipo], lms))
     return tuple(com_gama(c) for c in saida)
 
 
