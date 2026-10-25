@@ -10,7 +10,8 @@ Dois métodos nesta etapa, os padrões da proteção (decidido em 23/10/2026):
 
 - **sequência negativa, dois terminais** (`seqneg.localizar`, a planilha
   LocDef), vetorizada aqui;
-- **laço da falta pela reatância** (o método da Energisa):
+- **laço da falta pela reatância** (o método clássico de um terminal; é o
+  que a Energisa MT usa, mas o nome na tela é neutro — o programa é universal):
   `m = Im{V_laço / I_laço} / X1L`, com `I_laço = Iφ + k0·3I0` no laço de
   terra e `Iφ1 − Iφ2` no de fase. O laço é o que o classificador de falta
   escolheu (`falta.Veredito.laco`).
@@ -48,7 +49,7 @@ from osclab.plot import conversao, escala, serie, unidades
 #: terminais, o laço da falta quando não há.
 METODOS = ("seqneg", "laco")
 NOMES = {"seqneg": "Sequência negativa · 2 terminais (LocDef)",
-         "laco": "Laço da falta · reatância (Energisa)"}
+         "laco": "Laço da falta · reatância"}
 CURTOS = {"seqneg": "Seq. neg. 2T", "laco": "Laço (reatância)"}
 
 #: O platô começa DOIS ciclos depois do início da falta: um para a janela do
