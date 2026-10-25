@@ -90,6 +90,7 @@ import math
 import numpy as np
 
 from osclab.dsp import envoltoria
+from osclab.dsp import fasor as fasor_mod
 from osclab.dsp.fasor import ciclo_em_amostras
 from osclab.formats import ajustes as ajustes_mod
 from osclab.formats import conjuntos
@@ -273,7 +274,8 @@ OPCOES = {
     "forma": tuple((c, f"{r} — {q}") for c, r, q, _ in FORMAS),
     "ordens": (("2", "só a 2ª"), ("24", "2ª + 4ª")),
     "modo": (("fase", "por fase"), ("cruzado", "cruzado (cross-blocking)"),
-             ("restricao", "restrição harmônica")),
+             ("restricao", "restrição harmônica"),
+             ("ambos", "cruzado E restrição (os dois rodam juntos)")),
     "iop": tuple((c, f"{f} — {q}") for c, f, q in EQUACOES_IOP),
     "irt": tuple((c, f"{f} — {q}") for c, f, q in EQUACOES_IRT),
 }
@@ -481,11 +483,12 @@ def resolver(registro: Record, lidos: dict, manuais: dict, fab: str,
     # `E87HR` (restrição harmônica). Com o bloqueio desligado e a restrição
     # ligada — 4 dos 27 registros de 487E do parque —, o modo é a restrição;
     # lendo só o `E87HB`, o painel ficava sem curva por «falta o modo».
-    if (por_terminal and campos["modo"]["estado"] == FALTA
-            and str(lidos.get("E87HB", "")).strip().upper().startswith("N")
-            and str(lidos.get("E87HR", "")).strip().upper().startswith("Y")):
-        campos["modo"].update(valor="restricao", estado=COLETADO, variavel="E87HR",
-                              bruto=f"E87HB := {lidos['E87HB']}, E87HR := {lidos['E87HR']}")
+    hb = str(lidos.get("E87HB", "")).strip().upper()[:1]
+    hr = str(lidos.get("E87HR", "")).strip().upper()[:1]
+    if por_terminal and hr == "Y" and campos["modo"]["estado"] in (FALTA, COLETADO):
+        campos["modo"].update(valor="ambos" if hb == "Y" else "restricao",
+                              estado=COLETADO, variavel="E87HR",
+                              bruto=f"E87HB := {lidos.get('E87HB')}, E87HR := {lidos['E87HR']}")
 
     # Deduzidos, na ordem em que um depende do outro.
     for id_, como in (("con1", "estrela — o caso usual; o arquivo não disse"),
@@ -702,9 +705,14 @@ def limiar(irt: np.ndarray, pickup: float, slp1: float, bp1: float | None,
 def _harmonica(x: np.ndarray, trechos, frequencia: float, h: int) -> np.ndarray:
     """O fasor da harmônica `h` em cada amostra, janela de UM ciclo.
 
-    A mesma conta de `envoltoria.fasores`, girando `h` vezes mais depressa —
-    e sem o estimador cosseno, que é de fundamental.
+    A mesma conta de `envoltoria.fasores`, girando `h` vezes mais depressa. Com
+    o estimador COSSENO ligado, a harmônica também sai pelo cosseno — é como a
+    SEL a mede (o filtro cosseno da harmônica e a quadratura um quarto de ciclo
+    DELA antes, `n/(4h)`). Medida por Fourier com o cosseno ligado, a 2.ª
+    divergia do bit `87*BK2` do 487E em até 30 pontos (gabarito do relé,
+    25/10/2026).
     """
+    cosseno = fasor_mod.estimador() == "cosseno"
     saida = np.full(x.shape, np.nan + 0j, dtype=np.complex128)
     for trecho in trechos:
         n = ciclo_em_amostras(trecho.taxa_hz, frequencia)
@@ -714,8 +722,9 @@ def _harmonica(x: np.ndarray, trechos, frequencia: float, h: int) -> np.ndarray:
             continue
         k = np.arange(pedaco.shape[-1], dtype=np.float64)
         giro = np.exp(-2j * np.pi * h * k / n)
-        saida[fatia] = 2.0 * np.conj(giro) * envoltoria.media_do_ciclo(
+        fasor = 2.0 * np.conj(giro) * envoltoria.media_do_ciclo(
             pedaco.astype(np.complex128) * giro, n)
+        saida[fatia] = envoltoria._cosseno(fasor.real, n / h) if cosseno else fasor
     return saida
 
 
@@ -800,7 +809,7 @@ def decidir(iop, lim, h2, h5, valor) -> np.ndarray:
     existe = np.isfinite(iop) & np.isfinite(lim)
     passa = existe & (iop > lim)
 
-    if modo == "restricao":
+    if modo in ("restricao", "ambos"):
         reforco = iop * ((h2z / pct2 if pct2 > 0 else 0.0)
                          + (h5z / pct5 if pct5 > 0 else 0.0))
         passa_reforcado = passa & (iop > lim + reforco)
@@ -808,6 +817,17 @@ def decidir(iop, lim, h2, h5, valor) -> np.ndarray:
                                             >= (h5z / max(pct5, 1e-9)))
         bloq5 = passa & ~passa_reforcado & ~bloq2
         opera = passa_reforcado
+        if modo == "ambos":
+            # O 487E com `E87HB` e `E87HR` ligados roda os DOIS elementos ao
+            # mesmo tempo, e qualquer um deles dispara: o bloqueio (comum às
+            # fases) e a restrição (por fase). No 14TR03 o relé disparou pelo
+            # `87AHR` com o `87AHB` bloqueado pela fase C — modelar só o
+            # bloqueio mostrava «bloqueado 2ª» numa falta que o relé eliminou.
+            c2 = np.broadcast_to(b2.any(axis=0), b2.shape)
+            c5 = np.broadcast_to(b5.any(axis=0), b5.shape)
+            opera = opera | (passa & ~c2 & ~c5)
+            bloq2 = bloq2 & ~opera
+            bloq5 = bloq5 & ~opera
     else:
         if modo == "cruzado":
             # Uma fase com harmônica bloqueia as três, no mesmo instante.

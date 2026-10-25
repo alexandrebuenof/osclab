@@ -15,8 +15,9 @@ import math
 from datetime import datetime
 
 import numpy as np
+import pytest
 
-from osclab.formats.base import AnalogChannel, Record, SampleRate
+from osclab.formats.base import AnalogChannel, Record, SampleRate, Trecho
 from osclab.plot import diferencial, janela, paineis
 
 TAXA = 1920.0
@@ -370,3 +371,58 @@ def test_o_487e_com_restricao_harmonica_e_sem_bloqueio_tem_modo():
     campos = {c["id"]: c for c in diferencial.resolver(_registro("carga"), lidos, {}, "SEL")}
     assert campos["modo"]["valor"] == "restricao"
     assert campos["modo"]["estado"] == diferencial.COLETADO
+
+
+def test_a_conferencia_87T_so_compara_o_que_ficou_parado():
+    """A conferência «87T × relé» (`tests/conferencias.py`) só olha onde a
+    coluna do relé não andou em um ciclo e meio: logo depois de um degrau a
+    nossa janela sobre o `.CEV` já filtrado chega atrasada, e o erro mediria o
+    atraso. E num COMTRADE ela não se aplica — as colunas são do `.CEV`."""
+    from pathlib import Path
+
+    from tests import conferencias
+
+    x = np.r_[np.full(40, 0.50), np.full(40, 3.00)]
+    parado = conferencias._parado(x, 12)
+    assert not parado[:11].any()                 # sem um ciclo e meio de história
+    assert parado[11:40].all()
+    assert not parado[40:51].any()               # a janela ainda pega o degrau
+    assert parado[51:].all()
+    linhas = conferencias.diferencial_87t(Path("x.cfg"), _registro("carga"))
+    assert [x.veredito for x in linhas] == [conferencias.NAO_SE_APLICA]
+
+
+def test_487e_com_bloqueio_e_restricao_roda_os_dois():
+    """`E87HB := Y` e `E87HR := Y`: o relé roda o bloqueio comum e a
+    restrição por fase juntos, e QUALQUER um dispara. No 14TR03 ele disparou
+    pela restrição com o bloqueio comum segurando."""
+    texto = ('E87 := "S,T"  MVA := 19  VTERMS := 138.00  VTERMT := 13.80\n'
+             "CTRS := 40  CTRT := 200  TSCTC := 12  TTCTC := 12\n"
+             "O87P := 0.30  SLP1 := 30  SLP2 := 70  U87P := 10\n"
+             "PCT2 := 15  PCT5 := 35  E87HB := Y  E87HR := Y\n")
+    campos = {c["id"]: c for c in diferencial.resolver(
+        _registro("carga"), diferencial.lidos_de_texto(texto), {}, "SEL")}
+    assert campos["modo"]["valor"] == "ambos"
+    # A fase A com 2.ª alta bloqueia as três pelo bloqueio comum; a B, que
+    # passa com folga na restrição dela, opera mesmo assim.
+    iop = np.array([[2.0], [3.0], [0.1]])
+    lim = np.array([[0.5], [0.5], [0.5]])
+    h2 = np.array([[40.0], [2.0], [0.0]])
+    h5 = np.zeros((3, 1))
+    valor = {"pct2": 15.0, "pct5": 35.0, "u87": 10.0, "modo": "ambos"}
+    d = diferencial.decidir(iop, lim, h2, h5, valor)
+    assert d[1, 0] == diferencial.OPERA
+    assert diferencial.decidir(iop, lim, h2, h5, {**valor, "modo": "cruzado"})[1, 0] \
+        == diferencial.BLOQUEADO_2
+
+
+def test_a_harmonica_segue_o_estimador_cosseno():
+    from osclab.dsp import fasor as fasor_mod
+    t = np.arange(0, 0.2, 1 / 1920.0)
+    x = np.sin(2 * np.pi * 60 * t) + 0.3 * np.sin(2 * np.pi * 120 * t + 0.7)
+    trechos = (Trecho(0, t.size, 1920.0),)
+    fourier = abs(diferencial._harmonica(x, trechos, 60.0, 2)[-1])
+    with fasor_mod.usando("cosseno"):
+        cosseno = abs(diferencial._harmonica(x, trechos, 60.0, 2)[-1])
+    # Os dois medem a mesma 2.ª em regime (0,3 de pico), por caminhos diferentes.
+    assert fourier == pytest.approx(0.3, rel=1e-3) and cosseno == pytest.approx(0.3, rel=2e-2)
