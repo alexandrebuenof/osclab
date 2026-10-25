@@ -1,5 +1,37 @@
 # Onde o trabalho está
 
+## 25/10/2026 — confiabilidade e universalidade (commits b6c1495 … 3b1a958)
+
+**Princípio novo (CLAUDE.md): o leitor é universal.** Qualquer relé abre e
+analisa; o que não se lê automaticamente se digita; nada do parque da
+Energisa MT pode virar condição.
+
+Feito:
+
+- Diferencial 87T sai em 28/28 registros de 487E/787 (o `ccbm` com o nome do
+  relé juntava os terminais; `E87HR` lido). 87L: cada terminal vira trinca,
+  o plano de impedância casa `I*` ↔ `V*`, o alfa lê `87LPR/87LPA` e `87LR/87LANG`.
+- Paleta: o validador simulava daltonismo errado (fora do espaço LMS);
+  corrigido. Tema ESCURO com cores novas escolhidas pelo Alexandre.
+- LDL: validação independente virou `tests/test_ldl_validacao.py`; nota 50 → ~75.
+- Rotinas contra o dado real: `tools/comissionar.py` (placar em
+  `docs-privados/comissionamento/`), `tools/fotografia.py` (foto em
+  `docs-privados/fotografia/banco-2026-10-25.jsonl`), `tests/test_varredura.py`.
+
+**Pendente com o Alexandre:**
+
+1. `git push` dos commits do dia.
+2. Cores: escolher entre as 10 maquetes de «cores das fases»
+   (`OscLab maquetes/cores-das-fases-10.html`) e as cores do tema CLARO (ele
+   ainda reprova no validador corrigido).
+3. Classificador: «falta já em curso» (inclui a falta entre 1 e 2 ciclos do
+   começo, xfail em `test_varredura.py`), os 74 religadores «AG sem trip»,
+   seleção de fase do relé como prova.
+4. LDL: trifásica EXTERNA ainda vira resultado (xfail em `test_ldl_validacao.py`).
+5. Propostas de função nova (pedem 10 maquetes): diferencial juntando dois
+   registros (P139/451), ajustes do MiCOM por exportação de texto do Easergy,
+   ajustes do PL300 pelo `AJUSTES_*`.
+
 ## 24/10/2026 — etapa de aprendizagem sobre o banco do parque (sem commit)
 
 O banco inteiro de oscilografias (558 registros) foi lido, junto com os `.hdr` e os manuais dos seis fabricantes. O que se aprendeu, com os dados reais, está em `docs-privados/aprendizado/`, e o dicionário dos digitais em `docs-privados/dicionario/dicionario.csv`, com 2077 verbetes prontos para importar. Nada disso entra no git.
