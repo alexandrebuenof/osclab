@@ -963,7 +963,24 @@ def _par_unico(registro: Record):
     tensoes = [c for c in todos if c.grandeza == "V"]
     if len(correntes) == 1 and len(tensoes) == 1:
         return correntes[0], tensoes[0]
+    # Uma tensão e várias correntes — o 87L da SEL grava `IA` (a do 21) e os
+    # terminais do diferencial `IAL`, `IAX`, `IAT`. O nome responde, sem
+    # palpite: a corrente que casa com a tensão é a de nome CORRESPONDENTE
+    # (`I*` ↔ `V*`, `I*W` ↔ `V*W`). Só vale se for exatamente uma.
+    if len(tensoes) == 1:
+        alvo = _sem_grandeza(tensoes[0].nome)
+        casam = [c for c in correntes if _sem_grandeza(c.nome) == alvo]
+        if alvo and len(casam) == 1:
+            return casam[0], tensoes[0]
     return None, None
+
+
+def _sem_grandeza(nome: str) -> str:
+    """`I*W` → `*W`, `V*` → `*`: o nome do conjunto sem a letra da grandeza.
+    Vazio quando o nome não começa por ela (um `ccbm` declarado, por exemplo),
+    e aí não há correspondência a afirmar."""
+    nome = (nome or "").strip().upper()
+    return nome[1:] if nome[:1] in ("I", "V", "U") and "*" in nome[1:3] else ""
 
 
 def vinculos_possiveis(registro: Record) -> list[dict]:

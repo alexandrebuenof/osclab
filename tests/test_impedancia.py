@@ -843,3 +843,18 @@ def test_habilitacao_de_zona_pelos_nomes_do_311c_e_do_321():
     assert (terra["mho"], terra["quad"]) == (3, 2)
     # O nome do 4xx, quando existe, continua mandando.
     assert impedancia.caracteristica_de({"E21MP": "4", "E21P": "1"}, "AB")["mho"] == 4
+
+
+def test_com_uma_tensao_e_varias_correntes_o_nome_correspondente_decide():
+    """O 87L da SEL grava `IA` (a do 21) e os terminais `IAL`, `IAX`. Com uma
+    tensão só, a corrente do plano é a de nome correspondente (`I*` ↔ `V*`)
+    — e nada de adivinhar quando não há uma só que corresponda."""
+    nomes = ["IA", "IB", "IC", "IAL", "IBL", "ICL", "VA", "VB", "VC"]
+    canais = tuple(AnalogChannel(index=i, name=n, unit="A" if n[0] == "I" else "kV",
+                                 phase="", component="LD TESTE - UPC1")
+                   for i, n in enumerate(nomes))
+    r = Record(source=None, format_name="teste", station="", line_frequency=60.0,
+               start_time=None, analog_channels=canais,
+               analog=np.ones((9, 10)), time=np.arange(10) / 1200.0)
+    corrente, tensao = impedancia._par_unico(r)
+    assert corrente is not None and corrente.abc == (0, 1, 2) and tensao.abc == (6, 7, 8)

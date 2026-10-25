@@ -494,11 +494,15 @@ def _agrupar(registro: Record) -> list[dict]:
         declarado = (getattr(canal, "component", "") or "").strip()
         chave = (declarado, canal.unit.strip(), fase)
         contagem[chave] = contagem.get(chave, 0) + 1
-    do_rele = {(d, u) for (d, u, _), n in contagem.items() if d and n > 1}
+    # Vale para o ARQUIVO inteiro, não só para a unidade que repetiu: se o
+    # `ccbm` é o nome do relé nas correntes, é também nas tensões — deixá-las
+    # com o nome do relé e as correntes com `I*` desfazia a correspondência
+    # `I*` ↔ `V*` de que o plano de impedância precisa.
+    do_rele = {d for (d, _, _), n in contagem.items() if d and n > 1}
 
     def chave(canal) -> tuple[str, OrigemDoConjunto]:
         declarado = (getattr(canal, "component", "") or "").strip()
-        if (declarado, canal.unit.strip()) in do_rele:
+        if declarado in do_rele:
             fase, _ = fases.da_canal(canal)
             return sem_a_fase(getattr(canal, "name", ""), fase), OrigemDoConjunto.DEDUZIDA
         nome, _, origem = _chave(canal)
