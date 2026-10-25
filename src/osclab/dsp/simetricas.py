@@ -59,6 +59,46 @@ def de_fasores(a: complex, b: complex, c: complex) -> tuple[complex, complex, co
             (a + A**2 * b + A * c) / 3.0)
 
 
+#: `V1_linha / V1_fase` e `V2_linha / V2_fase`: √3, adiantado e atrasado de 30°.
+#:
+#: Não é constante de tabela: foi medida aqui mesmo, com trincas desequilibradas
+#: sorteadas, e sai 1,7320508 ∠ ±30,000000° em todas. Ver `test_simetricas`.
+_LINHA_POR_FASE_1 = cmath.sqrt(3.0) * cmath.exp(1j * cmath.pi / 6)
+_LINHA_POR_FASE_2 = cmath.sqrt(3.0) * cmath.exp(-1j * cmath.pi / 6)
+
+
+def de_lacos(ab, bc, ca):
+    """`(zero, positiva, negativa)` a partir dos TRÊS LAÇOS, referidas à fase.
+
+    Quando o relé grava `VAB`, `VBC`, `VCA` em vez de `VA`, `VB`, `VC`, o que
+    chega aqui são diferenças entre fases. Fortescue roda sobre elas sem
+    reclamar — e devolve três números que **não** são `3V0`, `V1` e `V2`.
+
+    Positiva e negativa se recuperam EXATAS, só giradas e esticadas::
+
+        V1_linha = √3 ∠+30° · V1_fase
+        V2_linha = √3 ∠−30° · V2_fase
+
+    Então esta função desfaz o giro e devolve os valores referidos à fase, que
+    são os que se comparam com o ajuste do relé e com o outro terminal.
+
+    **A sequência zero volta `NaN`, e esse é o ponto.** `VAB + VBC + VCA ≡ 0`
+    por identidade algébrica, qualquer que seja a falta: a soma dos três laços
+    é zero num curto trifásico e é zero numa falta à terra franca. Devolver
+    esse zero como `3V0` seria publicar "não há falta à terra" medido em nada —
+    a afirmação mais cara que este programa poderia fazer. `NaN` diz o que é
+    verdade: com tensão de linha, o neutro não está no arquivo.
+
+    (O caminho de volta existe e é por fora: um canal de tensão residual
+    MEDIDO, se o relé gravar um. Aí o `3V0` é medição, não dedução.)
+    """
+    _, positiva, negativa = de_fasores(ab, bc, ca)
+    vazio = np.full(np.shape(positiva), np.nan, dtype=np.complex128)
+    return (vazio if vazio.ndim else complex(np.nan, np.nan),
+            positiva / _LINHA_POR_FASE_1,
+            negativa / _LINHA_POR_FASE_2)
+
+
 def equilibrio(positiva, negativa) -> float | np.ndarray:
     """`|I2| / |I1|` em percentual — o quanto o sistema está desequilibrado.
 

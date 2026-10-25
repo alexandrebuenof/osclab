@@ -152,6 +152,11 @@ class Record:
     start_time: datetime | None = None
     trigger_time: datetime | None = None
     time_quality: str = ""                              # o que o arquivo diz do relógio
+    #: O fuso em que os CARIMBOS estão, em horas a partir do UTC (`-4` em
+    #: Cuiabá), como o `time_code` do COMTRADE 2013 declara. `None` quando o
+    #: arquivo não declara. A tela MOSTRA a hora como o arquivo escreveu;
+    #: este campo serve só para ALINHAR dois registros pela hora.
+    fuso_horas: float | None = None
 
     # --- canais -----------------------------------------------------------
     analog_channels: tuple[AnalogChannel, ...] = ()
@@ -181,6 +186,32 @@ class Record:
     #: sempre.
     trincas_escolhidas: dict = field(default_factory=dict)
 
+    #: Os VÍNCULOS de potência que o usuário fez: que trinca de corrente
+    #: pertence ao mesmo vão de que trinca de tensão.
+    #:
+    #: `{"I*W": {"com": "V*Y", "base": "fase"}, "V*Y": {"com": "I*W", ...}}`,
+    #: gravado nos dois sentidos — vincular G1 a G3 vincula G3 a G1.
+    #:
+    #: **O programa não deduz isto.** Dois vãos de uma subestação podem ter
+    #: correntes e tensões com nomes parecidos, e casar o par errado produz
+    #: uma potência na unidade certa, na ordem de grandeza certa, e errada —
+    #: o tipo de erro que não se vê no gráfico. Quem sabe qual TC pertence a
+    #: qual TP é quem leu o unifilar.
+    #:
+    #: `base` diz se as tensões daquele vínculo são de FASE (fase-neutro) ou
+    #: de LINHA, porque a conta muda: em fase sai potência por fase e total;
+    #: em linha só sai o total, pelo método dos dois wattímetros, já que não
+    #: há referência de neutro para repartir.
+    #:
+    #: A chave é o NOME do conjunto, não a posição — mesma razão de
+    #: `trincas_escolhidas`.
+    vinculos_de_potencia: dict = field(default_factory=dict)
+
+    #: Os NOMES dos digitais que o relé grava e a placa dele não tem (ver
+    #: `formats/ajustes.digitais_sem_placa`). Ficam fora da tela padrão e
+    #: marcados na busca: o que está nesses bits não é entrada nenhuma.
+    digitais_sem_placa: frozenset = field(default_factory=frozenset)
+
     # --- diagnóstico ------------------------------------------------------
     filtering: Filtering = Filtering.DESCONHECIDO
     filtering_source: FilteringSource = FilteringSource.DEDUZIDO
@@ -196,6 +227,15 @@ class Record:
     #: o aviso que aparece no caso normal deixa de ser lido. São informação do
     #: arquivo, não coisa que deu errado.
     relatos: tuple[str, ...] = ()
+    #: A classificação do evento que o RELÉ gravou, só a sigla — `AG T`,
+    #: `AB`, `3PH`. O «T» solto da SEL é TRIP, não terra. Vem do campo `EVENT` do `.CEV`; nos formatos que não a
+    #: trazem fica vazia, que é o estado normal de um COMTRADE.
+    #:
+    #: Separada de `relatos` porque ali ela é uma FRASE, boa de ler e ruim de
+    #: comparar. A tela põe esta sigla ao lado da que o OscLab concluiu, e
+    #: comparar duas frases para saber se conflitam seria análise de texto
+    #: onde cabe um campo.
+    classificacao_do_rele: str = ""
 
     # --- derivados --------------------------------------------------------
 

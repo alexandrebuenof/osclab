@@ -25,11 +25,43 @@
   /* O azul das tiras digitais. Mais escuro que o --destaque de propósito: uma
      tela com duas dúzias de tiras acesas no azul dos botões virava um bloco
      luminoso, e as ondas — que são o assunto — ficavam em segundo plano. */
-  --digital: #2f8da1;
+  /* As tiras digitais. Mais claro que o tom antigo (#2f8da1) — escolha dele,
+     entre sete modelos: a tira estava fina e apagada demais no meio de 76
+     linhas. O preço está medido: sob deuteranopia este tom fica a ΔE 1,8 do
+     azul da fase A, contra 14,6 do antigo. Não é colisão DENTRO de um
+     gráfico — digital e analógico nunca dividem painel —, mas na mesma tela
+     são duas coisas da mesma cor para quem não distingue verde e vermelho.
+     Por isso a engrenagem do painel deixa trocar. */
+  --digital: #45b8cf;
 
   /* Os sinais CALCULADOS (3I0, I1, I2...). Ficam fora da paleta de fases de
      propósito: pintar 3I0 com a cor da fase A o faria passar por IA no
      gráfico de correntes, e ninguém olharia duas vezes. */
+  /* As três fatias da barra de energia de um sinal — e as mesmas cores das
+   * marcas em subscrito do nome. Uma cor, um significado: turquesa é 60 Hz,
+   * roxo é harmônico, rosa é contínua. Passaram pelos mesmos testes de
+   * separação das cores de fase. */
+  /* O fundo de um cartão de sinal. Mais ESCURO que o da janela, e não mais
+   * claro: o cartão não é um objeto pousado em cima da lista, é um
+   * compartimento aberto nela. Afundar lê-se como «aqui dentro tem coisa»,
+   * levantar lê-se como «isto está selecionado». */
+  --cartao: #0a1011;
+  --cartao-borda: #253032;
+
+  /* A faixa alternada da tabelinha do cursor. Discreta de propósito:
+     o assunto são os números, não a tabela — ela existe só para o olho
+     não trocar de linha atravessando quatro colunas. */
+  --faixa-da-tabela: #202b2d;
+
+  /* A faixa alternada das LISTAS DE SINAL (os três catálogos). Mais discreta
+     que a da tabela do cursor: ali ela guia o olho por quatro colunas de
+     números; aqui a linha é curta e a faixa só precisa marcar o passo. */
+  --faixa-da-lista: #121a1b;
+
+  --energia-60: #2fb3bd;
+  --energia-harm: #8a72d8;
+  --energia-dc: #cc6a7a;
+
   --calculado-1: #b07ae0;
   --calculado-2: #e86aa8;
   --calculado-3: #8aa0a6;
@@ -60,11 +92,47 @@
   --fase-c: #d45560;
   --fase-n: #2c9b75;
 
+  /* As MISTURAS do selo da falta: média RGB das duas fases. Ver
+     `.selo-da-falta.fase-ab`. */
+  --falta-ab: #828571;
+  --falta-bc: #c66e36;
+  --falta-ca: #906c9b;
+
   /* Os dois cursores de medição. Escolhidos com o validador de paleta, não a
      olho: o roxo que parecia óbvio ficava a ΔE 3,6 do azul da fase A sob
      protanopia — um daltônico confundiria o cursor com a própria corrente. */
   --cursor-1: #ffffff;
   --cursor-2: #ffd166;
+
+  /* A altura de TODO controle do cabeçalho. Um número só, num lugar só: as
+     chaves, o par secundário|primário e o ímã tinham cada um a sua conta de
+     respiro, e saíam com 27, 24 e 26 px — uma fileira de botões de alturas
+     diferentes, com o ímã pairando acima dos vizinhos.
+
+     28 e não 27: é múltiplo de 4, então vira número inteiro de pixels de tela
+     em todos os zooms que aparecem (×1,25 = 35; ×1,5 = 42; ×1,75 = 49) — a
+     mesma razão do passo da lista de sinais. */
+  --alto-da-chave: 28px;
+
+  /* A TABELINHA do cursor: a largura dela e o vão até a onda.
+   *
+   * 268 e não 248: a unidade em cada linha (`IA 60Hz RMS (A)`) precisa dos
+   * vinte pixels a mais, e tirá-los das colunas de número faria `-116,9`
+   * cortar — número cortado numa tabela de laudo é pior que gráfico estreito.
+   *
+   * Em variável porque o `onda.js` também precisa do número: sem cursor a
+   * tabelinha não existe, e a moldura tem de saber quanto a onda vai encolher
+   * quando ela aparecer. Ver `refDoDesenho`. */
+  --lado-da-tabelinha: 268px;
+  --vao-da-tabelinha: 14px;
+
+  /* A GRADE da lista de sinais. Os valores aqui são os de partida; o
+     `ajustarGradeDaLista`, no `onda.js`, reescreve os três arredondados para
+     um número inteiro de pixels DE TELA — é o que mantém todas as barras de
+     energia com a mesma grossura em zoom que não seja redondo. */
+  --vao-do-cartao: 2px;
+  --miolo-do-cartao: 20px;
+  --alto-da-barra: 4px;
 
   --sans: "Segoe UI", system-ui, -apple-system, sans-serif;
   --mono: "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
@@ -81,6 +149,15 @@
   --destaque: #0e6e7a;
   --destaque-fraco: #dfeff1;
   --digital: #0a4b54;
+  --cartao: #edf1f1;
+  --cartao-borda: #d2dcdd;
+  --faixa-da-tabela: #e7edee;
+  --faixa-da-lista: #f2f6f7;
+
+  --energia-60: #0e6e7a;
+  --energia-harm: #5b43a8;
+  --energia-dc: #a8304a;
+
   --calculado-1: #6b3fa0;
   --calculado-2: #a8306a;
   --calculado-3: #57696b;
@@ -106,6 +183,10 @@
   --fase-b: #b8860b;
   --fase-c: #96172b;
   --fase-n: #157f5c;
+
+  --falta-ab: #777d75;
+  --falta-bc: #a74f1b;
+  --falta-ca: #664685;
 
   --cursor-1: #111a1b;
   --cursor-2: #b34700;
@@ -144,12 +225,344 @@ body {
 .topo.registro {
   flex-direction: column;
   align-items: stretch;
-  gap: 14px;
+  /* `nowrap` é obrigatório aqui: `.topo` herda `flex-wrap: wrap`, e num flex
+     de COLUNA isso faz o contêiner quebrar em COLUNAS — a largura de cada
+     fileira passa a vir do conteúdo, e ela ficava mais larga que a janela.
+     Era a causa da barra de rolagem horizontal ao ampliar a página, que
+     levava os botões para fora da tela. Medido em 19/10/2026. */
+  flex-wrap: nowrap;
+  gap: 10px;
 }
 
-.topo h1 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
+/* As fileiras de chaves NÃO quebram linha: cada uma rola dentro de si mesma
+   se faltar espaço. Quebrando, os botões mudavam de lugar conforme o zoom da
+   página — e um botão que muda de lugar é um botão que se procura. Rolando, a
+   ordem é sempre a mesma e a PÁGINA nunca ganha barra horizontal, que era o
+   que levava o cabeçalho inteiro para fora da tela. Medido em 19/10/2026. */
+.topo.registro .acoes {
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--linha) transparent;
+  padding-bottom: 2px;
+}
+.topo.registro .acoes::-webkit-scrollbar { height: 5px; }
+.topo.registro .acoes::-webkit-scrollbar-thumb {
+  background: var(--linha);
+  border-radius: 3px;
+}
+.topo.registro .acoes > * { flex: none; }
+
+/* A linha do TÍTULO, na tela da onda: nome e subtítulo à esquerda, o botão
+   do tema no canto direito que estava vazio. Escolha dele, 19/10/2026. O
+   tema é a única chave do cabeçalho que não tem nada a ver com o registro —
+   é preferência de quem olha —, e no fim da fileira de chaves ela tomava
+   lugar das que têm. */
+.topo.registro .marca {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.topo.registro .titulo-do-registro { min-width: 0; }
+.topo.registro .marca > .chave.tema { flex: none; }
+
+/* A BARRA DO APLICATIVO, acima do cabeçalho: as voltas à esquerda, o que sai
+   do registro e a base à direita. Fina e com fundo de superfície, para se ler
+   como moldura do programa, e não como parte do registro. */
+.barra-do-app {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 20px;
+  background: var(--superficie);
+  border-bottom: 1px solid var(--linha);
+  overflow-x: auto;
+}
+.barra-do-app > * { flex: none; }
+.barra-do-app .espaco-da-barra { flex: 1; }
+
+/* O título À ESQUERDA e as duas fileiras À DIREITA. Numa janela estreita as
+   fileiras descem para baixo do título — e quem decide isso é a LARGURA DA
+   JANELA, nunca o nome do registro: o título quebra dentro da coluna dele. */
+.topo.registro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 24px;
+}
+.fileiras-do-registro {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+  min-width: 0;
+}
+@media (max-width: 1100px) {
+  .topo.registro { grid-template-columns: minmax(0, 1fr); }
+  .fileiras-do-registro { justify-items: start; }
+}
+.fileiras-do-registro .acoes { max-width: 100%; }
+
+/* O nome do registro QUEBRA onde precisar. `UPC1 ALIMENTADOR
+   11SEL-451-521_09_202613_36_57_649_000` não tem um espaço depois do começo:
+   sem isto ele é uma palavra só de 50 caracteres, que empurrava a página
+   inteira para a direita quando se ampliava (Ctrl +) — e era por ela que os
+   botões saíam da tela. Medido em 19/10/2026. */
+.topo h1 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .sub { margin: 2px 0 0; color: var(--suave); font-size: 13px; }
-.versao { font-family: var(--mono); font-size: 12px; color: var(--destaque); }
+/* A versão é BOTÃO: ela abre a janelinha «sobre». Sem moldura, porque no
+   cabeçalho ela continua sendo uma etiqueta — a moldura só aparece no hover,
+   que é onde a mão pergunta se aquilo clica. */
+.versao {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--destaque);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 2px 6px;
+  background: none;
+  cursor: pointer;
+}
+.versao:hover { border-color: var(--destaque); }
+
+/* ----------------------------------------------------------------------
+   A JANELA DE AJUDA (abas)
+
+   As dicas moravam numa lista no rodapé, onde ninguém as lia depois da
+   primeira semana — e onde ocupavam tela em toda rolagem. Em abas, cada
+   assunto cabe inteiro numa tela e quem procura uma tecla acha pelo título.
+   ---------------------------------------------------------------------- */
+/* `[open]`, e NÃO `.janela-de-ajuda` solta — e isto não é detalhe.
+ *
+ * O navegador esconde um `<dialog>` fechado com `display: none` na folha
+ * DELE. Uma regra nossa com `display: flex` no elemento ganha dessa, e o
+ * resultado é um diálogo que nunca fecha: ele ficava colado no fim da página,
+ * embaixo do «+ adicionar gráfico», e o × não fazia nada visível — o `close()`
+ * tirava o `open`, mas o `display` continuava mandando mostrar.
+ *
+ * Era isto que ele via quando disse que «o botão de fechar não funciona» e que
+ * «o como usar ainda está aqui embaixo». Com o seletor preso ao `[open]`, o
+ * fechado volta a obedecer ao `display: none` do navegador. */
+.janela-de-ajuda[open] {
+  display: flex;
+  flex-direction: column;
+}
+.janela-de-ajuda {
+  width: min(680px, 94vw);
+  height: fit-content;
+  max-height: 86vh;
+}
+
+.abas-da-ajuda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--linha);
+}
+.abas-da-ajuda .aba {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--suave);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+.abas-da-ajuda .aba:hover { color: var(--tinta); border-color: var(--linha); }
+.abas-da-ajuda .aba.escolhida {
+  color: var(--destaque);
+  border-color: var(--destaque);
+  background: var(--destaque-fraco);
+}
+
+.folha-da-ajuda { overflow-y: auto; font-size: 13px; line-height: 1.5; }
+.folha-da-ajuda[hidden] { display: none; }
+.folha-da-ajuda h4 {
+  margin: 14px 0 6px;
+  font-size: 12.5px;
+  color: var(--tinta);
+}
+.folha-da-ajuda h4:first-child { margin-top: 2px; }
+.folha-da-ajuda p { margin: 0 0 8px; color: var(--suave); }
+.folha-da-ajuda b { color: var(--tinta); font-weight: 600; }
+.folha-da-ajuda code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--tinta);
+}
+.lista-da-ajuda {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  color: var(--suave);
+}
+.lista-da-ajuda li { margin: 0 0 4px; }
+
+/* A figura: ela mostra o GESTO, que é o que uma frase explica mal. Pequena de
+   propósito — é uma nota de rodapé do texto, não uma ilustração. */
+.figura-da-ajuda { margin: 4px 0 12px; }
+.figura-da-ajuda svg { display: block; }
+.figura-da-ajuda figcaption {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--suave);
+  opacity: .85;
+}
+
+/* ----------------------------------------------------------------------
+   A TELA INICIAL: o mosaico dos módulos
+
+   Cartões IGUAIS, e só a cor diz qual está pronto. Tamanhos diferentes
+   diriam que um módulo é mais importante que o outro, e o que muda entre
+   eles é o calendário, não a importância.
+   ---------------------------------------------------------------------- */
+.tela-do-menu .marca { display: flex; align-items: center; gap: 12px; }
+.tela-do-menu .marca h1 { margin: 0; }
+.logotipo { display: block; flex: none; }
+
+/* A etiqueta da versão na tela de arquivos: ali ela é só etiqueta — quem abre
+   o «sobre» é a da tela inicial. */
+.versao-etiqueta {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--destaque);
+  padding: 2px 6px;
+}
+
+/* A largura do MIAOLO, e não a da página: o mosaico tem 760 px e a chamada
+   fica alinhada com ele. Com 980 px aqui, os 760 ficavam encostados à
+   esquerda e sobravam 180 px à direita — o bloco inteiro parecia deslocado,
+   que foi o que ele viu. Com 800 (760 + os dois respiros de 20) o conjunto
+   centra e a chamada continua alinhada com a primeira coluna. */
+main.menu { max-width: 800px; margin: 0 auto; padding: 26px 20px 12px; }
+.menu .chamada { margin: 0 0 18px; color: var(--suave); font-size: 13.5px; }
+
+/* DOIS por linha, e não «o que couber»: são quatro módulos, e 2×2 é um
+   mosaico — três em cima e um sozinho embaixo é uma lista que sobrou. */
+.mosaico {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(240px, 1fr));
+  gap: 16px;
+  max-width: 760px;
+}
+@media (max-width: 620px) {
+  .mosaico { grid-template-columns: 1fr; }
+}
+
+/* Um cartão é um botão de verdade (ou um link, no módulo pronto): o módulo se
+   abre com Enter, e não só com o dedo. */
+.modulo {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 8px;
+  min-height: 182px;
+  padding: 16px 16px 13px;
+  text-align: left;
+  text-decoration: none;
+  background: var(--superficie);
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.modulo .icone-do-modulo { color: var(--suave); line-height: 0; }
+.modulo .nome-do-modulo {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--tinta);
+}
+.modulo .dizer-do-modulo {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--suave);
+}
+.modulo .selo {
+  justify-self: start;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--suave);
+  border: 1px solid var(--linha);
+  border-radius: 3px;
+  padding: 1px 6px;
+}
+
+/* O que está PRONTO acende: a cor é o que diz qual deles abre hoje. */
+.modulo.pronto { border-color: var(--destaque-fraco); }
+.modulo.pronto .icone-do-modulo { color: var(--destaque); }
+.modulo.pronto .selo {
+  color: var(--destaque);
+  border-color: var(--destaque);
+  background: var(--destaque-fraco);
+}
+.modulo.pronto:hover { border-color: var(--destaque); }
+
+/* Os futuros ficam apagados — e clicáveis. O clique abre a nota do que eles
+   vão fazer: botão apagado que não responde a nada é a tela discutindo com
+   quem clicou. */
+.modulo.futuro { opacity: .62; }
+.modulo.futuro:hover { opacity: .85; border-color: var(--suave); }
+
+.janela-do-modulo { width: min(460px, 92vw); height: fit-content; }
+.janela-do-modulo .dizer-da-nota {
+  margin: 2px 0 10px;
+  font-size: 13.5px;
+  color: var(--tinta);
+}
+
+/* A janelinha «sobre»: versão, licença e titularidade.
+ *
+ * Curta por natureza — meia dúzia de linhas —, então `fit-content`, pelo mesmo
+ * motivo da calculadora: num `<dialog>`, `height: auto` estica de uma borda à
+ * outra da tela. */
+.janela-sobre {
+  width: min(520px, 92vw);
+  height: fit-content;
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.janela-sobre .sobre-linha { margin: 2px 0 12px; font-size: 14px; }
+
+/* Rótulo e fato, como a tira do registro: o rótulo é endereço, miúdo e em
+   caixa alta; o olho passa por cima dele sem parar quando não é o que
+   procura. */
+.janela-sobre .sobre-fatos {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 14px;
+  margin: 0;
+  font-size: 13px;
+}
+.janela-sobre .sobre-fatos dt {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--suave);
+  padding-top: 3px;
+}
+.janela-sobre .sobre-fatos dd { margin: 0; color: var(--tinta); }
+.janela-sobre .sobre-fatos b { color: var(--tinta); font-weight: 600; }
+
+.janela-sobre .sobre-rodape {
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: var(--suave);
+}
+/* O azul-arroxeado do navegador não é cor desta tela. */
+.janela-sobre a { color: var(--destaque); }
 
 main {
   max-width: 980px;
@@ -171,7 +584,10 @@ h2 { margin: 0 0 8px; font-size: 17px; }
 
 .contagem { font-family: var(--mono); font-size: 12px; color: var(--suave); }
 
-.ajuda { margin: 0 0 16px; color: var(--suave); font-size: 14px; max-width: 68ch; }
+/* O parágrafo de explicação de uma tela. `p.ajuda`, e não `.ajuda` solta: o
+   botão de ajuda do cabeçalho tinha a mesma palavra na classe e herdava esta
+   margem de baixo -- 16 px que o punham fora da fileira das outras chaves. */
+p.ajuda { margin: 0 0 16px; color: var(--suave); font-size: 14px; max-width: 68ch; }
 
 code { font-family: var(--mono); font-size: 0.92em; }
 
@@ -349,13 +765,24 @@ footer a { color: var(--destaque); }
 
 /* --- cabeçalho: ações ---------------------------------------------------- */
 
-.acoes { display: flex; align-items: baseline; gap: 16px; }
+/* `center` e não `baseline`.
+ *
+ * A linha de base de uma caixa `inline-flex` é a do PRIMEIRO item dentro dela,
+ * e o ímã não tem texto nenhum — tem um `<svg>`, que não tem linha de base.
+ * Alinhados pela base, os botões saíam em alturas diferentes: o ímã 2,5 px
+ * acima dos vizinhos e o `secundário|primário` meio pixel abaixo, mesmo com
+ * todos medindo os mesmos 28 px de altura. É a mesma armadilha já consertada
+ * no cabeçalho dos gráficos. */
+.acoes { display: flex; align-items: center; gap: 16px; }
 
 /* Tema e voltar usam a mesma chave dos outros controles do cabeçalho — são a
    mesma fileira, e já foram dois links sublinhados no fim dela, o que os fazia
    parecer outra categoria de coisa. O `.voltar` continua sendo `<a>`, por
    navegar; o que muda é só o desenho. */
-.tema, .voltar, #exportar { text-decoration: none; }
+/* Chave que NAVEGA continua sendo `<a>` -- abrir noutra aba com o botão do
+   meio tem que funcionar --, mas não se veste de link: sublinhado no meio de
+   uma fileira de chaves se lê como outra categoria de coisa. */
+a.chave, .tema, .voltar, #exportar { text-decoration: none; }
 
 /* O título é editável, e isso precisa aparecer ANTES do clique: sem nenhuma
    pista, um nome que vira campo de texto ao ser clicado é um susto. */
@@ -386,10 +813,20 @@ footer a { color: var(--destaque); }
 
 /* --- tira de fatos do registro ------------------------------------------- */
 
+/* A tira de fatos do arquivo, em FICHAS: rótulo miúdo em cima, valor embaixo.
+ *
+ * Era uma frase corrida ("2000 amostras  2000 Hz  14 analógicos…") e o olho
+ * tinha que ler a frase inteira para achar a taxa. Com o rótulo por cima ele
+ * acha o rótulo primeiro — e a fileira comporta mais um fato sem virar um
+ * parágrafo, que foi o que permitiu acrescentar TC, TP e modelo.
+ *
+ * O desalinhamento que apareceu nas fichas escritas pelo JavaScript não era
+ * da ficha: era o `display` delas. Ver a regra do `.fi-js`, logo abaixo. */
 .tira {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 22px;
+  align-items: flex-start;
+  gap: 10px 22px;
   max-width: 1400px;
   margin: 0 auto;
   padding: 12px 20px 0;
@@ -398,11 +835,52 @@ footer a { color: var(--destaque); }
   color: var(--suave);
 }
 
+.tira .fi {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+/* As fichas escritas pelo JavaScript são BLOCO, e não flex-coluna como as
+   outras: o conteúdo delas não é um texto só — a dos canais sem sinal tem um
+   `<span>`, um `·` e um botão. Em flex-coluna cada um desses virava um item e
+   eles saíam empilhados e centralizados, um por linha, que era o
+   desalinhamento da tela. Em bloco, o rótulo é o `::before` (que é `block`, e
+   por isso fica em cima, como nas outras fichas) e o resto flui inline, como
+   texto — uma linha só, embaixo do rótulo. */
+.tira .fi-js { display: block; min-width: 0; }
+
+/* O rótulo: miúdo, espaçado e em caixa alta. Ele não é leitura — é endereço,
+   e o olho tem que passar por cima dele sem parar quando não for o que
+   procura. */
+.tira .rot,
+.tira .fi-js::before {
+  font-size: 9.5px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--suave);
+  opacity: .85;
+}
+
+.tira .val { color: var(--tinta); white-space: nowrap; }
+
+/* As três fichas que o JavaScript escreve com `textContent` tiram o rótulo do
+   CSS: `textContent` apaga os filhos do elemento, então um `<span>` com o
+   rótulo dentro sumiria no primeiro desenho. */
+.tira .fi-js::before { content: attr(data-rot); display: block; }
+
+/* O `display` acima vence o `[hidden] { display: none }` do navegador, que e'
+   regra de folha do usuario. Sem esta linha, as três fichas escritas pelo
+   JavaScript apareciam SEMPRE — rótulo aceso e valor vazio. */
+.tira .fi-js[hidden] { display: none; }
+
 .tira b { color: var(--tinta); font-weight: 600; }
 
 /* Taxa de amostragem que muda no meio do registro. Não é erro, mas muda como
    se lê o gráfico — então destaca-se do resto da tira, que é só informação. */
 .tira .atencao { color: var(--atencao); cursor: help; }
+.tira .atencao::before { color: var(--atencao); }
 
 /* O que o arquivo diz do proprio relogio. Fica ao lado do disparo e em tom
    discreto: e' contexto da hora, nao aviso -- o leitor nao fez nada, so'
@@ -413,6 +891,20 @@ footer a { color: var(--destaque); }
    de cor. Apagar o desenho por causa de um pedido que falhou custaria ao
    usuário o zoom, os cursores e o lugar onde ele estava. */
 #rodape.atencao { color: var(--atencao); }
+
+/* O AVISO do pé da tela da onda (era um `<footer>` com o placar de amostras).
+   Fica escondido enquanto não há o que avisar -- o `hidden` é escrito pelo
+   `onda.js` --, e por isso não precisa de respiro reservado: quando aparece,
+   ele empurra o resto para baixo, o que é exatamente o que um aviso deve
+   fazer. */
+.aviso-do-pe {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 10px 20px 28px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--atencao);
+}
 
 /* --- gráficos ------------------------------------------------------------ */
 
@@ -563,11 +1055,8 @@ footer a { color: var(--destaque); }
 }
 
 #graficos.com-cursores .grafico-corpo {
-  /* 268 e não 248: a unidade em cada linha (`IA 60Hz RMS (A)`) precisa dos
-     vinte pixels a mais, e tirá-los das colunas de número faria `-116,9`
-     cortar — número cortado numa tabela de laudo é pior que gráfico estreito. */
-  grid-template-columns: minmax(0, 1fr) 268px;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) var(--lado-da-tabelinha);
+  gap: var(--vao-da-tabelinha);
 }
 
 /* ----------------------------------------------------------------------
@@ -590,6 +1079,271 @@ footer a { color: var(--destaque); }
    perseguindo a cada desenho. */
 .tela-fasorial { flex: 0 0 324px; width: 324px; line-height: 0; }
 
+/* O plano complexo: o mesmo arranjo do fasorial, num quadro maior — o
+   caminho de um fasor precisa de mais espaço que uma seta. Posicionado para
+   a dica do hover cair em cima do ponto. */
+.tela-complexo { flex: 0 0 420px; width: 420px; line-height: 0; position: relative; }
+
+/* O plano alfa (87L): quadro fixo, tabela de uma coluna por sinal ao lado. */
+.tela-alfa { flex: 0 0 380px; width: 380px; line-height: 0; position: relative; }
+.alfa-tabela th.coluna-do-alfa { text-align: right; }
+.alfa-tabela td { text-align: right; font-variant-numeric: tabular-nums; }
+.cor-do-alfa {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+.alfa-tabela td.decisao-restringe { color: var(--bom); font-weight: 600; }
+.alfa-tabela td.decisao-opera { color: var(--ruim); font-weight: 600; }
+.alfa-tabela td.decisao-sem { color: var(--suave); }
+
+/* O diferencial (87T): a mesma grade do espectro — o plano na coluna larga e
+   a tabela de uma coluna por fase ao lado. O canvas se mede pela coluna, que
+   é `minmax(0, 1fr)`: a largura dela não depende do que está dentro. */
+.grafico-corpo.diferencial {
+  grid-template-columns: minmax(0, 1fr) var(--lado-da-tabelinha);
+  gap: var(--vao-da-tabelinha);
+}
+.grafico-corpo.diferencial .mini { display: table; }
+@media (max-width: 1100px) {
+  .grafico-corpo.diferencial { grid-template-columns: minmax(0, 1fr); }
+}
+.tela-diferencial { min-width: 0; line-height: 0; }
+.lado-diferencial { min-width: 0; }
+.tela-diferencial canvas { display: block; }
+.alfa-tabela td.decisao-bloqueado { color: var(--atencao); font-weight: 600; }
+.equacoes-do-diferencial {
+  margin-top: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--suave);
+}
+/* No lugar do gráfico, enquanto falta ajuste: a mesma altura, para a tela
+   não pular quando o último ajuste entra. */
+.faltam-ajustes {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px 20px;
+  border: 1px dashed var(--atencao);
+  border-radius: 6px;
+  line-height: 1.45;
+  font-size: 13px;
+  color: var(--tinta);
+}
+.faltam-ajustes p { margin: 0; max-width: 620px; }
+.faltam-ajustes .nota-do-quadro { color: var(--atencao); font-size: 12px; }
+.faltam-ajustes .medida { align-self: flex-start; }
+
+/* A caixa de ajustes do 87T: a da impedância, mais larga e com rolagem. */
+.menu-suspenso.ajustes-87 { width: 470px; overflow-y: auto; }
+.placar-87 { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 6px 6px; }
+.estado-87 {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 7px;
+  border: 1px solid var(--linha);
+  border-radius: 9px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  white-space: nowrap;
+  color: var(--suave);
+}
+.estado-87.coletado { color: var(--bom); border-color: var(--bom); }
+.estado-87.coletado::before { content: "●"; font-size: 8px; }
+.estado-87.suspeito { color: var(--atencao); border-color: var(--atencao); }
+.estado-87.suspeito::before { content: "▲"; font-size: 8px; }
+.estado-87.falta { border-style: dashed; }
+.estado-87.falta::before { content: "○"; font-size: 8px; }
+.estado-87.digitado { color: var(--fase-a); border-color: var(--fase-a); }
+.estado-87.digitado::before { content: "✎"; }
+.estado-87.deduzido { border-style: dotted; }
+.estado-87.deduzido::before { content: "ƒ"; font-style: italic; }
+.ajuste-87 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px 34px 98px;
+  gap: 6px;
+  align-items: center;
+  margin: 0 6px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--linha);
+}
+.ajuste-87 .rotulo-87 { font-size: 12.5px; }
+.ajuste-87 .variavel-87 {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--suave);
+}
+.ajuste-87 .campo-87 { width: 100%; font-family: var(--mono); font-size: 12px; }
+.ajuste-87.falta .campo-87 { border-style: dashed; }
+.ajuste-87.suspeito .campo-87 { border-color: var(--atencao); }
+.ajuste-87 .unidade-87 { font-size: 11px; color: var(--suave); }
+.ajuste-87 .estado-87 { justify-self: end; }
+.ajuste-87 .sub-87 {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--suave);
+}
+.ajuste-87 .sub-87 code { font-family: var(--mono); font-size: 10.5px; }
+.ajuste-87 .motivo-87 { color: var(--atencao); }
+.ajuste-87 .sub-87 .medida { height: 20px; font-size: 10.5px; }
+.ajustes-87 .equacao-87 {
+  margin: 2px 6px 4px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--tinta);
+}
+.tempo-do-alfa {
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--suave);
+}
+.menu-suspenso .nota-do-menu {
+  max-width: 300px;
+  margin: 2px 6px 8px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--suave);
+}
+.menu-suspenso .opcao small { margin-left: 6px; color: var(--suave); }
+.menu-suspenso .ajuste-numerico {
+  display: grid;
+  grid-template-columns: 70px auto;
+  gap: 4px 6px;
+  align-items: center;
+  padding: 0 2px;
+}
+.menu-suspenso .ajuste-numerico input[type="number"] {
+  width: 70px;
+  font: 12px var(--mono), monospace;
+  background: var(--fundo);
+  color: var(--tinta);
+  border: 1px solid var(--linha);
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+.menu-suspenso .ajuste-numerico input[type="range"] { grid-column: 1 / -1; width: 100%; }
+.dica-do-complexo {
+  position: absolute;
+  z-index: 5;
+  max-width: 300px;
+  padding: 4px 8px;
+  border: 1px solid var(--linha);
+  border-radius: 6px;
+  background: var(--superficie);
+  color: var(--tinta);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: normal;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
+}
+/* «fixa | dinâmica»: dois botões colados, como uma chave de duas posições. */
+.par-de-medidas { display: inline-flex; flex: 0 0 auto; }
+.par-de-medidas .medida { border-radius: 0; margin-left: -1px; }
+.par-de-medidas .medida:first-child { border-radius: 4px 0 0 4px; margin-left: 0; }
+.par-de-medidas .medida:last-child { border-radius: 0 4px 4px 0; }
+.par-de-medidas .medida.escolhido { position: relative; z-index: 1; }
+
+/* A PÍLULA da referência angular (plano complexo): uma peça em duas metades,
+   o sinal à esquerda e o modo à direita. Escolha dele, 22/10/2026. */
+.pilula-da-referencia {
+  display: inline-flex;
+  flex: 0 0 auto;
+  border: 1px solid var(--destaque);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.pilula-da-referencia button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 12px;
+  background: none;
+  border: 0;
+  padding: 2px 10px;
+  color: var(--tinta);
+  cursor: pointer;
+}
+.pilula-da-referencia .metade-do-modo {
+  border-left: 1px solid var(--destaque);
+  background: var(--destaque-fraco);
+  color: var(--destaque);
+}
+.pilula-da-referencia .metade-do-modo::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  flex: none;
+  background: currentColor;
+  -webkit-mask: var(--ic) center / contain no-repeat;
+  mask: var(--ic) center / contain no-repeat;
+}
+.pilula-da-referencia button:hover { background: var(--destaque-fraco); }
+
+/* O ⓘ azul: explicação que se ABRE no clique. Azul de propósito — é o azul
+   da fase A, a cor de «informação» que a tela já usa. */
+.info-azul {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  flex: none;
+  border: 1.5px solid var(--fase-a);
+  border-radius: 50%;
+  background: none;
+  color: var(--fase-a);
+  font: italic 700 11px/1 Georgia, serif;
+  cursor: pointer;
+}
+.info-azul:hover { background: var(--fase-a); color: var(--fundo); }
+.explica-referencia {
+  display: grid;
+  gap: 8px;
+  width: min(380px, calc(100vw - 40px));
+  padding: 2px 10px 4px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.explica-referencia p { margin: 0; }
+.explica-referencia p.suave { color: var(--suave); font-size: 11.5px; padding: 0 2px; }
+.modo-da-referencia {
+  padding: 8px 10px;
+  border: 1px solid var(--linha);
+  border-radius: 6px;
+}
+.modo-da-referencia.valendo { border-color: var(--destaque); background: var(--destaque-fraco); }
+.nome-do-modo { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; }
+.nome-do-modo b { font: 600 12.5px var(--mono); color: var(--tinta); }
+.icone-do-modo {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  background: var(--destaque);
+  -webkit-mask: var(--ic) center / contain no-repeat;
+  mask: var(--ic) center / contain no-repeat;
+}
+.selo-valendo {
+  margin-left: auto;
+  font: 10px var(--mono);
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--destaque);
+}
+
 /* Dois diagramas lado a lado: a comparação pré-falta × falta. Cada um
    fica com metade da linha, e dentro dela a tabela desce para baixo do
    círculo sozinha — o `flex-wrap` do corpo já faz isso quando a metade
@@ -610,7 +1364,8 @@ footer a { color: var(--destaque); }
 .grafico.painel-escolhido { cursor: grab; }
 #graficos.arrastando-painel .grafico.painel-escolhido { cursor: grabbing; }
 
-.grafico .tela, .grafico .tela-fasorial, .grafico .mini,
+.grafico .tela, .grafico .tela-fasorial, .grafico .tela-complexo,
+.grafico .tela-alfa, .grafico .mini,
 .grafico .legenda, .grafico canvas { cursor: auto; }
 
 /* O gráfico escolhido: a moldura diz que o cabeçalho dele agora arrasta. */
@@ -659,9 +1414,171 @@ footer a { color: var(--destaque); }
 .par-fasorial {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-  gap: 22px;
+  gap: 0;
   align-items: start;
 }
+
+/* O PAR É UM PAINEL SÓ (escolha dele, opção J1).
+ *
+ * Eram dois quadros encostados, e a moldura do cursor — que atravessa os dois
+ * — parecia cortá-los ao meio. Dentro de um quadro só ela deixa de cortar
+ * coisa nenhuma: vira detalhe do painel, que é o que a moldura sempre quis
+ * ser. As duas, a de cima e a de baixo, ficam DENTRO da borda.
+ *
+ * O que separa os dois diagramas é uma linha de 1 px, do topo ao rodapé —
+ * inclusive atrás dos cabeçalhos, que é onde ela diz onde um acaba e o outro
+ * começa. */
+.par-com-moldura {
+  /* Onde a divisória começa e termina, medido pelo `onda.js` a cada pintura
+     (ver `pintarMolduras`). Os zeros valem até a primeira medida chegar. */
+  --divisoria-topo: 0px;
+  --divisoria-base: 0px;
+  position: relative;
+  background: var(--superficie);
+  border: 1px solid var(--linha);
+  border-radius: 6px;
+  padding: 12px 14px 10px;
+}
+
+/* A divisória. Pseudoelemento, e não borda de uma das colunas: assim ela não
+   entra na largura de nenhuma das duas — as duas ficam com a MESMA largura de
+   conteúdo, até o pixel. Da última vez, um pixel de diferença bastou para o
+   cabeçalho da direita não caber, jogar o ▲▼× para a linha de baixo e deixar
+   um diagrama mais baixo que o outro. */
+.par-com-moldura::after {
+  content: "";
+  position: absolute;
+  /* COMEÇA na moldura de cima e TERMINA na de baixo: ela separa os desenhos,
+     que é onde há o que separar. Quem diz onde as molduras caíram é o
+     `onda.js` — a de cima é posicionada por medida —, e ele escreve as duas
+     distâncias aqui. Os zeros são o antes de a primeira medida chegar. */
+  top: var(--divisoria-topo, 0px);
+  bottom: var(--divisoria-base, 0px);
+  left: 50%;
+  width: 1px;
+  background: var(--linha);
+}
+
+/* A moldura azul do painel escolhido, dentro do par.
+ *
+ * Desenhada no PAR, e não na coluna: a coluna acaba onde o desenho acaba, e a
+ * marca precisa pegar a metade inteira do painel — inclusive as faixas das
+ * molduras do cursor, que são do par e não dela. `:has()` é o que deixa o pai
+ * saber qual das duas está escolhida. */
+.par-com-moldura::before {
+  content: "";
+  position: absolute;
+  display: none;
+  top: 2px;
+  bottom: 2px;
+  border: 1px solid var(--destaque);
+  border-radius: 5px;
+  pointer-events: none;
+  z-index: 3;
+}
+.par-com-moldura:has(> .par-fasorial > .grafico:first-child.painel-escolhido)::before {
+  display: block;
+  left: 0;
+  right: calc(50% + 11px);
+}
+.par-com-moldura:has(> .par-fasorial > .grafico:last-child.painel-escolhido)::before {
+  display: block;
+  left: calc(50% + 11px);
+  right: 0;
+}
+
+/* Os dois de dentro deixam de ser quadro: quem tem borda e fundo é o par. */
+.par-com-moldura > .par-fasorial > .grafico {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+}
+/* O mesmo respiro dos dois lados da divisória -- e dos DOIS lados de cada
+   coluna, não só do lado de dentro.
+ *
+ * Com os 22 px todos do lado da divisória, o centro da coluna não era o centro
+ * do desenho: os dois diagramas ficavam 11 px à esquerda do meio da metade
+ * deles, que foi o deslocamento que ele viu. Com 11 px de cada lado o vão
+ * entre os dois continua os mesmos 22 px, e cada metade fica simétrica. */
+.par-com-moldura > .par-fasorial > .grafico { padding: 0 11px; }
+
+/* O ▲▼× DESCE NOS DOIS, ou em nenhum.
+ *
+ * Com um nome de canal comprido («∠ TP-LT1:V C»), a fileira de botões de um
+ * lado estoura a largura e o ▲▼× cai para a linha de baixo — só daquele lado.
+ * O cabeçalho fica uma linha mais alto que o do vizinho, e o par inteiro sai
+ * do lugar: desenho, tabela e rodapé, todos desencontrados.
+ *
+ * Quem percebe a quebra é o `onda.js` (`alinharPares`), que mede; aqui fica só
+ * o efeito. `flex: 0 0 100%` põe o grupo numa linha própria, e `margin-left:
+ * auto` o mantém encostado à direita, que é onde ele sempre esteve. */
+.par-com-moldura .grafico-titulo.arranjo-embaixo .arranjo {
+  flex: 0 0 100%;
+  justify-content: flex-end;
+}
+
+/* E o desenho fica CENTRADO na metade dele. O corpo do fasorial é uma linha
+   flex que embrulha: na largura de meia tela a tabelinha desce para baixo do
+   círculo, e então o que a linha tem é só o círculo -- centrá-la é centrar o
+   círculo. */
+.par-com-moldura > .par-fasorial > .grafico > .corpo-fasorial {
+  justify-content: center;
+}
+
+/* A marca do escolhido é desenhada pelo PAR (ver `.par-com-moldura::before`),
+   então a do painel solto não vale aqui: ela pararia na borda da coluna. */
+.par-com-moldura .grafico.painel-escolhido {
+  box-shadow: none;
+}
+
+/* A divisória PARA nas molduras do cursor, em vez de atravessá-las.
+ *
+ * Quem para é a moldura, não a linha: as duas faixas têm o fundo do painel e
+ * passam por cima dela. Fazer a linha parar pela medida exigiria saber onde a
+ * moldura caiu — e é o JavaScript que decide isso, medindo. Assim a regra fica
+ * em um lugar só, e continua certa se a altura do cabeçalho mudar. */
+.par-com-moldura > .moldura-acima,
+.par-com-moldura > .moldura-abaixo {
+  background: var(--superficie);
+}
+.par-com-moldura > .moldura-abaixo {
+  position: relative;
+  z-index: 2;
+}
+
+/* Num par, o NOME fica numa linha e os botões na de baixo.
+ *
+ * A coluna tem metade da largura, e numa delas o ▲▼× cabia na primeira linha e
+ * na outra não — dois cabeçalhos da mesma forma desenhados de dois jeitos, e o
+ * desenho de baixo acompanhando o desalinhamento. Com o nome sozinho em cima,
+ * as duas colunas têm sempre a mesma altura de cabeçalho. */
+.par-com-moldura .grafico-titulo .nome-painel {
+  flex: 0 0 100%;
+  /* Botão de largura cheia centraliza o próprio rótulo. O nome é o começo da
+     linha, não um título de cartaz. */
+  text-align: left;
+}
+
+/* A de cima sai do FLUXO. No fluxo ela só poderia nascer antes dos dois
+   painéis — acima dos botões, porque o cabeçalho é de cada painel, um em cada
+   coluna. Fora do fluxo ela cai rente ao topo dos dois desenhos; quem mede
+   isso é o `onda.js`, que já mede a largura e a esquerda dela.
+
+   O espaço continua reservado pelo `padding-top` do corpo logo abaixo: assim a
+   moldura não cobre nada e nada se mexe quando o cursor aparece. */
+.par-com-moldura > .moldura-acima {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  margin: 0;
+  /* Por cima da divisória: a moldura é uma régua só, de ponta a ponta. */
+  z-index: 2;
+}
+
+.par-com-moldura > .moldura-abaixo { margin: 10px 0 0; }
+
+.par-com-moldura .corpo-fasorial { padding-top: 26px; }
 
 .lado-fasorial {
   flex: 0 1 420px;
@@ -777,7 +1694,14 @@ footer a { color: var(--destaque); }
   min-width: 0;
 }
 
-.mini tbody th.canal > .rotulo > :first-child {
+/* Quem encolhe é o NOME, nomeado — e não «o primeiro filho».
+ *
+ * Era `:first-child`, e funcionou até a bolinha da cor entrar na frente do
+ * nome: o seletor passou a mirar a bolinha, o nome deixou de encolher, e quem
+ * sobrava para ser cortado era a unidade — `Current IA (A)` virou
+ * `Current IA (`. Exatamente o estrago que o comentário acima diz existir para
+ * impedir, reintroduzido por um seletor posicional. */
+.mini tbody th.canal > .rotulo > .nome {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -785,12 +1709,107 @@ footer a { color: var(--destaque); }
 }
 
 /* O nome do canal é botão: clicar faz dele o zero dos ângulos, como no SIGRA. */
+/* A bolinha com a cor da curva, na primeira coluna da tabelinha.
+ *
+ * A cor saiu da LETRA e veio para cá. Letra colorida no meio de nomes brancos
+ * se lê como «este está selecionado»; cor numa bolinha ao lado se lê como
+ * etiqueta — a mesma decisão do cartão de sinal e da legenda da onda.
+ *
+ * É botão porque é CLICÁVEL: onde a cor está escrita é onde se troca a cor. */
+.mini .bolinha-do-sinal {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 0;
+  padding: 0;
+  flex: none;
+  align-self: center;
+  cursor: pointer;
+}
+/* O alvo de clique é MAIOR que o desenho: 8px de bolinha são difíceis de
+   acertar com o mouse, e aumentar o desenho a faria competir com o nome.
+   18×18 invisíveis em volta resolvem sem mexer no desenho nem na coluna. */
+.mini .bolinha-do-sinal::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+}
+/* `outline` e não `border` ao focar: com borda a bolinha cresceria 2px e a
+   coluna inteira se mexeria debaixo do mouse. */
+.mini .bolinha-do-sinal:hover,
+.mini .bolinha-do-sinal:focus-visible {
+  outline: 2px solid var(--tinta);
+  outline-offset: 1px;
+}
+
+/* O nome na tabelinha: BRANCO, como na legenda e no cartão.
+ *
+ * Seletor de DUAS classes, de propósito, e escrito ACIMA das regras de
+ * `.marca-do-nome`: as marcas em subscrito (`60Hz` turquesa, `DC` rosa) têm a
+ * mesma especificidade, e empate em CSS decide pela que vem depois. Com um
+ * seletor mais específico aqui, o `60Hz` ficaria branco junto com o nome — e
+ * a cor dele é o que o liga à fatia da barra de energia. */
+.mini .nome { color: var(--tinta); }
+
+/* Faixas alternadas.
+ *
+ * Num painel com dez ou vinte sinais, o olho perde a linha ao atravessar da
+ * primeira coluna até a coluna «2−1». A faixa resolve sem traçar grade, que
+ * acrescentaria vinte linhas ao lado de um gráfico cujo assunto são as curvas.
+ *
+ * Nas CÉLULAS e não na `<tr>`: com `border-collapse: collapse` o fundo da
+ * linha fica atrás das bordas das células e some nos temas em que a borda é
+ * da cor do fundo.
+ *
+ * A linha do TEMPO fica de fora: ela não é sinal, e já se separa pelo traço. */
+.mini tbody tr:nth-child(odd):not(.tempo) > th,
+.mini tbody tr:nth-child(odd):not(.tempo) > td {
+  background: var(--faixa-da-tabela);
+}
+
+/* A paleta ANCORADA na bolinha. Flutuante porque a célula da tabelinha tem
+   `overflow: hidden` e largura fixa: seis bolinhas dentro dela empurrariam o
+   nome para fora e sairiam cortadas. `fixed` escapa de qualquer recorte. */
+.paleta-flutuante {
+  position: fixed;
+  z-index: 60;
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  padding: 3px 6px;
+  border: 1px solid var(--destaque);
+  border-radius: 999px;
+  background: var(--fundo);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .45);
+}
+.paleta-flutuante .cor-opcao {
+  width: 12px;
+  height: 12px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  padding: 0;
+  cursor: pointer;
+}
+.paleta-flutuante .cor-opcao:hover,
+.paleta-flutuante .cor-opcao:focus-visible {
+  border-color: var(--tinta);
+  outline: none;
+}
+.paleta-flutuante .cor-opcao.escolhida {
+  outline: 1.5px solid var(--tinta);
+  outline-offset: 1px;
+}
+
+/* `color` explícito e não `inherit`: a cor do canal saiu da letra e foi para
+   a bolinha, e o `th.canal` é cinza. Sem isto o nome da referência herdava o
+   cinza e ficava mais apagado que os das outras tabelinhas. */
 .mini .refere {
   background: none;
   border: none;
   padding: 0;
   font: inherit;
-  color: inherit;
+  color: var(--tinta);
   cursor: pointer;
   max-width: 100%;
   overflow: hidden;
@@ -864,29 +1883,51 @@ footer a { color: var(--destaque); }
 
 /* --- lado dos valores: arquivo, secundário, primário --------------------- */
 
+/* Mesma altura das chaves: era 24 contra 27, e numa fileira de botões a
+   diferença de três pixels se vê. O raio também passou a 6, como o delas. */
+/* A moldura é dos SEGMENTOS, não do grupo. Com a moldura no grupo, o
+   segmento aceso ficava sem a borda da esquerda: `.lado button:first-child
+   { border-left: none }` tem especificidade maior que `.lado button` e
+   vencia a regra que devolvia a borda — e o `overflow: hidden` ainda cortava
+   o que sobrasse. Era o «secundário» sem todas as bordas. */
 .lado {
   display: inline-flex;
-  border: 1px solid var(--linha);
-  border-radius: 5px;
-  overflow: hidden;
+  box-sizing: border-box;
+  height: var(--alto-da-chave);
 }
 
 .lado button {
+  display: inline-flex;
+  align-items: center;
   background: none;
-  border: none;
-  border-left: 1px solid var(--linha);
-  padding: 3px 9px;
+  border: 1px solid var(--linha);
+  padding: 0 9px;
   font: inherit;
   font-size: 12px;
   color: var(--suave);
   cursor: pointer;
 }
 
-.lado button:first-child { border-left: none; }
 .lado button:hover:not(.escolhido) { color: var(--tinta); }
 
+/* O MESMO desenho de «aceso» da chave: fundo turquesa fraco, moldura
+   turquesa, letra turquesa. Antes o segmento escolhido só tinha o fundo — a
+   moldura era do grupo, e ficava cinza. Lado a lado com o «Filtro» aceso, o
+   mesmo estado aparecia de duas formas.
+
+   Os segmentos se sobrepõem em 1 px para que a moldura do aceso feche nos
+   quatro lados sem engrossar a junção — a mesma solução do «agrupados /
+   um por gráfico». */
+.lado button { margin-left: -1px; border-radius: 0; }
+.lado button:first-child { margin-left: 0; border-radius: 6px 0 0 6px; }
+.lado button:last-child { border-radius: 0 6px 6px 0; }
+
 .lado button.escolhido {
+  position: relative;
+  z-index: 1;
   background: var(--destaque-fraco);
+  border: 1px solid var(--destaque);
+  border-radius: 6px;
   color: var(--destaque);
   font-weight: 600;
 }
@@ -897,10 +1938,94 @@ footer a { color: var(--destaque); }
 
 /* Chave de um estado só: acesa ou apagada. Mais honesta que dois botões que se
    alternam — filtro é coisa que está ligada ou não. */
+
+/* --- os ícones das chaves do cabeçalho -----------------------------------
+ *
+ * Em MÁSCARA, e não como `<svg>` dentro do botão. Dois dos botões — o do modo
+ * e o do tema — têm o rótulo reescrito por JavaScript com `textContent`, e
+ * `textContent` apaga os filhos do elemento: um ícone que fosse filho sumia no
+ * primeiro clique. Como máscara ele é do CSS, e sobrevive.
+ *
+ * `background: currentColor` faz o desenho seguir a cor do texto — inclusive
+ * o turquesa da chave acesa. Uma cor escrita no ícone ficaria presa no tema
+ * escuro e no estado apagado. */
+.chave[style*="--ic"]::before,
+.chave.com-icone::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  flex: none;
+  margin-right: 7px;
+  background: currentColor;
+  -webkit-mask: var(--ic) center / contain no-repeat;
+  mask: var(--ic) center / contain no-repeat;
+}
+
+/* A seta do menu não leva ícone: ela É um ícone. */
+.chave.seta::before { content: none; }
+
+:root {
+  /* O desenho de CADA chave, escrito nela mesma (`style="--ic: …"`). Aqui só
+     o valor neutro, para quem não declarar nenhum: sem ele, uma chave com a
+     classe e sem a variável ganharia um quadrado da cor do texto. */
+  --ic: none;
+
+  --ic-tradicional: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'><path d='M1.5 8c1.6-5.5 4.4-5.5 6 0s4.4 5.5 6 0'/></svg>");
+  /* A onda CRUA, com tudo que vem junto dela — escolha do Alexandre. O par
+     diz a diferença entre os dois modos sem uma palavra: o tradicional
+     mostra o que sai do filtro de 60 Hz, o avançado mostra o que entrou. */
+  --ic-avancado: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M1.5 8.5l1-3.5 1 5.5 1-6.5 1 7.5 1-5 1 3.5 1-6 1 7 1-4.5 1 2.5 1-2'/></svg>");
+  --ic-filtro: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linejoin='round'><path d='M2 3h12l-4.6 5.2v5.3L6.6 12V8.2z'/></svg>");
+  --ic-tema: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5'><circle cx='8' cy='8' r='4.2'/><path d='M8 3.8a4.2 4.2 0 0 0 0 8.4z' fill='black' stroke='none'/><path d='M8 .8v1.4M8 13.8v1.4M.8 8h1.4M13.8 8h1.4M2.9 2.9l1 1M12.1 12.1l1 1M13.1 2.9l-1 1M3.9 12.1l-1 1' stroke-linecap='round'/></svg>");
+  --ic-exportar: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M8 2v7.5M5 7l3 3 3-3M2.5 13.2h11'/></svg>");
+  /* A pasta do acervo. A seta para a esquerda ficou com o «menu», que é quem
+     volta ao começo -- duas chaves com a mesma seta não diriam qual é qual. */
+  --ic-arquivos: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M1.8 4.2h4l1.2 1.6h7.2v7.4H1.8z'/><path d='M1.8 7.4h12.4'/></svg>");
+  --ic-eventos: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'><circle cx='3' cy='3.5' r='1.1' fill='black' stroke='none'/><circle cx='3' cy='8' r='1.1' fill='black' stroke='none'/><circle cx='3' cy='12.5' r='1.1' fill='black' stroke='none'/><path d='M6 3.5h8M6 8h6M6 12.5h7'/></svg>");
+  --ic-casa: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linejoin='round'><path d='M2 7.2L8 2.4l6 4.8V14H9.8v-4H6.2v4H2z'/></svg>");
+  --ic-voltar: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M6.6 3L2.4 8l4.2 5M2.4 8h11.2'/></svg>");
+  /* A BASE DE DADOS: a pilha de discos, escolha dele entre oito desenhos. O
+     `viewBox` é o mesmo 48 dos ícones do mosaico — a máscara escala por
+     `contain`, então o desenho é um só para a chave de 14 px e para o ícone
+     de 40 px da tela da base. */
+  /* LOCALIZAR FALTA: a linha entre duas barras, com o ponto da falta. */
+  --ic-localizar: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48' fill='none' stroke='black' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 14v20M42 14v20M6 24h36'/><path d='M27 8l-6 10h7l-6 10'/></svg>");
+  --ic-base: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48' fill='none' stroke='black' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='24' cy='13' rx='14' ry='5'/><path d='M10 13v10c0 2.8 6.3 5 14 5s14-2.2 14-5V13'/><path d='M10 23v10c0 2.8 6.3 5 14 5s14-2.2 14-5V23'/></svg>");
+  /* Um desenho por GAVETA, e cada um aponta para quem vai usá-la: a grade da
+     tabela nos sinais digitais, as duas torres do módulo de linhas nas linhas,
+     e a pasta do acervo nos registros. Três pilhas de disco iguais não diriam
+     qual é qual — e é justamente a diferença entre elas que a tela precisa
+     mostrar. */
+  --ic-digitais: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48' fill='none' stroke='black' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'><rect x='7' y='9' width='34' height='30' rx='2'/><path d='M7 18h34M7 28h34M18 18v21M30 18v21'/></svg>");
+  --ic-linhas: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48' fill='none' stroke='black' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'><path d='M11 40V14M5 18h12M7 24h8M37 40V14M31 18h12M33 24h8'/><path d='M11 18 Q24 28 37 18'/></svg>");
+  /* O PINCEL. Cabo em diagonal e a ponta cheia embaixo: é a ponta que diz
+     que ele pinta, e é o único desenho da fileira com uma parte sólida — as
+     outras chaves são todas de traço. */
+  --ic-pincel: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48' fill='none' stroke='black' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'><path d='M40 8 22 26'/><path d='M14 34c0-4 3-7 7-7s7 3 7 7-3 7-7 7H8c3 0 6-3 6-7z' fill='black' stroke='none'/><path d='M26 22l-6-6'/></svg>");
+  /* A LÓGICA E OS AJUSTES: linhas de uma lista, com a lupa do elemento no
+     fim. Vizinho do dicionário na fileira: as duas respondem «o que é isto
+     que estou vendo», uma pelo arquivo e a outra pelo que você cadastrou. */
+  /* Os dois modos da referência do plano complexo: alfinete (fixa) e seta
+     girando (dinâmica). */
+  --ic-fixa: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linejoin='round'><path d='M8 10v5'/><path d='M5 2h6l-1 4 2 3H4l2-3z'/></svg>");
+  --ic-dinamica: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'><path d='M13 8a5 5 0 1 1-1.5-3.5'/><path d='M12 1.5v3h-3'/></svg>");
+  --ic-logica: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M2 3.4h12M2 6.8h7M2 10.2h9M2 13.6h5'/><circle cx='12.2' cy='11.4' r='2.6'/></svg>");
+  /* O DICIONÁRIO: um livro aberto. Vizinho do ícone da lógica na fileira
+     principal — os dois são ferramentas de LEITURA do registro, como o ímã e
+     a escala, e não navegação. */
+  --ic-dicionario: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M8 4.4C6.8 3.4 5.2 3 3 3v9c2.2 0 3.8.4 5 1.4 1.2-1 2.8-1.4 5-1.4V3c-2.2 0-3.8.4-5 1.4z'/><path d='M8 4.4v9'/></svg>");
+  --ic-ajuda: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'><circle cx='8' cy='8' r='6.2'/><path d='M6.1 6.1a1.95 1.95 0 1 1 2.6 1.85c-.5.18-.7.5-.7 1v.5'/><circle cx='8' cy='11.6' r='.75' fill='black' stroke='none'/></svg>");
+}
+
 .chave {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: var(--alto-da-chave);
   font-family: var(--mono);
   font-size: 12px;
-  padding: 5px 12px;
+  padding: 0 12px;
   border: 1px solid var(--linha);
   border-radius: 6px;
   background: none;
@@ -916,6 +2041,24 @@ footer a { color: var(--destaque); }
   color: var(--destaque);
 }
 
+/* As chaves que TROCAM de palavra têm largura mínima, e o conteúdo encostado
+ * à esquerda.
+ *
+ * «tradicional» tem onze letras e «avançado» tem oito: a cada clique o botão
+ * encolhia três caracteres e a setinha do menu — que fica colada nele — andava
+ * junto, no exato instante em que a mão acabou de acertar o botão. O mesmo
+ * vale para «tema claro» × «tema escuro».
+ *
+ * A largura sai em `ch`, que na fonte monoespaçada é exatamente a largura de
+ * um caractere: 11ch é o rótulo mais longo, e o resto da conta é o ícone, o
+ * respiro dele e o respiro lateral da chave. Em `em` ou em pixels o número
+ * seria um chute que quebra quando a fonte mudar.
+ *
+ * E `flex-start`, não `center`: centrado, o ícone andaria meia diferença de
+ * largura para a direita a cada troca — teria resolvido metade do problema. */
+#modo { min-width: calc(11ch + 45px); justify-content: flex-start; }
+#tema { min-width: calc(11ch + 45px); justify-content: flex-start; }
+
 /* Travado pelo ARQUIVO, não pela tela: o relé já filtrou e não há como
    desfiltrar. Fica visível e inerte — esconder deixaria o usuário procurando
    um botão que ele viu antes. */
@@ -924,11 +2067,11 @@ footer a { color: var(--destaque); }
 /* O ímã é ícone, não palavra: ao lado de «60 Hz», «secundário» e «primário»,
    mais um texto viraria uma frase. O quadrado mantém o desenho centrado e a
    altura igual à dos vizinhos, que é o que impede a fileira de ficar torta. */
+/* O ímã é ícone, não palavra, e por isso tinha respiro próprio — e com ele
+   uma altura própria, dois pixels acima dos vizinhos. Agora só o respiro
+   lateral é dele; a altura e a centragem vêm da `.chave`. */
 .chave.ima {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 10px;
+  padding: 0 10px;
   line-height: 0;
 }
 
@@ -949,7 +2092,7 @@ footer a { color: var(--destaque); }
 }
 
 .chave.seta {
-  padding: 5px 6px;
+  padding: 0 6px;
   border-left: 0;
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
@@ -996,6 +2139,25 @@ footer a { color: var(--destaque); }
 }
 
 .menu-suspenso .opcao:hover { background: var(--destaque-fraco); }
+
+/* O menu dos filtros em LISTA: nome, quem usa e uma linha do que faz. O
+   `white-space: nowrap` das opções não vale aqui — a linha de explicação
+   quebra dentro da largura do menu. */
+.menu-suspenso .opcao.opcao-do-filtro {
+  align-items: flex-start;
+  white-space: normal;
+  width: 360px;
+  max-width: calc(100vw - 40px);
+  padding: 6px 10px;
+}
+.opcao-do-filtro input { margin-top: 3px; }
+.texto-do-filtro { display: grid; gap: 2px; min-width: 0; }
+.nome-do-filtro { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.quem-usa { font-size: 10.5px; color: var(--suave); }
+.resumo-do-filtro {
+  font: 11px/1.4 system-ui, sans-serif;
+  color: var(--suave);
+}
 
 /* As opções do menu de acrescentar gráfico são BOTÕES, não rádios: elas fazem
    uma coisa acontecer, não escolhem um estado. */
@@ -1057,11 +2219,62 @@ footer a { color: var(--destaque); }
 .menu-suspenso .opcao input:disabled { cursor: help; }
 
 /* A medida de cada gráfico, no topo dele. Discreta de propósito: é escolha de
-   vista, não um dado do registro — não pode competir com o título. */
+   vista, não um dado do registro — não pode competir com o título.
+ *
+ * `center` e não `baseline`, e isto foi MEDIDO.
+ *
+ * Era `baseline`, e funcionava enquanto todos os botões eram só texto: a
+ * linha de base de todos caía no mesmo lugar. Com ícone dentro, deixa de
+ * funcionar — a linha de base de uma caixa `inline-flex` é a do PRIMEIRO item
+ * dela, e um `<svg>` não tem linha de base, então o navegador usa a borda de
+ * baixo dele. Resultado medido no navegador, pelo topo de cada botão:
+ *
+ *     + sinal        202,36   (só texto — a referência)
+ *     ver RMS        201,86   meio pixel acima
+ *     calculadora    199,36   TRÊS pixels acima
+ *     agrupados…     200,86   um pixel e meio acima
+ *
+ * Cada botão subia o tanto que o ícone dele é mais alto que a letra. Com
+ * `center` os quatro têm 18 px de altura e passam a coincidir exatamente, e
+ * um ícone novo amanhã não desalinha mais nada. */
+/* O cabeçalho de um gráfico: todos os controles com a MESMA altura e o mesmo
+   respiro entre eles.
+   
+   Medido antes de mexer: os botões de texto davam 18 px, a engrenagem 16 (o
+   desenho dela é menor que uma linha de texto) e o ▲▼× 20. E o espaçamento
+   não era um só: depois de um botão com menu vinha a âncora do menu — um
+   elemento de largura zero, mas que é item do flex e por isso cobrava o `gap`
+   duas vezes, 20 px onde os outros têm 10. */
 .grafico-titulo {
+  --gap-do-titulo: 10px;
+  --alto-do-controle: 20px;
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  /* Num par de fasoriais o cabeçalho tem metade da largura. Sem a quebra, os
+     botões eram espremidos até o rótulo partir em duas linhas — e, com a
+     altura travada, a segunda linha saía para fora da moldura. Quebrando, eles
+     passam inteiros para a linha de baixo. */
+  flex-wrap: wrap;
+  gap: 6px var(--gap-do-titulo);
+}
+
+/* A altura, uma só, em tudo que é controle deste cabeçalho. `border-box`
+   porque a borda de 1 px dos `.medida` entra na conta. */
+.grafico-titulo .medida,
+.grafico-titulo .mexer {
+  height: var(--alto-do-controle);
+  box-sizing: border-box;
+  /* O rótulo não parte: um botão de 20 px de altura com duas linhas de texto
+     derrama a segunda para fora dele. */
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+/* A âncora de um menu não é botão nem ocupa espaço: ela só marca ONDE o menu
+   nasce. O `gap` do flex, porém, não sabe disso — e abria o dobro do vão
+   depois de cada botão com menu. A margem negativa devolve esse vão. */
+.grafico-titulo .ancora-de-menu {
+  margin-left: calc(-1 * var(--gap-do-titulo));
 }
 
 /* O mesmo botãozinho discreto em dois lugares: a medida no cabeçalho do
@@ -1073,7 +2286,7 @@ footer a { color: var(--destaque); }
   font-size: 12px;
   font-weight: 400;
   letter-spacing: 0;
-  padding: 1px 6px;
+  padding: 0 6px;
   border: 1px solid var(--linha);
   border-radius: 4px;
   background: none;
@@ -1088,10 +2301,24 @@ footer a { color: var(--destaque); }
    a cada clique (`inst.` / `RMS`), e sem isto o «+ sinal» ao lado anda alguns
    pixels toda vez — o alvo do mouse se move debaixo do dedo de quem acabou de
    clicar. O `inline-block` é o que faz o `min-width` valer num botão. */
+/* O botão da medida tem largura MÍNIMA, e isso não é estética.
+ *
+ * Ele troca de palavra a cada clique — `ver RMS` e `ver onda` —, e sem a
+ * largura travada o `+ sinal` ao lado andava alguns pixels no exato momento
+ * do clique: o alvo do mouse se movia debaixo do dedo de quem acabou de
+ * acertá-lo. A medida vale para as DUAS palavras mais o desenho. */
 .grafico-titulo .medida {
-  display: inline-block;
-  min-width: 4.6em;
-  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 7.6em;
+}
+/* O desenho de onda/eficaz no botão: o mesmo do cartão de sinal, menor. */
+.grafico-titulo .medida .icone-da-folha {
+  width: 22px;
+  height: 9px;
+  flex: none;
 }
 
 .grafico-titulo .medida:hover,
@@ -1222,6 +2449,17 @@ footer a { color: var(--destaque); }
 /* A barra da peneira, numa janela que não tem «agrupar por»: só a caixinha. */
 .busca.fasorial .barra-do-catalogo { margin: 0 0 6px; }
 
+/* O «mostrar na tela» no mesmo canto das três janelas — o da direita, que é
+   onde ele já estava no catálogo analógico. Coluna de flex só para poder
+   encostá-lo ali sem mexer no resto. */
+.busca.fasorial[open] {
+  display: flex;
+  flex-direction: column;
+}
+.busca.fasorial {
+}
+.busca.fasorial .aceitar { align-self: flex-end; }
+
 /* A âncora de um menu pendurado num botão de painel (a referência do
    fasorial). Posicionada, senão o menu se resolve contra a janela e cai
    longe do botão — foi o que aconteceu com o menu do modo de análise. */
@@ -1230,7 +2468,34 @@ footer a { color: var(--destaque); }
 /* A setinha de um menu pendurado num botão de painel precisa de ar: sem
    ele, `∠ VAY▾` se lê como uma palavra só. */
 .medida .seta-do-menu { margin-left: 5px; }
+
+/* Aberto: a mesma seta, de cabeça para baixo. O próximo clique recolhe, e é
+   isso que ela passa a dizer. `inline-block` porque `transform` não vale em
+   caixa de linha. */
+.seta-do-menu.virada { display: inline-block; transform: scaleY(-1); }
 .busca .achado .quando { color: var(--destaque); font-size: 11px; }
+/* Canal que o relé grava sem ter a placa: apagado e dito, nunca escondido —
+   escondido não é o mesmo que inexistente, e quem procura precisa ver por quê. */
+.busca .achado.sem-placa .nome { color: var(--suave); text-decoration: line-through; }
+.busca .achado .sem-placa-aviso { color: var(--atencao); font-size: 11px; cursor: help; }
+
+/* A MESMA faixa alternada do catálogo analógico: as três janelas escolhem
+   sinal do mesmo jeito e passaram a ter a mesma cara. */
+.busca .achado.faixa { background: var(--faixa-da-lista); border-radius: 5px; }
+
+/* A unidade, cinza e colada no nome — como no catálogo analógico. Era ciano e
+   encostada na borda da janela, longe do nome a que pertence. */
+.busca .unidade-da-linha {
+  color: var(--suave);
+  font-size: 10px;
+  opacity: .75;
+}
+
+/* O «60 Hz» do catálogo do fasorial NÃO tem estilo próprio: ele usa a marca do
+   nome desenhado (`.marca-do-nome.marca-hz`), que é o formato adotado no
+   programa. Havia uma `.marca-de-60` aqui, sobrescrita e noutro turquesa — a
+   mesma marca em duas formas na mesma tela faz quem olha perguntar qual das
+   duas quer dizer outra coisa. */
 
 .busca .aceitar {
   font-family: var(--mono);
@@ -1398,17 +2663,10 @@ footer a { color: var(--destaque); }
    bolinha ao lado do nome. */
 .busca .nome-da-linha.calculado .nome { color: var(--calculado-2); }
 
-/* Por que aquele canal só tem a coluna `onda`. Fica ao lado do nome, e não no
-   hover: o motivo é o que decide se vale abrir o arquivo para ver o que é
-   aquilo. */
-.busca .motivo-da-linha {
-  color: var(--suave);
-  font-size: 11px;
-  opacity: .85;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* Por que aquele canal só tem a coluna `onda` NÃO é mais texto na faixa: em
+   «Outros sinais» o motivo aparecia em toda linha, empurrava a barra de
+   energia para dentro e deixava aquele bloco com outra cara que os de cima.
+   Ele está no `title` do nome e por extenso dentro do cartão aberto. */
 
 .busca .etiqueta {
   color: var(--suave);
@@ -1449,10 +2707,19 @@ footer a { color: var(--destaque); }
   opacity: .85;
 }
 
+/* Altura TRAVADA num múltiplo de 4, pelo mesmo motivo do passo dos cartões
+   (ver `.cartao-do-sinal`): se o cabeçalho de bloco medisse 33,19px num bloco
+   e 34px no outro — era o que media, porque o `ƒx` do bloco dos calculados é
+   mais alto que a ondinha do outro —, os cartões depois dele começariam numa
+   fração de pixel diferente dos de cima, e as barras de energia dos
+   calculados sairiam com outra espessura aparente. Era exatamente o que se
+   via: as do `IN` e do `VN` mais grossas que as do `IAW`. */
 .busca .cabeca-de-bloco {
   display: flex;
   align-items: center;
   gap: 8px;
+  height: 36px;
+  box-sizing: border-box;
   padding: 10px 0 4px;
   color: var(--tinta);
   font-family: var(--sans);
@@ -1460,7 +2727,7 @@ footer a { color: var(--destaque); }
   font-weight: 600;
 }
 
-.busca .bloco-do-grupo .cabeca-de-bloco { padding: 6px 0 4px; }
+.busca .bloco-do-grupo .cabeca-de-bloco { height: 32px; padding: 6px 0 4px; }
 .busca .cabeca-de-bloco .regua { flex: 1; height: 1px; background: var(--linha); }
 
 /* O cabeçalho é um BOTÃO: dobrar um bloco é ação, e ação tem que chegar pelo
@@ -1528,6 +2795,22 @@ footer a { color: var(--destaque); }
   padding: 1px 6px;
 }
 
+/* `↔G3`: com quem este grupo está vinculado, colado no nome dele.
+ *
+ * Contornado e não preenchido: `G1` é o que o grupo É, `↔G3` é uma relação
+ * dele. Dois chips cheios lado a lado se leriam como dois grupos. */
+.busca .chip-do-vinculo {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--destaque);
+  border: 1px solid var(--destaque);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-left: -2px;
+  cursor: help;
+  white-space: nowrap;
+}
+
 .busca .titulo-do-bloco { white-space: nowrap; }
 
 /* O `G1` do fim do nome, na mesma caixinha que o grupo tem no cabeçalho do
@@ -1542,6 +2825,10 @@ footer a { color: var(--destaque); }
   background: var(--destaque-fraco);
   border-radius: 3px;
   padding: 0 5px;
+  /* O respiro vinha do `gap` da célula da matriz antiga. No cartão o nome é
+   * um span só, e sem a margem o `G1` encostava no `IN` — dois fundos
+   * diferentes colados se leem como uma palavra só. */
+  margin-left: 5px;
   flex: none;
 }
 
@@ -1893,8 +3180,19 @@ footer a { color: var(--destaque); }
   cursor: default;
 }
 
-.tela-harmonicos { flex: 0 0 auto; }
-.tela-harmonicos canvas { display: block; }
+/* O painel de harmônicos usa a MESMA grade do analógico, para os dois ficarem
+   com a mesma largura e as tabelas alinhadas na mesma coluna. Duas diferenças:
+   a tabela dele aparece SEMPRE, com cursor ou sem — o painel é de um instante,
+   e sem cursor ele já diz isso no lugar dos números, como o fasorial. */
+.grafico-corpo.harmonicos {
+  grid-template-columns: minmax(0, 1fr) var(--lado-da-tabelinha);
+  gap: var(--vao-da-tabelinha);
+}
+.grafico-corpo.harmonicos .mini { display: table; }
+
+@media (max-width: 1100px) {
+  .grafico-corpo.harmonicos { grid-template-columns: minmax(0, 1fr); }
+}
 
 .busca .cor-do-sinal:hover,
 .busca .cor-do-sinal:focus-visible { border-color: var(--tinta); }
@@ -1960,6 +3258,231 @@ footer a { color: var(--destaque); }
 }
 
 .rodape-do-painel div { white-space: normal; }
+
+/* O rodapé do painel de harmônicos, em FICHAS.
+   Ele acumula coisas de naturezas diferentes — o que foi medido, o limite do
+   arquivo, dois avisos — e em texto corrido elas viravam um parágrafo de três
+   linhas que ninguém lia. Cada ficha carrega o rótulo em cinza e o valor em
+   tinta; a frase longa vai para o `title`. */
+.rodape-do-painel.fichas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 7px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+/* `display` na classe apaga o `display: none` que o atributo `hidden` traz da
+   folha do navegador — a ficha escondida continuava na tela. Vale para
+   qualquer regra de `display` posta por classe, e é o tipo de coisa que só
+   aparece quando alguém olha: o aviso de transição ficou aceso num painel
+   VAZIO, sem sinal nenhum para avisar sobre. */
+/* O botão de cabeçalho que leva ÍCONE antes do texto. Sem isto os dois ficam
+   colados («fxnova conta»): `.medida` não tem `gap`, e o ícone é um nó irmão
+   do rótulo, não um `::before`. */
+.grafico-cabecalho .medida.com-icone,
+.medida.com-icone {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* A calculadora desce 1px dentro do próprio botão.
+ *
+ * Isto é o ajuste ÓPTICO, e é outro problema do alinhamento do botão (ver
+ * `.grafico-titulo`): `calculadora` é tudo minúscula e sem descendente, então
+ * a massa da palavra fica na metade de baixo da caixa de linha enquanto o
+ * desenho ocupa a caixa inteira — centrar os dois retângulos deixa o desenho
+ * parecendo alto. O ícone de onda/eficaz não precisa: ele é baixo e já nasce
+ * na faixa da letra minúscula. */
+.icone-calculadora { position: relative; top: 1px; }
+
+/* O seletor de arranjo: duas teclas coladas, uma acesa.
+ *
+ * Coladas de propósito — é a mesma forma do `secundário | primário` do
+ * cabeçalho. Duas teclas separadas se leriam como duas ações independentes,
+ * e estas são uma escolha entre duas. */
+/* Sem margem própria: o espaçamento do cabeçalho é o `gap` dele, e um
+   milímetro a mais aqui já fazia esta tecla destoar das vizinhas. */
+.seletor-do-arranjo {
+  display: inline-flex;
+}
+.seletor-do-arranjo .tecla-do-arranjo {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 0;
+  /* Sem o mínimo do `.medida`: estas duas não trocam de palavra, então não
+     há nada que possa dançar, e a largura da palavra basta. */
+  min-width: 0;
+}
+.seletor-do-arranjo .tecla-do-arranjo:first-child {
+  border-radius: 4px 0 0 4px;
+}
+/* As duas teclas se SOBREPÕEM em 1 px em vez de a segunda ficar sem borda
+   esquerda. Sem isto, a tecla acesa da direita aparecia com moldura em três
+   lados e a da esquerda em quatro — o mesmo estado desenhado de duas formas,
+   conforme qual das duas estivesse valendo. Sobrepostas, as duas têm as
+   quatro bordas e a acesa vem por cima (`z-index`), então a junção continua
+   sendo um traço só. */
+.seletor-do-arranjo .tecla-do-arranjo:last-child {
+  border-radius: 0 4px 4px 0;
+  margin-left: -1px;
+}
+
+.seletor-do-arranjo .tecla-do-arranjo.aceso {
+  position: relative;
+  z-index: 1;
+}
+.seletor-do-arranjo .tecla-do-arranjo.aceso {
+  color: var(--destaque);
+  border-color: var(--destaque);
+  background: var(--destaque-fraco);
+  /* A tecla acesa é o estado, não um alvo: ela não responde ao clique, e o
+     cursor tem que dizer isso antes de alguém tentar. */
+  cursor: default;
+}
+.icone-do-arranjo { flex: none; }
+
+/* A ficha de um sinal CALCULADO na calculadora: cor dos calculados, a mesma
+   do catálogo. Um `3I0 G1` tem origem diferente de um `IAW`, e a conta que
+   mistura os dois é justamente a que pede atenção. */
+.busca.calculadora .chip-de-canal.calculado { color: var(--calculado-2); }
+
+/* As fichas em FILEIRAS rotuladas: canais, minhas contas, calculados. Numa
+   fileira só, um `3I0 G1` no meio dos canais se lê como mais um canal do
+   arquivo — e a conta que mistura os dois é justamente a que pede atenção. */
+/* Duas colunas: o rótulo à esquerda, as fichas à direita.
+ *
+ * Era um `flex` com o rótulo como primeiro item, e aí a SEGUNDA linha de
+ * fichas voltava para a margem — debaixo do rótulo. Duas fileiras que quebram
+ * em pontos diferentes deixavam de ter coluna nenhuma em comum, e era isso
+ * que se via como «canais» e «calculados» desalinhados.
+ *
+ * Com a grade, toda ficha — inclusive a da terceira linha — começa no mesmo
+ * x. Ver `fileiraDeFichas` em `onda.js`. */
+.busca.calculadora .fileira-de-fichas {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  align-items: baseline;
+  column-gap: 3px;
+  margin-top: 5px;
+}
+
+.busca.calculadora .fichas-da-fileira {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 5px;
+}
+
+.busca.calculadora .rotulo-da-fileira {
+  color: var(--suave);
+  font-size: 10.5px;
+  text-align: right;
+  padding-right: 3px;
+}
+
+/* O alternador bruto / 60 Hz. Fica ACIMA das fileiras porque muda todas:
+   é o eixo da fileira, não mais uma ficha dela. */
+.busca.calculadora .chave-da-coluna {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin: 8px 0 2px;
+}
+
+.busca.calculadora .tecla-da-coluna {
+  padding: 2px 10px;
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+  background: none;
+  color: var(--suave);
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.busca.calculadora .tecla-da-coluna.aceso {
+  border-color: var(--destaque);
+  color: var(--destaque);
+}
+
+/* Travado no tradicional: continua LEGÍVEL, e o hover diz por quê. Esconder
+   o botão faria a tela parecer não ter a opção. */
+.busca.calculadora .tecla-da-coluna:disabled {
+  cursor: help;
+  opacity: .55;
+}
+
+/* O «…» que abre o resto. Discreto: ele não é um sinal, é um controle. */
+.busca.calculadora .chip-de-canal.reticencias {
+  color: var(--suave);
+  border-style: dashed;
+  letter-spacing: 1px;
+}
+
+.rodape-do-painel .ficha[hidden] { display: none; }
+
+.rodape-do-painel .ficha {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 2px 8px;
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* O rótulo em cinza, o valor em tinta: a hierarquia que deixa varrer a fileira
+   lendo só os valores. */
+.rodape-do-painel .ficha b {
+  font-weight: 400;
+  color: var(--suave);
+}
+
+.rodape-do-painel .ficha span { color: var(--tinta); }
+
+/* A ficha que tem frase no hover ganha o pontilhado de sempre — sem ele não há
+   como saber que há mais a ler. */
+.rodape-do-painel .ficha.tem-dica {
+  cursor: help;
+  border-bottom-style: dashed;
+}
+
+/* Aviso: cor de atenção na borda e no texto. Não vermelho — nada aqui está
+   errado, e o painel continua desenhando tudo. */
+.rodape-do-painel .ficha.atencao {
+  border-color: var(--atencao);
+  color: var(--atencao);
+}
+
+.rodape-do-painel .ficha.atencao b,
+.rodape-do-painel .ficha.atencao span { color: var(--atencao); }
+
+.rodape-do-painel .ficha.atencao::before { content: "⚠"; }
+
+/* Vermelho, que é diferente de âmbar. Âmbar é «confira isto antes de
+   concluir» — uma zona sugerida, uma réplica que falta. Vermelho é o que
+   ACONTECEU no registro (a trajetória entrou nesta zona) e o que não dá para
+   calcular de jeito nenhum (sem Z0 não há k0). Os dois pedem leitura, mas só
+   um deles é notícia do evento, e misturá-los faria a fileira inteira virar
+   ruído âmbar. */
+.rodape-do-painel .ficha.ruim {
+  border-color: var(--ruim);
+  color: var(--ruim);
+}
+
+.rodape-do-painel .ficha.ruim b,
+.rodape-do-painel .ficha.ruim span { color: var(--ruim); }
+
+.rodape-do-painel .ficha.ruim::before { content: "●"; font-size: 8px; }
+
+/* O trecho arredondado para ciclo inteiro não é aviso — é o programa dizendo o
+   que fez. Marca discreta, só para a ficha não passar por exata. */
+.rodape-do-painel .ficha.arredondado { border-style: dashed; }
 
 /* A peneira do buscador: fica ENTRE as abas e a lista porque é sobre a lista.
    Discreta de propósito — é um ajuste, não um dos assuntos da janela. */
@@ -2069,13 +3592,17 @@ footer a { color: var(--destaque); }
 }
 
 .grafico-titulo .mexer {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--alto-do-controle);
   border: 1px solid transparent;
   border-radius: 5px;
   background: none;
   color: var(--suave);
   font-size: 12px;
   line-height: 1;
-  padding: 3px 7px;
+  padding: 0 7px;
   cursor: pointer;
 }
 
@@ -2097,3 +3624,2199 @@ footer a { color: var(--destaque); }
 /* Painel recém-criado, ainda sem sinal: diz o que fazer em vez de ficar uma
    moldura vazia sem explicação. */
 .grafico .vazio { margin: 4px 0 8px; font-size: 13px; }
+
+/* ----------------------------------------------------------------------
+   A CALCULADORA DE SINAIS
+
+   O nome em cima, a expressão embaixo, e o veredito do servidor entre ela e
+   a ajuda — é nessa ordem que se escreve e é nessa ordem que se lê o erro.
+   ---------------------------------------------------------------------- */
+.busca.calculadora .nome-da-conta,
+.busca.calculadora .expressao-da-conta {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 8px 0 0;
+  padding: 7px 9px;
+  border: 1px solid var(--linha);
+  border-radius: 6px;
+  background: var(--fundo);
+  color: var(--tinta);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.busca.calculadora .expressao-da-conta {
+  resize: vertical;
+  line-height: 1.5;
+  /* Duas linhas, SEMPRE. A janela é um flex em coluna com teto de 88 % da
+     altura, e numa aba (o quadro é mais baixo que a janela do navegador) o
+     flex espremia o campo até 14 px — o texto saía cortado ao meio. */
+  min-height: calc(2 * 1.5em + 16px);
+}
+
+/* O veredito tem altura fixa: sem isso a janela pula a cada tecla, e o botão
+   de criar foge de debaixo do dedo. */
+.busca.calculadora .veredito-da-conta {
+  margin: 7px 0 0;
+  min-height: 32px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--suave);
+}
+
+.busca.calculadora .veredito-da-conta.bom { color: var(--bom, #5fb98f); }
+.busca.calculadora .veredito-da-conta.ruim { color: var(--ruim, #e06c5a); }
+/* A conta que PASSA com ressalva. Cor de atenção, e não de erro: vermelho
+   num resultado que a tela vai desenhar ensina a ignorar vermelho — e a regra
+   do projeto é avisar, nunca bloquear. */
+.busca.calculadora .veredito-da-conta.ressalva { color: var(--atencao); }
+
+/* O ⓘ ao lado do nome de uma conta com ressalva — na lista da calculadora e
+   na linha do catálogo. A frase inteira fica no hover: ela explica o que a
+   conta tem de estranho, e ao lado de uma linha que funciona se leria como
+   defeito. */
+.busca .ressalva-da-linha {
+  color: var(--atencao);
+  cursor: help;
+  flex: none;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+.busca.calculadora .ajuda-da-conta {
+  margin: 2px 0 10px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--suave);
+}
+
+.busca.calculadora .expressao-escrita {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--suave);
+}
+
+.busca.calculadora .linha-na-tela .link {
+  background: none;
+  border: 0;
+  padding: 0 4px;
+  color: var(--destaque);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.busca.calculadora .linha-na-tela .link:hover { text-decoration: underline; }
+
+/* Os nomes dos canais, clicáveis: inserir `[Voltage A-G]` num clique poupa
+   digitação e, sobretudo, poupa errar o nome — nome de canal cada fabricante
+   escreve como quer. */
+.busca.calculadora .canais-da-conta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0 0;
+  /* Era 86 px: cabiam duas linhas de canais, e «minhas contas» e
+     «calculados» ficavam escondidos debaixo da rolagem — pareciam ter sumido. */
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.busca.calculadora .chip-de-canal {
+  border: 1px solid var(--linha);
+  border-radius: 4px;
+  background: none;
+  color: var(--suave);
+  padding: 2px 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.busca.calculadora .chip-de-canal:hover {
+  border-color: var(--destaque);
+  color: var(--tinta);
+}
+
+/* A calculadora é uma janela CURTA: ela tem dois campos e um veredito, não
+   uma lista de cento e vinte sinais. Sem isto ela esticava até o teto e o
+   botão de criar ficava sozinho no fim de um vazio.
+
+   `fit-content`, e NÃO `auto`: o navegador dá ao `<dialog>` `position: fixed`
+   com `inset: 0` e `margin: auto`, e nessa combinação `height: auto` quer
+   dizer "estique de uma borda à outra" — o oposto do que a palavra sugere.
+   Custou uma rodada de depuração: a regra estava aplicada, o `display: flex`
+   valendo, e a janela continuava com mil pixels. */
+.busca.calculadora[open] {
+  display: flex;
+  flex-direction: column;
+}
+.busca.calculadora {
+  height: fit-content;
+  max-height: 88vh;
+  /* Quando não cabe, a JANELA rola — nenhum filho encolhe. Encolhendo, era o
+     campo da conta que pagava (achatado a 14 px). */
+  overflow-y: auto;
+}
+.busca.calculadora[open] > * { flex-shrink: 0; }
+
+.busca.calculadora .contas-existentes {
+  flex: 0 1 auto;
+  overflow-y: auto;
+  margin: 10px 0 0;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.busca.calculadora .aceitar { align-self: flex-start; margin-top: 4px; }
+
+/* O botão de criar fica apagado enquanto a conta não compila. Sem isto ele
+   parecia clicável com um erro em vermelho logo acima — duas mensagens
+   contrárias na mesma janela. */
+.busca .aceitar:disabled {
+  opacity: .45;
+  cursor: default;
+  border-color: var(--linha);
+}
+
+/* ----------------------------------------------------------------------
+   O TECLADO DA CALCULADORA
+
+   Ela tem que PARECER uma calculadora: quem abre uma espera teclas. Digitar
+   `raiz(3)` de cabeça supõe saber que a função existe — a tecla ensina.
+   ---------------------------------------------------------------------- */
+.busca.calculadora .teclado-da-conta {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 9px 0 0;
+}
+
+.busca.calculadora .fileira-de-teclas { display: flex; gap: 5px; }
+
+/* O teclado COMPACTO: as doze teclas numa fileira, mais baixas. */
+.busca.calculadora .teclado-da-conta.compacto .tecla { padding: 4px 0; font-size: 12px; }
+
+/* As contas prontas: nome em cima, a expressão embaixo, menor. */
+.busca.calculadora .contas-prontas {
+  /* A MESMA grade das fileiras de fichas: o rótulo na coluna de 76 px. */
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  column-gap: 3px;
+  align-items: start;
+  margin: 8px 0 0;
+}
+.busca.calculadora .grade-das-prontas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 4px;
+}
+.busca.calculadora .conta-pronta {
+  display: grid;
+  gap: 1px;
+  text-align: left;
+  padding: 4px 8px;
+  border: 1px solid var(--linha);
+  border-radius: 6px;
+  background: none;
+  color: var(--tinta);
+  cursor: pointer;
+  max-width: 100%;
+}
+.busca.calculadora .conta-pronta:hover { border-color: var(--destaque); background: var(--destaque-fraco); }
+.busca.calculadora .conta-pronta b { font: 600 11.5px var(--mono); }
+.busca.calculadora .conta-pronta code {
+  font: 10.5px var(--mono);
+  color: var(--suave);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.busca.calculadora .tecla {
+  flex: 1;
+  padding: 7px 0;
+  border: 1px solid var(--linha);
+  border-radius: 6px;
+  background: var(--fundo);
+  color: var(--tinta);
+  font-family: var(--mono);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.busca.calculadora .tecla:hover {
+  border-color: var(--destaque);
+  color: var(--destaque);
+}
+
+.busca.calculadora .tecla:active { background: var(--destaque-fraco); }
+
+/* A primeira sugestão fica marcada: é a que o Tab completa, e marcar qual é
+   evita apertar Tab para descobrir. */
+.busca.calculadora .chip-de-canal.primeiro {
+  border-color: var(--destaque);
+  color: var(--destaque);
+}
+
+.busca.calculadora .dica-do-tab,
+.busca.calculadora .sem-sugestao {
+  align-self: center;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--suave);
+  padding-left: 4px;
+}
+
+/* --- o nome de um sinal, com as marcas em subscrito ----------------------
+ *
+ * `IAW` com `60Hz RMS` embaixo, em vez de `IAW · 60Hz RMS` corrido. O ponto
+ * médio não é desenhado: quem separa é a posição.
+ *
+ * A cor é a MESMA da fatia da barra de energia — turquesa é 60 Hz, rosa é
+ * contínua. O RMS fica na cor do texto porque não é fatia: é o total. E a cor
+ * só reforça o que tamanho e posição já dizem, para o nome continuar legível
+ * num relatório impresso em preto e branco. Ver `escreverNome` em `onda.js`.
+ */
+.marca-do-nome {
+  font-size: 0.62em;
+  vertical-align: -0.2em;
+  margin-left: 2px;
+  letter-spacing: 0.3px;
+  opacity: .95;
+}
+.marca-do-nome + .marca-do-nome { margin-left: 3px; }
+.marca-do-nome.marca-hz { color: var(--energia-60); }
+.marca-do-nome.marca-dc { color: var(--energia-dc); }
+
+/* --- o cartão de um sinal, no menu «acrescentar» -------------------------
+ *
+ * Era uma matriz de canais × contas, com cinco colunas e um risquinho em cada
+ * cruzamento vazio. Virou um cartão por sinal: três folhas dentro — onda, RMS
+ * e DC — e um interruptor de filtro no cabeçalho, que é o que faz `IAW` e
+ * `IAW · 60Hz` deixarem de ser duas linhas para serem o mesmo sinal em dois
+ * estados. Ver `desenharLinha` em `onda.js`.
+ */
+/* O PASSO da lista é 32px — 30 de cartão e 2 de vão —, e o 2 não é estética.
+ *
+ * Era 3, e o passo dava 33. Num navegador a 125 %, 33px são 41,25 pixels de
+ * tela: cada cartão começa um quarto de pixel adiante do anterior, e a barra
+ * de energia dentro dele também. A barra tem altura inteira (4px → 5 pixels
+ * de tela, ver `.barra-de-energia`), mas uma barra de 5 pixels que começa em
+ * 402,11 pinta de 402,11 a 407,11: toca SEIS fileiras, a primeira com 89 % de
+ * tinta e a última com 11 %. Na linha seguinte a fração é 0,36, na outra 0,61
+ * — e a mesma barra, com a mesma altura, aparece mais grossa ou mais fina
+ * conforme a fileira em que caiu. Medido na tela: `IAW` em 402,11 e `VAY` em
+ * 525,86.
+ *
+ * Com passo 32 todo cartão começa na MESMA fração de pixel (32 × 1,25 = 40,
+ * inteiro; 1,5 → 48; 1,75 → 56; 2 → 64). As barras podem não ficar
+ * perfeitamente nítidas — isso depende de onde a lista inteira começa —, mas
+ * ficam todas IGUAIS, que é o que se enxerga.
+ *
+ * Altura do cartão travada pelo mesmo motivo: a caixinha do grupo (`G1`) é
+ * monoespaçada e tem entrelinha maior que o resto da linha; sem o travamento
+ * ela engorda o cartão dela e desencontra o passo de todos os seguintes. */
+/* FAIXA ALTERNADA, e não cartão (escolha dele).
+ *
+ * O cartão com borda dizia «aqui dentro tem coisa», e isso continua verdade —
+ * mas a seta de dobrar já diz o mesmo, e o quadro em volta de cada linha
+ * fazia esta janela parecer de outra família que a do fasorial e a dos
+ * harmônicos, que escolhem sinal do MESMO jeito. Uma faixa sim, outra não:
+ * o olho anda na horizontal sem nada delimitando, e as três janelas ficam
+ * irmãs. O passo de 30 px continua o mesmo. */
+.cartao-do-sinal {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  margin: 0 0 var(--vao-do-cartao, 2px);
+}
+.cartao-do-sinal.faixa { background: var(--faixa-da-lista); }
+/* ABERTO, o cartão MANTÉM a cor que já tinha -- a da faixa dele, clara ou
+   escura (pedido dele). Nem um fundo próprio (o padrão antigo, do tempo em que
+   cada linha era um quadro), nem a cor da faixa escura aplicada a todos: as
+   duas coisas tiravam a linha da lista justamente quando ela se abre, e uma
+   linha da faixa clara escurecia ao abrir, que foi o que ele viu.
+
+   Por isso aqui não há `background` nenhum: a faixa já pintou, ou já deixou de
+   pintar, e abrir não é motivo para repintar. Quem diz que ela está aberta é a
+   seta virada e o conteúdo que apareceu embaixo. */
+.cartao-do-sinal.aberto { border-color: var(--cartao-borda); }
+/* O canal sem sinal NÃO é apagado.
+ *
+ * Era `opacity: .55` no cartão inteiro, e isso o fazia parecer desabilitado —
+ * justamente depois de o usuário DESMARCAR «ocultar sinais nulos», que é
+ * pedir para trabalhar com eles. A tela discutindo com a escolha que acabou
+ * de ser feita.
+ *
+ * Quem diz que o canal está mudo é a etiqueta escrita, que sobrevive à
+ * impressão em preto e branco; aqui sobra uma pista discreta no nome. E a
+ * entrada não cabeada continua marcável de propósito: um trafo energizado por
+ * um lado só tem a outra trinca em zero legitimamente, e esse zero é
+ * informação. */
+.cartao-do-sinal.mudo .nome-do-cartao { color: var(--suave); }
+/* Compacto: metade do respiro de antes e a fonte um ponto menor. Numa lista
+ * de vinte sinais, o respiro bonito de um cartão vira três telas de rolagem —
+ * e esta tela é de ACHAR o sinal, não de contemplá-lo. */
+.topo-do-cartao {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 9px;
+  /* 20 + 4 + 4 = 28 de cartão e 2 de borda: 30, o passo de que fala o
+     comentário acima. Travado para a caixinha do grupo não engordar a linha. */
+  /* A altura do MIOLO sai de uma variável, e a variável é arredondada para
+     um número inteiro de pixels DE TELA pelo `onda.js` (`ajustarGradeDaLista`).
+     Travada, também, para a caixinha do grupo não engordar a linha. */
+  min-height: var(--miolo-do-cartao, 20px);
+  box-sizing: content-box;
+  cursor: pointer;
+}
+.dobra-do-cartao { color: var(--suave); font-size: 9px; width: 9px; flex: none; }
+/* A FAMÍLIA está na cor do nome: branco é canal do relé, rosa é conta do
+ * OscLab — a mesma regra do catálogo do fasorial e dos harmônicos. Era uma
+ * bolinha ao lado, e a mesma informação aparecia de dois jeitos nas duas
+ * janelas. O que a bolinha dizia a mais (programa × conta sua) está no `⋯`. */
+.nome-do-cartao { font-size: 12px; color: var(--tinta); cursor: help; }
+.nome-do-cartao.calculado .nome { color: var(--calculado-2); }
+.unidade-do-cartao { color: var(--suave); font-size: 10px; opacity: .75; }
+.empurra-do-cartao { flex: 1; }
+
+/* A barra de energia: onde mora a energia daquele sinal, antes de marcar
+ * qualquer caixa. As cores são as mesmas das marcas em subscrito do nome —
+ * uma cor, um significado. */
+.barra-de-energia {
+  display: flex;
+  /* 4px e não 5px, e o motivo é de RASTERIZAÇÃO, não de gosto.
+   *
+   * Uma barra de 5px num navegador a 125 % mede 6,25 pixels de tela. O
+   * navegador não desenha um quarto de pixel: ele arredonda, e o lado para
+   * onde arredonda depende de onde a barra COMEÇA. Linhas com a caixinha do
+   * grupo (`VN G3`) ficam uma fração de pixel mais altas que as sem — a
+   * caixinha é monoespaçada e a fonte mono tem entrelinha maior —, e essa
+   * fração empurrava a barra seguinte para o outro lado do arredondamento.
+   * Resultado: `VAY` com 6 pixels e `VN` com 7, medido na tela do Alexandre.
+   * Parecia que sinal calculado tinha barra mais grossa; era a caixinha.
+   *
+   * 4px resolve nos zooms REDONDOS — 4 a 100 %, 5 a 125 %, 6 a 150 %, 8 a
+   * 200 % —, e só neles. Medido em 15/10 com o navegador a 110 %: 4px dão
+   * 4,4 pixels de tela e o passo de 32px dá 35,2, então cada linha começa
+   * numa fração diferente (0; 0,2; 0,4; 0,6; 0,8) e a MESMA barra sai com
+   * cinco fileiras pintadas numa linha e quatro na seguinte. Foi o que ele
+   * viu, duas vezes.
+   *
+   * Por isso as duas medidas — a altura da barra e o passo da lista — passaram
+   * a ser VARIÁVEIS, arredondadas para um número inteiro de pixels de tela
+   * pelo `ajustarGradeDaLista` do `onda.js`, em qualquer zoom. Com o passo
+   * inteiro, toda linha começa na MESMA fração; com a altura inteira, a
+   * fração é a mesma nas duas pontas. Aí todas as barras saem iguais. */
+  /* A altura sai de uma variável: o `onda.js` a arredonda para um número
+     inteiro de pixels DE TELA, e os 4px aqui são só o valor de partida. */
+  height: var(--alto-da-barra, 4px);
+  width: 104px;
+  gap: 1.5px;
+  flex: none;
+  cursor: help;
+}
+.barra-de-energia i { display: block; }
+/* O raio acompanha a altura: 3px numa barra de 4px seria cortado pelo
+ * navegador para 2px de qualquer jeito, e escrito assim a conta fica visível
+ * para quem mexer na altura depois. */
+.barra-de-energia i:first-child { border-radius: 2px 0 0 2px; }
+.barra-de-energia i:last-child { border-radius: 0 2px 2px 0; }
+
+/* O interruptor. Preso é diferente de ausente: preso ainda DIZ em que estado
+ * o sinal está, e o `title` diz por que não se mexe. */
+.interruptor {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: none;
+  color: var(--suave);
+  font: inherit;
+  font-size: 10px;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+.interruptor.preso { opacity: .45; cursor: default; }
+.rotulo-do-interruptor { white-space: nowrap; }
+.interruptor .trilho {
+  width: 26px; height: 13px; border-radius: 999px;
+  background: var(--linha); position: relative; flex: none;
+}
+.interruptor .trilho.aceso { background: var(--destaque-fraco); }
+.bolinha-do-interruptor {
+  position: absolute; top: 2px; left: 2px;
+  width: 9px; height: 9px; border-radius: 50%; background: var(--suave);
+}
+.trilho.aceso .bolinha-do-interruptor {
+  left: auto; right: 2px; background: var(--destaque);
+}
+.engrenagem-do-cartao {
+  border: 0; background: none; color: var(--suave); font-size: 12px;
+  opacity: .6; cursor: pointer; padding: 2px 4px; flex: none;
+}
+.engrenagem-do-cartao:hover,
+.engrenagem-do-cartao.aberta { color: var(--destaque); opacity: 1; }
+
+/* As folhas */
+.folhas-do-cartao { padding: 0 9px 4px; }
+.folha-do-cartao {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 1px 4px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.folha-do-cartao:hover { background: rgba(127, 144, 147, .09); }
+.icone-da-folha { color: var(--suave); opacity: .5; flex: none; }
+.rotulo-da-folha { font-size: 11px; min-width: 36px; }
+.folha-do-cartao.apagada { opacity: .4; cursor: help; }
+.porque-da-folha {
+  color: var(--suave); font-size: 10px; opacity: .85;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* O selo da folha habilitada à força. Âmbar e não vermelho: ela não está
+ * errada — está fora do que o programa julgou, e quem julgou foi o
+ * engenheiro. O selo existe para ela não passar por resultado normal num
+ * relatório impresso. */
+.selo-forcado {
+  font-size: 9px; color: var(--atencao); border: 1px solid var(--atencao);
+  border-radius: 4px; padding: 0 4px; opacity: .9;
+}
+
+/* A gaveta da engrenagem */
+.gaveta-do-cartao {
+  margin: -2px 0 8px;
+  border: 1px solid var(--linha);
+  border-left: 2px solid var(--destaque);
+  border-radius: 6px;
+  background: var(--cartao);
+  padding: 8px 10px;
+  font-size: 10.5px;
+  color: var(--suave);
+  line-height: 1.7;
+}
+.parte-da-gaveta { display: flex; gap: 9px; }
+.chave-da-gaveta { min-width: 72px; opacity: .72; flex: none; }
+.valor-da-gaveta { color: var(--tinta); }
+
+/* --- a tira de capacidades da calculadora --------------------------------
+ *
+ * Cinco verificações numa linha — unidade, onda, RMS, DC, filtro — e embaixo
+ * uma linha de texto que comenta SÓ o que não dá. A altura é fixa de
+ * propósito: a janelinha não pode mudar de tamanho a cada tecla, senão o
+ * botão «criar sinal» escorrega debaixo do clique. Ver `desenharCapacidades`.
+ */
+.tira-de-capacidades {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.capacidade {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--linha);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  color: var(--tinta);
+}
+.capacidade.unidade {
+  border-color: var(--destaque);
+  color: var(--destaque);
+  background: var(--destaque-fraco);
+}
+.capacidade.sim { border-color: var(--bom); color: var(--bom); }
+/* Apagada e riscada, não vermelha: «não dá» não é «deu errado». */
+.capacidade.nao {
+  color: var(--suave);
+  opacity: .5;
+  text-decoration: line-through;
+}
+.porque-da-conta {
+  color: var(--suave);
+  font-size: 11px;
+  line-height: 1.6;
+  margin: 8px 0 0;
+  min-height: 17px;
+}
+
+/* --- a queda de sugestões da calculadora ---------------------------------
+ *
+ * Cai colada no campo enquanto há um colchete aberto. Fora dos colchetes não
+ * existe: ali se digita número e operador, e uma lista por cima seria estorvo.
+ * Ver `desenharQueda` em `onda.js`.
+ */
+.queda-de-sugestoes {
+  border: 1px solid var(--destaque);
+  border-radius: 7px;
+  background: var(--fundo);
+  overflow: hidden;
+  margin: -4px 0 8px;
+}
+.queda-de-sugestoes[hidden] { display: none; }
+.sugestao {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  border: 0;
+  background: none;
+  color: var(--tinta);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  padding: 6px 11px;
+  cursor: pointer;
+}
+.sugestao.escolhida { background: var(--destaque-fraco); }
+.sugestao:hover { background: var(--destaque-fraco); }
+.nome-sugerido { flex: 1; }
+.tecla-da-sugestao { color: var(--suave); font-size: 9.5px; }
+.pe-da-queda {
+  padding: 5px 11px;
+  font-size: 9.5px;
+  color: var(--suave);
+  border-top: 1px solid var(--linha);
+  opacity: .8;
+}
+
+/* --- o vínculo de potência, no editor de grupos --------------------------
+ *
+ * Que trinca de corrente pertence ao mesmo vão de que trinca de tensão. Com o
+ * par feito saem P, Q, S e FP; sem ele, nada disso existe. O programa não
+ * casa sozinho — ver `botaoDeVinculo` em `onda.js`.
+ */
+.vincular-o-grupo.vinculado {
+  border-color: var(--destaque);
+  color: var(--destaque);
+}
+.vinculo-do-grupo {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--destaque);
+  opacity: .9;
+  line-height: 1.6;
+}
+.base-da-tensao {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 0 10px;
+  flex-wrap: wrap;
+}
+.opcao-de-vinculo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  border: 1px solid var(--cartao-borda);
+  border-radius: 6px;
+  background: var(--cartao);
+  color: var(--tinta);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  padding: 7px 10px;
+  margin: 0 0 4px;
+  cursor: pointer;
+}
+.opcao-de-vinculo:hover { border-color: var(--destaque); }
+.opcao-de-vinculo.escolhida {
+  border-color: var(--destaque);
+  background: var(--destaque-fraco);
+}
+.nome-do-candidato { color: var(--suave); font-size: 11px; }
+
+/* A opção de vínculo em DUAS linhas: em cima quem é o grupo, embaixo o que o
+ * par vai produzir.
+ *
+ * Em cima estava `V*Y` — a chave INTERNA do agrupamento, que é o nome dos
+ * canais com a letra da fase trocada por `*`. Serve para juntar os três e não
+ * serve para escolher entre eles: ninguém reconhece o seu vão por `V*Y`.
+ * Agora são os nomes do arquivo, que é o que o engenheiro lê no relé.
+ *
+ * Embaixo fica a base da tensão, que era um botão à parte no alto da
+ * janelinha. Ali ela descrevia «a tensão», no singular, numa lista de várias
+ * — e o chute saía do PRIMEIRO candidato e valia para qualquer um que fosse
+ * clicado. Na linha de cada um, ela descreve aquele. */
+.opcao-de-vinculo.em-duas-linhas {
+  display: block;
+  padding: 7px 10px 6px;
+}
+.alto-da-opcao, .baixo-da-opcao {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.baixo-da-opcao { margin-top: 3px; }
+.canais-do-candidato {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--tinta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.unidade-do-candidato {
+  color: var(--suave);
+  font-size: 10px;
+  flex: none;
+}
+/* A base e o que sai dela, discretas: elas CONFIRMAM a escolha, não são a
+   escolha. Quem escolhe é o grupo, na linha de cima. */
+.base-do-candidato {
+  color: var(--suave);
+  font-size: 10.5px;
+  flex: none;
+}
+.saida-do-par {
+  color: var(--suave);
+  font-size: 10.5px;
+  opacity: .8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* «mais completo»: tensão de FASE faz mais coisa funcionar — VN, 3V0,
+   potência por fase e o triângulo só existem com o neutro. Verde e não
+   neutra, porque é recomendação e não rótulo. */
+.etiqueta-boa {
+  color: var(--bom);
+  border: 1px solid var(--bom);
+  border-radius: 3px;
+  font-size: 9.5px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 0 4px;
+  white-space: nowrap;
+  flex: none;
+  margin-left: auto;
+}
+
+/* --- o triângulo de tensões ---------------------------------------------
+ *
+ * Reaproveita o quadro do fasorial: mesmo círculo, mesma tabela, mesma rosa
+ * dos ventos. O que muda é o desenho e os botões de camada. Ver
+ * `pintarTriangulo` em `onda.js` e `plot/triangulo.py`.
+ */
+.grafico.triangulo .tela-fasorial { cursor: pointer; }
+/* O vínculo que não serve aparece APAGADO, não escondido: um vínculo que some
+ * da lista se lê como vínculo que não existe. O motivo fica escrito ao lado. */
+.opcao-de-vinculo.apagada {
+  opacity: .5;
+  cursor: not-allowed;
+}
+.opcao-de-vinculo.apagada .porque-da-folha { white-space: normal; }
+/* As tensões de linha e o deslocamento do neutro na tabela do triângulo:
+ * valor, sem seta. Elas SÃO os lados do triângulo — desenhá-las de novo
+ * saindo do neutro seria a mesma grandeza em dois lugares.
+ *
+ * A cor saiu da LETRA e foi para a bolinha, como em toda tabelinha do
+ * programa: a da linha é a do triângulo, a do neutro é a da seta do
+ * baricentro — nunca de fase, que tensão de linha não é grandeza de fase. */
+.bolinha-fixa {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  align-self: center;
+}
+.nome-de-linha { letter-spacing: .3px; }
+
+/* A janelinha de UM campo — «a que grupo este canal pertence».
+ *
+ * Sem isto ela herda a altura da de corrigir trinca, que tem três campos, e
+ * sobra meia tela de vazio debaixo de um `select`. */
+/* `.achados` tem `height: 46vh` porque nas janelinhas de BUSCA ela é a lista
+ * rolável, e uma lista que muda de altura conforme o resultado faz a janela
+ * pular a cada letra digitada. Aqui ela tem UMA linha — e 46vh de vazio
+ * debaixo de um `select` é o que se via. */
+.busca.trincas.curta .achados {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+/* --- a barra da onda ------------------------------------------------------
+ *
+ * O espelho do gráfico analógico enquanto um cursor é movido longe dele. Ver
+ * «a barra da onda» em `onda.js`, que explica quando ela aparece e o que
+ * mostra.
+ *
+ * `position: fixed` com esquerda e largura escritas pelo JS: ela ocupa
+ * exatamente o lugar do canvas que espelha, e é isso que faz o risco do
+ * cursor cair na mesma coluna de pixel do gráfico grande.
+ *
+ * Fora da tela por `translateY`, e não por `display: none`: assim ela entra
+ * e sai deslizando do alto, que é o movimento que diz de onde ela veio — e
+ * um elemento que nunca sai do fluxo não força recálculo de layout a cada
+ * gesto de cursor.
+ */
+.barra-da-onda {
+  position: fixed;
+  top: 0;
+  z-index: 40;
+  box-sizing: border-box;
+  padding: 6px 0 7px;
+  background: var(--superficie);
+  border-bottom: 1px solid var(--destaque);
+  box-shadow: 0 6px 16px rgb(0 0 0 / .55);
+  transform: translateY(-102%);
+  transition: transform .12s ease-out;
+  pointer-events: none;      /* a barra se lê, não se clica */
+}
+
+.barra-da-onda.aberta { transform: translateY(0); }
+
+@media (prefers-reduced-motion: reduce) {
+  .barra-da-onda { transition: none; }
+}
+
+.topo-da-barra {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 16px;
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--tinta);
+}
+
+/* O nome do gráfico espelhado. Não quebra: com ele em duas linhas a barra
+   mudaria de altura conforme o gráfico escolhido. */
+.nome-da-barra { white-space: nowrap; }
+
+.legenda-da-barra {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 400;
+}
+
+.sinal-da-barra {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.sinal-da-barra i {
+  width: 12px;
+  height: 2.5px;
+  border-radius: 2px;
+}
+
+/* O «Tab» só aparece com mais de um analógico na tela: uma tecla anunciada
+   que não leva a lugar nenhum é pior que tecla nenhuma. */
+.dica-da-barra {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--suave);
+  border: 1px solid var(--linha);
+  border-radius: 3px;
+  padding: 0 5px;
+}
+
+.leitura-da-barra {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--suave);
+  white-space: nowrap;
+}
+
+.leitura-da-barra b { color: var(--tinta); margin-left: 8px; }
+.leitura-da-barra b:first-child { margin-left: 0; }
+.leitura-da-barra b.c1 { color: var(--cursor-1); }
+.leitura-da-barra b.c2 { color: var(--cursor-2); }
+
+.barra-da-onda canvas { display: block; }
+
+/* --- a moldura do cursor -------------------------------------------------
+ *
+ * O sulco de 7 px rente à borda de cima e de baixo dos painéis SEM eixo de
+ * tempo — fasorial, triângulo, harmônicos. Ver «a moldura do cursor» em
+ * `onda.js`, que explica por que ela existe e por que a etiqueta fica por
+ * fora.
+ *
+ * A altura da etiqueta é reservada SEMPRE: sem isso o painel pularia 11 px a
+ * cada `1` ou `Esc`. Por isso a caixa do topo tem altura fixa e não se encolhe
+ * quando não há cursor. */
+.moldura-do-cursor { line-height: 0; }
+.moldura-do-cursor.moldura-acima { margin: -4px 0 8px; }
+.moldura-do-cursor.moldura-abaixo { margin: 10px 0 -2px; }
+/* `margin: 0` explícito: a tela do painel é centrada por outra regra, e
+   centrada a moldura ficava 20 px à direita do desenho dos analógicos — o
+   risco caía numa coluna que não é a do cursor, que é o oposto do que ela
+   existe para fazer. O deslocamento fino quem faz é o `onda.js`, que mede a
+   esquerda do desenho de verdade. */
+.moldura-do-cursor canvas { display: block; margin: 0; }
+
+/* A engrenagem de ajustes de um gráfico, e o que ela abre.
+ *
+ * Quadrada e sem rótulo: ela fica no fim de uma fileira de botões de texto, e
+ * mais uma palavra ali viraria uma frase. O desenho tem DENTES, e não raios
+ * saindo de um círculo — com raios a figura se lê como um sol.
+ *
+ * O furo do meio é da cor da superfície do painel, e não um recorte: assim a
+ * engrenagem continua inteira quando o botão fica aceso ou passa o mouse. */
+.medida.engrenagem {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 7px;
+  min-width: 0;
+  line-height: 0;
+}
+
+/* Cada ajuste numa linha, e os botões ocupando a largura do menu: dentro de
+   um menu eles deixam de ser uma fileira e viram uma lista, e lista se lê de
+   cima para baixo. */
+.menu-suspenso .linha-de-ajuste {
+  padding: 2px 6px;
+}
+
+/* O `.medida` de DENTRO de um menu. O desenho dele morava só em
+   `.grafico-titulo .medida`, e um menu pendurado no corpo da página (a caixa
+   de ajustes do plano) não está dentro de título nenhum: o «polar | R + jX»
+   saía com a cara de botão padrão do navegador. Mesma figura do cabeçalho. */
+.menu-suspenso .medida {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid var(--linha);
+  border-radius: 4px;
+  background: none;
+  color: var(--suave);
+  font: 400 11.5px var(--mono);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.menu-suspenso .medida:hover:not(:disabled) { color: var(--tinta); border-color: var(--suave); }
+.menu-suspenso .medida.escolhido {
+  color: var(--destaque);
+  border-color: var(--destaque);
+  background: var(--destaque-fraco);
+}
+.menu-suspenso .medida:disabled { opacity: .45; cursor: default; }
+.menu-suspenso .linha-de-ajuste .medida {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+/* A linha que abre as opções ali mesmo — ajustes → escala → as duas opções.
+   Um menu dentro do menu não funciona (ver `botaoDaEscala`), e um caminho de
+   dois passos não precisa de dois menus. */
+.menu-suspenso .ajuste-com-opcoes { display: block; }
+.menu-suspenso .ajuste-com-opcoes .medida {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+}
+.menu-suspenso .opcoes-do-ajuste {
+  margin: 3px 0 1px 10px;
+  padding-left: 8px;
+  border-left: 1px solid var(--linha);
+}
+.menu-suspenso .opcoes-do-ajuste[hidden] { display: none; }
+
+/* Engrenagem sem ajuste nenhum ainda (os harmônicos). Ela existe para o lugar
+   dos ajustes ser o mesmo em todo gráfico; dizer o que há e onde está é melhor
+   que uma caixa vazia — ou que não ter o botão num painel só. */
+.menu-suspenso .nada-a-ajustar {
+  margin: 0;
+  /* `max-content` com teto: sem isto o parágrafo herdava a largura estreita do
+     menu e quebrava a cada três palavras. */
+  width: max-content;
+  max-width: 23em;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--suave);
+}
+
+/* Ligado. A regra de aceso dos botões de gráfico (`.grafico-titulo .medida
+   .escolhido`) não alcança o menu, que mora fora do título — sem esta linha o
+   botão de «ver amostras» continuava apagado depois de ligado, e o clique
+   parecia não ter feito nada. Mesmas três cores, para ser o mesmo aceso. */
+.menu-suspenso .linha-de-ajuste .medida.escolhido {
+  color: var(--destaque);
+  border-color: var(--destaque);
+  background: var(--destaque-fraco);
+}
+
+/* === A BASE DE DADOS ====================================================== */
+
+/* O AVISO da primeira vez, na tela inicial. Âmbar e com tarja à esquerda: é a
+   mesma gramática dos diagnósticos do registro — avisa, não bloqueia. Ele
+   existe só enquanto não houver base; depois, o mesmo lugar passa a mostrar a
+   linha de estado, que é informação e não chamado. */
+.aviso-da-base {
+  /* `margin: 0`, e não `0 auto`: o `main` é uma GRADE, e margem automática
+     num item de grade desliga o `stretch` — a tarja encolhia até o conteúdo e
+     ficava centrada, desalinhada do mosaico que ela acompanha. O respiro
+     abaixo já vem do `gap` da grade. */
+  max-width: 760px;
+  margin: 0;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  background: var(--superficie);
+  border: 1px solid var(--linha);
+  border-left: 3px solid var(--atencao);
+  border-radius: 8px;
+}
+.aviso-da-base .ic { color: var(--atencao); line-height: 0; flex: none; }
+.aviso-da-base p { margin: 0; font-size: 13px; }
+.aviso-da-base .sub { color: var(--suave); font-size: 12px; margin-top: 2px; }
+.aviso-da-base .chave { margin-left: auto; flex: none; }
+
+/* A LINHA DE ESTADO. Não é botão: é o que a base tem, dito de uma vez. A
+   gaveta desligada aparece riscada em vez de sumir — sumir faria o número
+   trocar de lugar e a pessoa procurar o que não saiu do lugar. */
+.linha-da-base {
+  max-width: 760px;
+  margin: 0;              /* idem: item de grade, ver a tarja acima */
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--suave);
+}
+.linha-da-base .ic { line-height: 0; flex: none; }
+.linha-da-base .cont { color: var(--tinta); }
+.linha-da-base .cont.apagada { opacity: .55; text-decoration: line-through; }
+.linha-da-base .gerenciar { margin-left: auto; }
+
+/* --- a tela da base ------------------------------------------------------ */
+
+main.base { max-width: 800px; margin: 0 auto; padding: 22px 20px 30px; }
+
+.base-topo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--linha);
+}
+.base-topo .ic { color: var(--destaque); line-height: 0; flex: none; }
+/* O bloco do nome ENCOLHE. Sem isto, o caminho da base — que pode ter
+   noventa caracteres e não tem onde quebrar — faz o cabeçalho inteiro virar
+   três linhas empilhadas, com o ícone sozinho em cima. */
+.base-topo .bloco { flex: 1 1 240px; min-width: 0; }
+.base-topo h2 { margin: 0; font-size: 18px; }
+.base-topo .caminho {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--suave);
+  margin-top: 2px;
+  word-break: break-all;
+}
+.base-topo .acoes-da-base { margin-left: auto; display: flex; gap: 7px; flex-wrap: wrap; }
+
+.gavetas { display: grid; gap: 12px; margin-top: 16px; }
+.gaveta {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 14px;
+  align-items: start;
+  padding: 14px;
+  background: var(--superficie);
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+}
+/* Desligada fica APAGADA, não escondida: quem desligou precisa continuar
+   vendo que ela existe para poder ligar de novo. */
+.gaveta.desligada { opacity: .55; }
+.gaveta .ic { color: var(--suave); line-height: 0; }
+.gaveta.ligada .ic { color: var(--destaque); }
+.gaveta h3 { margin: 0; font-size: 14.5px; }
+.gaveta .conta { font-family: var(--mono); font-size: 11.5px; color: var(--suave); margin-top: 3px; }
+.gaveta .conta b { color: var(--tinta); font-weight: 400; }
+.gaveta .efeito { font-size: 12.5px; color: var(--suave); margin-top: 6px; }
+.gaveta .efeito.alerta { color: var(--atencao); }
+.gaveta .pilha { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+
+/* O INTERRUPTOR. Palavra ao lado do desenho, e não só o desenho: «habilitada»
+   e «desabilitada» escritas tiram a dúvida de qual lado é o ligado — dúvida
+   que todo interruptor mudo tem. */
+.interruptor {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--suave);
+  background: none;
+  border: 1px solid var(--linha);
+  border-radius: 999px;
+  padding: 4px 11px 4px 5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.interruptor .bola {
+  width: 26px; height: 15px; border-radius: 999px;
+  background: var(--linha); position: relative; flex: none;
+}
+.interruptor .bola::after {
+  content: ""; position: absolute; top: 2px; left: 2px;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--suave); transition: transform .12s;
+}
+.interruptor[aria-pressed="true"] { color: var(--destaque); border-color: var(--destaque); }
+.interruptor[aria-pressed="true"] .bola { background: var(--destaque-fraco); }
+.interruptor[aria-pressed="true"] .bola::after {
+  transform: translateX(11px);
+  background: var(--destaque);
+}
+@media (prefers-reduced-motion: reduce) {
+  .interruptor .bola::after { transition: none; }
+}
+
+/* --- a base que ainda não existe ----------------------------------------- */
+
+.base-vazia { display: grid; place-items: center; text-align: center; padding: 30px 10px 24px; }
+.base-vazia .ic { color: var(--suave); opacity: .6; line-height: 0; }
+.base-vazia h2 { margin: 14px 0 0; font-size: 18px; }
+.base-vazia p.ajuda { margin: 8px 0 0; max-width: 56ch; }
+.base-vazia .dupla { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; justify-content: center; }
+
+.chave-grande {
+  display: inline-flex; align-items: center; gap: 9px;
+  font-family: var(--mono); font-size: 12.5px; color: var(--tinta);
+  background: var(--superficie); border: 1px solid var(--linha);
+  border-radius: 8px; padding: 10px 16px; cursor: pointer;
+}
+.chave-grande:hover { border-color: var(--destaque); color: var(--destaque); }
+.chave-grande.aberta { border-color: var(--destaque); color: var(--destaque); background: var(--destaque-fraco); }
+
+.forma-da-base { margin: 16px auto 0; max-width: 460px; text-align: left; display: grid; gap: 10px; }
+.forma-da-base label { font-family: var(--mono); font-size: 10.5px; color: var(--suave); display: block; margin-bottom: 4px; }
+.forma-da-base input {
+  width: 100%; font-size: 13px; color: var(--tinta); background: var(--fundo);
+  border: 1px solid var(--linha); border-radius: 7px; padding: 7px 9px;
+}
+/* O que fica EMBAIXO dos dois campos: a estrutura e a barra. Só existe
+   depois de haver caminho — antes dele não há o que desenhar. */
+.palco-da-base { display: grid; gap: 12px; }
+.dizer-do-campo { margin: 5px 0 0; font-size: 11.5px; color: var(--suave); }
+.espera-do-caminho {
+  padding: 16px; border: 1px dashed var(--cartao-borda); border-radius: 8px;
+  text-align: center; color: var(--suave); font-size: 12.5px;
+}
+
+/* A ESTRUTURA da base. SECA: ícone e nome, nada escrito ao lado — escolha
+   dele em 19/10/2026, depois de a versão comentada ficar ilegível. O recuo é
+   `padding`, e não espaço no texto: espaço em texto o navegador colapsa, e
+   era isso que empilhava tudo rente à esquerda. */
+.estrutura-da-base {
+  background: var(--cartao); border: 1px solid var(--cartao-borda);
+  border-radius: 8px; padding: 13px 15px; display: grid; gap: 2px;
+  overflow-x: auto;
+}
+.estrutura-da-base .galho {
+  display: flex; align-items: center; min-height: 23px;
+  font-family: var(--mono); font-size: 12.5px; white-space: nowrap;
+}
+.ic-da-arvore {
+  width: 13px; height: 13px; flex: none; margin-right: 8px;
+  fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round;
+}
+.ic-da-arvore.pasta { color: var(--destaque); }
+.ic-da-arvore.arquivo { color: var(--suave); }
+.estrutura-da-base .raiz { color: var(--suave); }
+/* A pasta da base acompanha o que ele digita no nome, na mesma tecla: é a
+   linha que responde «o que é esse nome». Por isso é a única acesa. */
+.estrutura-da-base .viva { color: var(--destaque); }
+.estrutura-da-base .fixo { color: var(--tinta); }
+.estrutura-da-base .arq { color: var(--suave); }
+
+/* A BARRA do caminho, e os porquês embaixo dela. Avisa, nunca bloqueia: o
+   botão «criar» continua valendo com a barra vermelha. */
+.qualidade-do-caminho { display: grid; gap: 7px; }
+.barra-da-qualidade {
+  height: 7px; border-radius: 4px; background: var(--linha); overflow: hidden;
+}
+.barra-da-qualidade i { display: block; height: 100%; transition: width .18s; }
+.barra-da-qualidade i.bom { background: var(--bom); }
+.barra-da-qualidade i.atencao { background: var(--atencao); }
+.barra-da-qualidade i.ruim { background: var(--ruim); }
+.veredito {
+  display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap;
+  font-family: var(--mono); font-size: 11.5px;
+}
+.veredito .palavra.bom { color: var(--bom); }
+.veredito .palavra.atencao { color: var(--atencao); }
+.veredito .palavra.ruim { color: var(--ruim); }
+.veredito .resto { color: var(--suave); }
+/* Os porquês só aparecem quando HÁ porquê: caminho limpo mostra a barra
+   verde e mais nada. Um aviso que está sempre na tela deixa de ser aviso. */
+.porques { display: grid; gap: 5px; }
+.porque {
+  display: flex; gap: 9px; align-items: flex-start; text-align: left;
+  font-size: 12.5px; padding: 7px 10px; border-radius: 6px;
+  border-left: 3px solid var(--linha); background: var(--faixa-da-lista);
+}
+.porque.ruim { border-left-color: var(--ruim); background: #1b1113; }
+.porque.atencao { border-left-color: var(--atencao); background: #1a1710; }
+.porque .marca {
+  font-family: var(--mono); font-size: 10.5px; color: var(--suave);
+  white-space: nowrap; padding-top: 2px;
+}
+.porque.ruim .marca { color: var(--ruim); }
+.porque.atencao .marca { color: var(--atencao); }
+
+.bases-achadas { margin: 16px auto 0; max-width: 480px; text-align: left; display: grid; gap: 8px; }
+.base-achada {
+  display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center;
+  padding: 10px 12px; background: var(--superficie); border: 1px solid var(--linha);
+  border-radius: 8px; cursor: pointer; text-align: left; color: inherit;
+  font-family: inherit; font-size: 13.5px;
+}
+.base-achada:hover { border-color: var(--destaque); }
+.base-achada .cm { font-family: var(--mono); font-size: 11px; color: var(--suave); margin-top: 2px; word-break: break-all; }
+.base-achada .estado { font-family: var(--mono); font-size: 10.5px; color: var(--suave); }
+/* A base cujo caminho sumiu CONTINUA na lista. Esquecer sozinho seria decidir
+   pelo dono — o pen-drive pode voltar amanhã. */
+.base-achada.sumiu { border-color: var(--ruim); cursor: not-allowed; opacity: .8; }
+.base-achada.sumiu:hover { border-color: var(--ruim); }
+.base-achada.sumiu .estado { color: var(--ruim); }
+
+/* --- a gaveta dos digitais ----------------------------------------------- */
+
+.janela-da-gaveta { width: min(860px, 94vw); max-height: 86vh; }
+.barra-da-gaveta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.busca-da-gaveta {
+  flex: 1 1 200px; min-width: 0; font-size: 13px; color: var(--tinta);
+  background: var(--fundo); border: 1px solid var(--linha); border-radius: 7px; padding: 6px 10px;
+}
+.rolo-da-gaveta { max-height: 52vh; overflow: auto; margin-top: 10px; }
+table.verbetes { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.verbetes th {
+  position: sticky; top: 0; z-index: 1; background: var(--fundo);
+  text-align: left; font-family: var(--mono); font-size: 10px;
+  letter-spacing: .07em; text-transform: uppercase; color: var(--suave);
+  font-weight: 500; padding: 0 8px 7px; border-bottom: 1px solid var(--linha);
+}
+table.verbetes td { padding: 7px 8px; border-bottom: 1px solid var(--linha); vertical-align: middle; }
+table.verbetes tr.par td { background: var(--faixa-da-lista); }
+table.verbetes .cod { font-family: var(--mono); font-size: 12.5px; }
+table.verbetes .cod.longo { font-size: 11.5px; word-break: break-all; }
+table.verbetes .sem-descricao { color: var(--suave); font-style: italic; }
+table.verbetes td.descricao { cursor: text; }
+table.verbetes td.descricao input {
+  width: 100%; font-size: 13px; color: var(--tinta); background: var(--fundo);
+  border: 1px solid var(--destaque); border-radius: 6px; padding: 4px 7px;
+}
+
+/* A CATEGORIA é um botão que troca de valor, e cada valor tem a sua cor — a mesma
+   do significado em todo o programa: vermelho é trip, âmbar é partida. O
+   «sem tipo» fica tracejado: é um buraco deixado de propósito, não um valor. */
+.tipinho {
+  font-family: var(--mono); font-size: 10.5px; border-radius: 999px;
+  padding: 2px 9px; border: 1px solid; background: none; cursor: pointer; white-space: nowrap;
+}
+.tipinho.trip { color: var(--ruim); border-color: var(--ruim); }
+.tipinho.partida { color: var(--atencao); border-color: var(--atencao); }
+/* Roxo, e não laranja: laranja ficaria a um passo do âmbar da partida, e
+   bloqueio e partida são justamente as duas que não podem ser confundidas
+   quando se pergunta por que um elemento não atuou. */
+.tipinho.bloqueio { color: var(--calculado-1); border-color: var(--calculado-1); }
+.tipinho.estado { color: var(--digital); border-color: var(--digital); }
+.tipinho.io { color: var(--bom); border-color: var(--bom); }
+/* A AUXILIAR é discreta de propósito: é o que quase nunca se quer ver. O que
+   a separa do «sem categoria» é a borda inteira — tracejado quer dizer
+   «buraco», e a auxiliar não é buraco, é uma escolha. */
+.tipinho.auxiliar { color: var(--suave); border-color: var(--suave); }
+.tipinho.sem-categoria { color: var(--suave); border-color: var(--linha); border-style: dashed; }
+
+.recado-da-base { margin-top: 10px; font-size: 12.5px; }
+.recado-da-base.ruim { color: var(--ruim); }
+.recado-da-base.bom { color: var(--bom); }
+
+/* Um ícone SOLTO, fora de uma chave. Mesma técnica do `::before` da chave —
+   máscara sobre `currentColor` — para o desenho existir num lugar só: quem
+   trocar o ícone da base troca a variável, e a tela inicial, a tela da base e
+   a chave mudam juntas. O tamanho vem de quem usa. */
+.icone-mascara {
+  display: inline-block;
+  background: currentColor;
+  -webkit-mask: var(--ic) center / contain no-repeat;
+  mask: var(--ic) center / contain no-repeat;
+}
+
+
+/* --- o navegador de pastas ------------------------------------------------ */
+
+.janela-do-navegador { width: min(560px, 94vw); max-height: 82vh; }
+.atalhos-de-pasta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.caminho-atual {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--suave);
+  margin: 10px 0 0;
+  word-break: break-all;
+}
+.lista-de-pastas {
+  margin-top: 8px;
+  max-height: 46vh;
+  overflow: auto;
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+}
+.pasta-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 11px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--linha);
+  color: var(--tinta);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.pasta-item:last-child { border-bottom: none; }
+.pasta-item:hover { background: var(--superficie); }
+.pasta-item .ic { color: var(--suave); line-height: 0; flex: none; }
+/* «Subir um nível» é um item como os outros, e não uma seta no cabeçalho:
+   a mão já está na lista, e subir é o movimento mais repetido de todos. */
+.pasta-item.subir { color: var(--suave); font-family: var(--mono); font-size: 12px; }
+.pasta-item.vazia { color: var(--suave); cursor: default; font-style: italic; }
+.pasta-item.vazia:hover { background: none; }
+.pe-do-navegador { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+
+/* Campo com o «…» colado: o botão é parte do campo, não um vizinho dele. */
+.campo-com-botao { display: flex; gap: 6px; align-items: stretch; }
+.campo-com-botao input { flex: 1 1 auto; min-width: 0; }
+.chave.procurar { flex: none; height: auto; padding: 0 12px; font-size: 14px; letter-spacing: .12em; }
+
+/* === A consulta ao dicionário, na tela da onda ============================ */
+
+/* Cinza e CLICÁVEL quando não há dicionário: o clique explica o que falta.
+   Chave que some deixa quem a procurou achando que a tela mudou de forma;
+   chave que não responde é a tela discutindo com quem clicou. */
+.chave.sem-dicionario { opacity: .45; }
+.chave.sem-dicionario:hover { opacity: .7; }
+
+.janela-do-dicionario[open] {
+  display: flex;
+  flex-direction: column;
+  width: min(620px, 94vw);
+  max-height: 78vh;
+}
+.janela-do-dicionario .de-que-rele {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--suave);
+}
+.busca-do-dicionario {
+  width: 100%;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--tinta);
+  background: var(--cartao);
+  border: 1px solid var(--linha);
+  border-radius: 7px;
+  padding: 7px 10px;
+}
+.achados-do-dicionario { margin-top: 10px; overflow: auto; }
+.achados-lista { display: grid; gap: 1px; }
+.achado-do-dicionario {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 5px;
+}
+.achado-do-dicionario.par { background: var(--faixa-da-lista); }
+.achado-do-dicionario .sinal { font-family: var(--mono); font-size: 12.5px; color: var(--tinta); }
+/* A ORIGEM é o degrau em que o verbete venceu. Fica escrita porque a regra
+   não pode ser mágica: quem cadastrou um verbete genérico precisa ver que é
+   ele que está respondendo, e não um do modelo que ele não lembra de ter. */
+.achado-do-dicionario .origem { font-family: var(--mono); font-size: 9.5px; color: var(--suave); }
+.achado-do-dicionario .descricao { font-size: 12.5px; }
+.achado-do-dicionario .descricao.vazia { color: var(--suave); font-style: italic; }
+.conta-do-dicionario {
+  margin: 10px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--linha);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--suave);
+}
+.dicionario-vazio {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  padding: 14px 2px 4px;
+  font-size: 13px;
+  color: var(--suave);
+}
+.dicionario-vazio p { margin: 0; max-width: 60ch; }
+
+/* === O painel de LÓGICA E AJUSTES ======================================== */
+
+/* Cinza e clicável quando o arquivo não trouxe ajuste — mesma regra da chave
+   do dicionário, e de propósito a mesma aparência: as duas dizem a mesma
+   coisa («não tenho o que mostrar, clique para saber por quê»). */
+.chave.sem-logica { opacity: .45; }
+.chave.sem-logica:hover { opacity: .7; }
+.chave.sem-eventos { opacity: .45; }
+.chave.sem-eventos:hover { opacity: .7; }
+
+/* FLUTUANTE, não modal. O pedido era ver a lógica ao mesmo tempo que os
+   sinais; janela modal apaga a tela atrás, e a tela atrás é metade do
+   assunto. Arrasta pela barra, estica pelo canto (`resize: both` — o
+   navegador desenha a alça melhor do que qualquer alça nossa). */
+.painel-flutuante {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  min-width: 280px;
+  min-height: 180px;
+  max-width: 96vw;
+  max-height: 92vh;
+  overflow: hidden;
+  resize: both;
+  background: var(--superficie);
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .45);
+}
+.painel-flutuante[hidden] { display: none; }
+
+.barra-do-painel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 7px 8px 7px 11px;
+  border-bottom: 1px solid var(--linha);
+  background: var(--fundo);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.barra-do-painel.arrastando { cursor: grabbing; }
+.barra-do-painel h3 { margin: 0; font-size: 13px; white-space: nowrap; }
+/* De QUAL arquivo saiu. Fica escrito porque o painel é seco: quem lê um
+   ajuste aqui precisa poder dizer de onde ele veio sem adivinhar. */
+.barra-do-painel .de-onde {
+  margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--suave);
+}
+.barra-do-painel .fechar {
+  flex: none;
+  border: 0;
+  background: none;
+  color: var(--suave);
+  font-size: 19px;
+  line-height: 1;
+  padding: 0 3px;
+  cursor: pointer;
+}
+.barra-do-painel .fechar:hover { color: var(--tinta); }
+
+.miolo-do-painel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 8px;
+  padding: 10px;
+}
+.miolo-do-painel .busca-do-dicionario { flex: none; margin-top: 0; }
+#corpo-da-logica { flex: 1 1 auto; min-height: 0; overflow: auto; }
+
+.grupo-da-logica + .grupo-da-logica { margin-top: 16px; }
+.titulo-do-grupo {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--linha);
+  font-size: 11px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--suave);
+}
+.titulo-do-grupo .conta {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+.linha-da-logica {
+  display: grid;
+  grid-template-columns: minmax(86px, 24%) minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+.linha-da-logica.par { background: var(--faixa-da-lista); }
+.linha-da-logica .nome {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--destaque);
+  overflow-wrap: anywhere;
+}
+/* O valor sai do arquivo LETRA POR LETRA. Quebra onde precisar porque uma
+   equação SELOGIC passa de cem caracteres e cortar seria esconder metade da
+   lógica. */
+.linha-da-logica .valor {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--tinta);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* Os operadores com cor, para a equação longa poder ser lida de relance. É
+   só cor: o texto é o mesmo que veio no arquivo. */
+.linha-da-logica .valor .op { color: var(--calculado-1); }
+.linha-da-logica mark {
+  background: var(--destaque-fraco);
+  color: var(--destaque);
+  border-radius: 2px;
+}
+.nada-no-grupo {
+  margin: 6px 0 0;
+  padding: 0 6px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--suave);
+}
+.pe-da-logica {
+  margin: 14px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--linha);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--suave);
+}
+.logica-vazia {
+  display: grid;
+  gap: 10px;
+  padding: 6px 2px;
+  font-size: 13px;
+  color: var(--suave);
+}
+.logica-vazia p { margin: 0; max-width: 56ch; }
+.logica-vazia .miudo { font-size: 11.5px; opacity: .85; }
+
+
+/* === O PINCEL dos sinais digitais ======================================== */
+
+/* Mora no cabeçalho do PAINEL de digitais, ao lado da engrenagem: é ali que
+   ele age, e uma ferramenta que só vale para um painel, posta no cabeçalho da
+   tela inteira, promete o que não cumpre. Desenho dele, 19/10/2026.
+   
+   Uma peça só, com a divisória no meio. Dois botões soltos lado a lado se
+   leriam como duas ferramentas; com a moldura em volta, lê-se como uma
+   ferramenta que tem uma cor carregada. */
+.controle-do-pincel {
+  display: inline-flex;
+  align-items: stretch;
+  height: 24px;
+  border: 1px solid var(--linha);
+  border-radius: 6px;
+  overflow: hidden;
+  background: none;
+}
+.controle-do-pincel .lado-pincel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  background: none;
+  border: 0;
+  color: var(--suave);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.controle-do-pincel .lado-pincel:hover { color: var(--tinta); }
+.controle-do-pincel .ic-do-pincel {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  background: currentColor;
+  -webkit-mask: var(--ic-pincel) center / contain no-repeat;
+  mask: var(--ic-pincel) center / contain no-repeat;
+}
+.controle-do-pincel .lado-cor {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 7px;
+  background: none;
+  border: 0;
+  border-left: 1px solid var(--linha);
+  cursor: pointer;
+}
+.controle-do-pincel .lado-cor:hover { background: var(--superficie); }
+/* O círculo é o alvo, e precisa PARECER um alvo: anel claro em volta da cor,
+   para a mão saber que ali se clica em outra coisa. */
+.controle-do-pincel .bolota {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--superficie), 0 0 0 2.5px var(--linha);
+}
+.controle-do-pincel .lado-cor:hover .bolota {
+  box-shadow: 0 0 0 1.5px var(--superficie), 0 0 0 2.5px var(--suave);
+}
+.controle-do-pincel.pintando { border-color: var(--destaque); }
+.controle-do-pincel.pintando .lado-pincel {
+  color: var(--destaque);
+  background: var(--destaque-fraco);
+}
+.controle-do-pincel.pintando .lado-cor { border-left-color: var(--destaque); }
+
+/* O TÍTULO de um grupo de ajustes, dentro da engrenagem. Com meia dúzia de
+   ajustes na mesma caixa, o olho precisa de um lugar onde parar. */
+.titulo-de-grupo {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--suave);
+  padding: 8px 10px 3px;
+}
+.titulo-de-grupo:first-child { padding-top: 2px; }
+
+/* As duas opções por CATEGORIA, apagadas enquanto não houver dicionário.
+   Apagada e CLICÁVEL: o clique diz o que falta, como a chave do dicionário
+   no cabeçalho. */
+.medida.sem-dicionario { opacity: .45; }
+.medida.sem-dicionario:hover { opacity: .7; }
+
+/* Registro sem `.hdr`: não há lógica nem ajuste para mostrar. Dito na hora do
+   envio, ainda dá para arrastar o arquivo que falta — no painel vazio lá
+   dentro, já não. */
+.sem-logica {
+  margin: 6px 0 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--suave);
+}
+
+
+/* --- o tipo da falta -----------------------------------------------------
+ *
+ * O MESMO selo no cartão do acervo e na tira de fatos do registro, para que
+ * `AG` signifique a mesma coisa nos dois lugares. A cor é a CONFIANÇA, e não
+ * a gravidade: verde quando corrente e tensão concordam, âmbar quando só uma
+ * pista existe, vermelho quando as duas discordam. Gravidade seria pintar
+ * uma trifásica de vermelho — e a tela não tem opinião sobre isso.
+ */
+.selo-da-falta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--suave);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  color: var(--suave);
+}
+/* A COR É A DAS FASES DA FALTA (21/10/2026, maquete «selo da falta»,
+   esquema 2). Monofásica na cor da fase; bifásica na média RGB das duas —
+   a «mistura de tinta» que ele pediu: CA roxo, BC alaranjado, AB um cinza
+   esverdeado (azul e âmbar são quase complementares); trifásica na tinta.
+   As misturas NÃO passaram pelo `tools/paleta.py`: o selo nunca divide
+   espaço com os traços, e a sigla escrita é a identidade. */
+.selo-da-falta.fase-a { color: var(--fase-a); border-color: var(--fase-a); }
+.selo-da-falta.fase-b { color: var(--fase-b); border-color: var(--fase-b); }
+.selo-da-falta.fase-c { color: var(--fase-c); border-color: var(--fase-c); }
+.selo-da-falta.fase-ab { color: var(--falta-ab); border-color: var(--falta-ab); }
+.selo-da-falta.fase-bc { color: var(--falta-bc); border-color: var(--falta-bc); }
+.selo-da-falta.fase-ca { color: var(--falta-ca); border-color: var(--falta-ca); }
+.selo-da-falta.fase-abc { color: var(--tinta); border-color: var(--tinta); }
+
+/* A confiança, que era a cor do selo, virou um pontinho ao lado dele. */
+.ponto-da-confianca {
+  display: inline-block;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--suave);
+}
+.ponto-da-confianca.alta { background: var(--bom); }
+.ponto-da-confianca.media { background: var(--atencao); }
+.ponto-da-confianca.baixa { background: var(--ruim); }
+/* `flex: none`: no cartão do acervo ela divide a linha com um título longo,
+   e encolhia — o «AB → ABG» da evolutiva vazava por cima do «remover». Quem
+   cede a largura é o título, que já quebra linha. */
+.selo-com-ponto { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+/* O raio do trip, ao lado do selo. Vermelho de LED de trip; `FE0E` pede a
+   forma de TEXTO, senão o Windows pinta o emoji amarelo e ignora a cor. */
+.raio-do-trip {
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ruim);
+  flex: none;
+}
+.selo-da-falta { white-space: nowrap; }
+
+/* «Sem falta» é resposta, não ausência de resposta — por isso ele existe e
+   é tracejado em vez de não aparecer. */
+.selo-da-falta.vazio {
+  font-weight: 400;
+  letter-spacing: 0;
+  border-style: dashed;
+}
+
+/* No cartão do acervo ele vai para a direita, antes do «remover». */
+.registro-topo .selo-da-falta.vazio,
+.registro-topo .selo-com-ponto { margin-left: auto; }
+
+/* Na tira de fatos, o selo e a sigla do relé dividem a linha do valor. */
+.tira .selo-e-rele { display: inline-flex; align-items: center; gap: 8px; }
+.tira .do-rele { font-family: var(--mono); font-size: 10.5px; color: var(--suave); }
+
+/* Conflito: os dois ficam na tela, e o do relé é que muda de cor. Apagar um
+   dos dois faria parecer que só existe um veredito. */
+.tira .do-rele.conflita { color: var(--ruim); }
+.tira .do-rele.concorda { cursor: help; opacity: 0.8; }
+
+/* ===== A CAIXA DE AJUSTES DO PLANO DE IMPEDÂNCIA =========================
+ *
+ * Ela é um `.menu-suspenso` que NÃO está dentro do painel: cada tecla
+ * digitada pede a janela ao servidor de novo, e a resposta refaz os painéis
+ * inteiros — um menu pendurado no cabeçalho sumiria debaixo do dedo a cada
+ * letra. Pendurada no `body` e posicionada em coordenadas de viewport, ela
+ * sobrevive à repintura e o desenho se mexe atrás dela enquanto se digita.
+ */
+.menu-suspenso.ajustes-do-plano {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 60;
+  width: 360px;
+  max-width: calc(100vw - 16px);
+  padding: 10px 10px 8px;
+}
+
+.ajustes-do-plano .bloco-da-linha {
+  border: 1px solid var(--linha);
+  border-radius: 5px;
+  padding: 5px 8px 6px;
+  margin-bottom: 4px;
+}
+.ajustes-do-plano .topo-do-bloco {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+.ajustes-do-plano .titulo-do-bloco {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--suave);
+}
+/* As duas chavinhas coladas, como um controle só — mesmo gesto do seletor
+   de fase do triângulo. */
+.ajustes-do-plano .medida.chavinha {
+  height: 18px;
+  font-size: 10.5px;
+  padding: 0 6px;
+  border-radius: 0;
+  margin-left: -1px;
+}
+.ajustes-do-plano .medida.chavinha:first-of-type {
+  margin-left: auto;
+  border-radius: 4px 0 0 4px;
+}
+.ajustes-do-plano .medida.chavinha:last-of-type { border-radius: 0 4px 4px 0; }
+
+/* Os parâmetros da linha têm grade PRÓPRIA, e não a das zonas: `ZL` é um
+   número complexo (dois campos) e uma zona é um alcance (um campo, mais a
+   leitura em % e o tempo). Na mesma grade, o segundo campo de `ZL` caía na
+   coluna do «% da LT» — e ali um ângulo de 80 se lê como 80 % da linha.
+   Apanhado por ele na maquete, 20/10/2026. */
+.ajustes-do-plano .linha-de-parametros {
+  display: grid;
+  grid-template-columns: 1fr 1fr 54px;
+  gap: 5px;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--tinta);
+}
+.ajustes-do-plano .linha-de-parametros.cabeca {
+  font-size: 9.5px;
+  letter-spacing: .04em;
+  color: var(--suave);
+  padding-bottom: 2px;
+}
+/* O mesmo número na OUTRA forma, em cinza: confere sem trocar de modo e sem
+   perder o que se estava digitando. É ali que um seno trocado por um
+   cosseno salta à vista. */
+.ajustes-do-plano .espelho-da-linha {
+  margin: 5px 0 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--suave);
+  text-align: right;
+}
+
+/* O corpo do bloco é só agrupamento: existe para o cabeçalho, os campos e
+   o espelho andarem juntos quando o seletor polar/retangular refaz a caixa. */
+.ajustes-do-plano .corpo-do-bloco { display: block; }
+
+.ajustes-do-plano .tabela-de-zonas { display: grid; gap: 2px; }
+.ajustes-do-plano .linha-de-zona {
+  display: grid;
+  grid-template-columns: 24px 1fr 54px 52px 52px;
+  gap: 5px;
+  align-items: center;
+  padding: 1px 2px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--tinta);
+}
+.ajustes-do-plano .linha-de-zona.cabeca {
+  font-size: 9.5px;
+  letter-spacing: .04em;
+  color: var(--suave);
+  border-bottom: 1px solid var(--linha);
+  padding-bottom: 2px;
+  margin-bottom: 2px;
+}
+.ajustes-do-plano .linha-de-zona b { font-weight: 600; }
+
+.ajustes-do-plano input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 11px;
+  border: 1px solid var(--linha);
+  border-radius: 3px;
+  background: var(--fundo);
+  color: var(--tinta);
+  padding: 1px 5px;
+  min-width: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.ajustes-do-plano input:hover { border-color: var(--suave); }
+.ajustes-do-plano input:focus { outline: none; border-color: var(--destaque); }
+
+/* A ORIGEM de cada número, escrita ao lado dele. É a coisa mais importante
+   desta caixa: um ajuste sugerido que pareça lido é o erro que faria alguém
+   concluir que o relé atuou certo quando ninguém conferiu nada. */
+.ajustes-do-plano .etiqueta-origem {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .04em;
+  color: var(--suave);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ajustes-do-plano .etiqueta-origem.lido { color: var(--bom); }
+.ajustes-do-plano .etiqueta-origem.sugerido { color: var(--atencao); }
+.ajustes-do-plano .etiqueta-origem.modelagem { color: var(--atencao); }
+.ajustes-do-plano .etiqueta-origem.digitado { color: var(--destaque); }
+.ajustes-do-plano .etiqueta-origem.vazio { color: var(--linha); }
+
+.ajustes-do-plano .medida.largo {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+}
+.ajustes-do-plano .nota-do-menu {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--suave);
+}
+
+/* O botão do cabeçalho quando alguma zona NÃO saiu do relé: o rótulo já é o
+   aviso, e a cor o torna impossível de não ver. */
+.grafico-titulo .medida.aviso-no-botao {
+  color: var(--atencao);
+  border-color: var(--atencao);
+  background: none;
+}
+
+/* ===== AS ABAS DE OSCILOGRAFIA ===========================================
+ *
+ * Como as de um navegador: uma barra no alto e um quadro por aba. Cada aba é
+ * a página da onda inteira, independente das outras (`templates/abas.html`).
+ */
+.corpo-das-abas { display: flex; flex-direction: column; height: 100vh; margin: 0; }
+.barra-de-abas {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 6px 8px 0;
+  background: var(--fundo);
+  border-bottom: 1px solid var(--linha);
+  overflow-x: auto;
+  flex: none;
+}
+.aba-de-oscilografia {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 280px;
+  padding: 5px 8px 5px 12px;
+  border: 1px solid var(--linha);
+  border-bottom: 0;
+  border-radius: 7px 7px 0 0;
+  background: var(--superficie);
+  color: var(--suave);
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.aba-de-oscilografia.ativa { color: var(--tinta); background: var(--fundo); position: relative; top: 1px; }
+.aba-de-oscilografia .nome-da-aba { overflow: hidden; text-overflow: ellipsis; }
+/* O «×» de tirar alguma coisa da tela, UM SÓ em todo o programa: fechar a
+   aba, tirar o IED da aba, tirar o registro do acervo. Era «remover»,
+   «tirar» sublinhado e «×», cada um com uma cara. */
+.botao-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--suave);
+  font: 15px/1 var(--mono);
+  cursor: pointer;
+}
+.botao-x:hover { color: var(--ruim); background: var(--destaque-fraco); }
+/* Os botões da barra das abas: a mesma `.chave` do resto da tela, mais
+   baixos, encostados na linha de baixo como uma aba. */
+.barra-de-abas .chave { height: 26px; margin: 0 0 5px 6px; font-size: 12px; flex: none; }
+.barra-de-abas .aba-nova { border-style: dashed; }
+.barra-de-abas .aba-nova:hover { border-color: var(--destaque); color: var(--destaque); }
+.menu-das-abas { position: fixed; max-height: 60vh; overflow-y: auto; min-width: 280px; }
+.quadros-das-abas { flex: 1; min-height: 0; }
+.quadro-da-aba { display: block; width: 100%; height: 100%; border: 0; }
+/* `display: block` vence o `[hidden]` do navegador: sem esta linha TODOS os
+   quadros ficavam visíveis, um embaixo do outro, e trocar de aba não mudava
+   nada — a primeira oscilografia continuava na tela (22/10/2026). */
+.quadro-da-aba[hidden] { display: none; }
+
+/* ===== VÁRIOS IEDs NA MESMA ABA ========================================= */
+.tira-dos-ieds { display: grid; gap: 4px; padding: 0 16px 6px; }
+.barra-dos-ieds { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.barra-dos-ieds .chave { font-size: 11.5px; }
+/* O «+ adicionar oscilografia»: o ÚNICO botão cheio da faixa, na cor de
+   destaque. Escondido no meio das chaves, ninguém o achava (maquete 1 de
+   «mais-oscilografia-10», escolha dele em 22/10/2026). */
+.barra-dos-ieds .mais-oscilografia {
+  height: 28px;
+  padding: 0 14px;
+  border: 0;
+  background: var(--destaque);
+  color: var(--fundo);
+  font-weight: 600;
+}
+.barra-dos-ieds .mais-oscilografia:hover:not(:disabled) {
+  color: var(--fundo);
+  filter: brightness(1.1);
+}
+.barra-dos-ieds .mais-oscilografia:disabled { opacity: .45; }
+.rotulo-dos-ieds {
+  margin-left: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--suave);
+}
+.linha-do-ied {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  font-size: 12px;
+  border: 1px solid var(--linha);
+  border-radius: 5px;
+  padding: 4px 8px;
+}
+.apelido-do-ied { font-weight: 600; max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lapis-do-ied {
+  border: 0; background: none; color: var(--suave); cursor: pointer; font-size: 12px; padding: 0 3px;
+}
+.tirar-do-ied { margin-left: auto; }
+.campo-do-apelido { font-size: 12px; width: 260px; }
+.fato-do-ied { display: inline-flex; gap: 5px; align-items: baseline; white-space: nowrap; font-family: var(--mono); }
+.fato-do-ied b { font-weight: 400; font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--suave); }
+.fato-do-ied.aviso-do-ied span { color: var(--atencao); }
+/* O selo do IED: a letra CENTRADA no quadradinho (flex, linha de altura 1). */
+.selo-ied {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  border-radius: 3px;
+  font: 700 9.5px/1 var(--mono);
+  color: var(--fundo);
+  background: var(--suave);
+  vertical-align: middle;
+}
+.selo-ied.ied-a { background: var(--destaque); }
+.selo-ied.ied-b { background: var(--traco-2); }
+.selo-ied.ied-c { background: var(--traco-1); }
+.abas-dos-ieds { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 6px; }
+.aba-do-ied {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 12px;
+  border: 1px solid var(--linha); border-radius: 5px 5px 0 0; background: none; color: var(--suave);
+  padding: 3px 8px; cursor: pointer;
+}
+.aba-do-ied.escolhida { color: var(--tinta); border-color: var(--destaque); }
+/* Cada registro da lista em DUAS linhas: o nome, que é o que se procura, e
+   embaixo, menor e apagado, onde e quando — o que desempata dois registros
+   de nome parecido. Numa linha só o nome comprido empurrava o resto. */
+.opcao-de-registro {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  max-width: 420px;
+  text-align: left;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--tinta);
+  cursor: pointer;
+}
+.opcao-de-registro + .opcao-de-registro { margin-top: 1px; }
+.opcao-de-registro:hover, .opcao-de-registro:focus-visible {
+  background: var(--destaque-fraco);
+  outline: none;
+}
+.opcao-de-registro .nome-do-registro {
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.opcao-de-registro .sub-do-registro {
+  font: 10.5px/1.3 var(--mono);
+  color: var(--suave);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.opcao-de-registro:hover .nome-do-registro { color: var(--destaque); }
+
+/* A vista do plano de impedância, dentro da caixa de ajustes: um rótulo
+   curto e as chaves dele na mesma linha. */
+.vista-do-plano { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 4px 0; }
+.vista-do-plano .rotulo-da-vista {
+  min-width: 9.5em;
+  font: 10.5px var(--mono);
+  color: var(--suave);
+}
+
+/* A âncora do menu dos eventos mora SOLTA na fileira, e o `gap` dela abria
+   um vão dobrado depois do botão. A margem negativa devolve esse vão. */
+.topo.registro .acoes > .ancora-de-menu { margin-left: -16px; }
+
+/* ===== A CAIXA DE AJUSTES, MAQUETE 7 (22/10/2026) ========================
+ *
+ * Só os ajustes do relé — a vista foi para a engrenagem. Rascunho com
+ * «aplicar»: o que se digita fica pendente até ser aplicado, e o rodapé
+ * diz isso. A base dos ohms vai escrita na faixa e em cada coluna.
+ */
+.menu-suspenso.ajustes-do-plano { width: 520px; max-height: calc(100vh - 24px); overflow-y: auto; }
+.ajustes-do-plano .faixa-da-base {
+  margin: 0 0 8px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: var(--destaque-fraco);
+  font: 11px/1.4 var(--mono);
+  color: var(--tinta);
+}
+.ajustes-do-plano .bloco-da-linha .titulo-do-bloco { margin-bottom: 4px; }
+.ajustes-do-plano .bloco-da-linha .linha-de-parametros {
+  grid-template-columns: 70px auto 10px 60px 10px minmax(0, 1fr);
+}
+.ajustes-do-plano .unidade-do-campo { font: 10.5px var(--mono); color: var(--suave); }
+.ajustes-do-plano .nota-da-linha {
+  margin: 4px 0 0;
+  font: 10.5px/1.4 var(--mono);
+  color: var(--suave);
+}
+.ajustes-do-plano .nota-da-linha.atencao { color: var(--atencao); }
+.ajustes-do-plano .linha-da-forma {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 0;
+}
+.ajustes-do-plano .linha-da-forma .par-de-medidas .medida { height: 22px; }
+.ajustes-do-plano .zonas-v7 { margin-top: 8px; }
+.ajustes-do-plano .zonas-v7 .linha-de-zona {
+  grid-template-columns: 24px 78px 1fr 1fr 1fr 1.9fr 50px;
+}
+.ajustes-do-plano .zonas-v7 select {
+  font: 11px var(--mono);
+  background: var(--fundo);
+  color: var(--tinta);
+  border: 1px solid var(--linha);
+  border-radius: 3px;
+  padding: 1px 2px;
+  min-width: 0;
+}
+.ajustes-do-plano .zonas-v7 input.col-t { text-align: left; }
+/* A coluna que a forma em vista não usa fica apagada — e continua editável:
+   dá para preparar a quadrilateral olhando a mho. */
+.ajustes-do-plano .zonas-v7.sem-quad .col-x,
+.ajustes-do-plano .zonas-v7.sem-quad .col-r,
+.ajustes-do-plano .zonas-v7.sem-mho .col-mho { opacity: .4; }
+.ajustes-do-plano .rodape-do-ajuste {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 0;
+}
+.ajustes-do-plano .pendente-do-ajuste {
+  margin-right: auto;
+  font: 10.5px var(--mono);
+  color: var(--atencao);
+}
+.ajustes-do-plano .medida.primario-do-ajuste:not(:disabled) {
+  background: var(--destaque);
+  border-color: var(--destaque);
+  color: var(--fundo);
+  font-weight: 600;
+}
+
+
+/* ---------------------------------------------------------------------------
+   LOCALIZAR FALTA: a tela própria (painel 1 da maquete, 23/10/2026).
+   O botão troca a área das ondas por este painel. As ondas não somem do
+   layout: ficam invisíveis e com altura zero, e por isso mantêm a largura —
+   os canvases continuam com as colunas de pixel certas para quando voltarem.
+   --------------------------------------------------------------------------- */
+#graficos.atras-da-localizacao { visibility: hidden; height: 0; overflow: hidden; }
+.tela-localizar { margin: 10px 16px 30px; border: 1px solid var(--linha); border-radius: 8px;
+  background: var(--superficie); font-size: 13px; }
+.tela-localizar[hidden] { display: none; }
+.tela-localizar svg { display: block; }
+.tela-localizar svg text { fill: var(--suave); font-size: 11px; }
+.loc-abas { display: flex; align-items: flex-end; gap: 4px; padding: 8px 12px 0; border-bottom: 1px solid var(--linha); }
+.loc-abas > button { background: transparent; border: 1px solid transparent; border-bottom: none; color: var(--suave);
+  padding: 6px 16px; border-radius: 6px 6px 0 0; font: inherit; font-size: 14px; cursor: pointer; margin-bottom: -1px; }
+.loc-abas > button.on { background: var(--superficie); border-color: var(--linha); color: var(--tinta); font-weight: 600;
+  box-shadow: inset 0 2px 0 var(--destaque); }
+.loc-abas > button:disabled { cursor: not-allowed; opacity: .55; }
+.loc-abas .loc-fechar { margin-left: auto; margin-bottom: 6px; }
+.loc-corpo { padding: 12px; }
+/* A FAIXA DO RESULTADO: no mesmo lugar sempre, presa ao rolar. Ninguém
+   procura o número. */
+.loc-resultado { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 6px 30px; align-items: center;
+  margin: -12px -12px 12px; padding: 10px 16px; background: var(--superficie); border-bottom: 1px solid var(--linha);
+  border-left: 4px solid var(--destaque); box-shadow: 0 6px 12px -8px rgba(0, 0, 0, .55); }
+.loc-resultado .bloco { display: flex; flex-direction: column; }
+.loc-resultado .rot { font-size: 11.5px; color: var(--suave); }
+.loc-resultado .km { font-size: 28px; font-weight: 700; color: var(--destaque); font-variant-numeric: tabular-nums; line-height: 1.15; }
+.loc-resultado .km-m { font-size: 18px; font-weight: 700; color: var(--destaque); font-variant-numeric: tabular-nums; line-height: 1.5; }
+.loc-resultado .met { font-size: 15px; font-weight: 600; display: inline-flex; gap: 6px; align-items: center; line-height: 1.6; }
+.loc-passos { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; color: var(--suave); }
+.loc-passo { display: inline-flex; gap: 7px; align-items: center; border: 1px solid var(--linha); border-radius: 999px; padding: 3px 12px 3px 4px; }
+.loc-num { display: inline-flex; width: 21px; height: 21px; border-radius: 50%; align-items: center; justify-content: center;
+  font-size: 11.5px; font-weight: 700; background: var(--linha); color: var(--tinta); }
+.loc-num.ok { background: var(--bom); color: #fff; }
+.loc-num.aviso { background: var(--atencao); color: #111; }
+.loc-sec { border: 1px solid var(--linha); border-radius: 7px; padding: 9px 10px; margin-bottom: 12px; }
+.loc-sec > h3 { margin: 0 0 6px; font-size: 13px; font-weight: 600; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.loc-sec > h3 .nota { font-weight: 400; }
+.loc-nota { color: var(--suave); font-size: 12px; margin: 4px 0; }
+.loc-nota b { color: var(--tinta); }
+.loc-aviso { color: var(--atencao); margin: 6px 0; }
+.loc-bom { color: var(--bom); } .loc-aten { color: var(--atencao); }
+.loc-selo-ok { color: var(--bom); border: 1px solid var(--bom); border-radius: 4px; padding: 0 6px; font-size: 11.5px; font-weight: 600; }
+.loc-selo-aviso { color: var(--atencao); border: 1px solid var(--atencao); border-radius: 4px; padding: 0 6px; font-size: 11.5px; font-weight: 600; }
+.loc-controles { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin-bottom: 6px; color: var(--suave); font-size: 12.5px; }
+.loc-duas { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; }
+@media (max-width: 900px) { .loc-duas { grid-template-columns: 1fr; } }
+.loc-g { width: 100%; min-width: 0; }
+.loc-g svg.tempo { cursor: crosshair; }
+.tela-localizar table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+.tela-localizar td, .tela-localizar th { border-bottom: 1px solid var(--linha); padding: 4px 6px; text-align: right; font-size: 12.5px; }
+.tela-localizar td:first-child, .tela-localizar th:first-child { text-align: left; }
+.tela-localizar th { color: var(--suave); font-weight: 500; font-size: 11.5px; }
+.loc-ied { display: inline-flex; width: 18px; height: 18px; border-radius: 50%; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; background: var(--destaque); color: var(--fundo); }
+.loc-ied.b { background: var(--suave); }
+.loc-bolinha { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; margin-right: 4px; }
+.loc-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; }
+.loc-chip { display: inline-flex; gap: 5px; align-items: center; border: 1px solid var(--linha); border-radius: 999px;
+  padding: 2px 10px; background: transparent; color: var(--tinta); font: inherit; font-size: 12.5px; cursor: pointer; }
+.loc-chip.on { border-color: var(--destaque); background: var(--destaque-fraco); }
+.loc-chip:disabled { opacity: .45; cursor: not-allowed; text-decoration: line-through; }
+.pilula-loc { display: inline-flex; border: 1px solid var(--linha); border-radius: 999px; overflow: hidden; }
+.pilula-loc button { background: transparent; color: var(--suave); border: none; padding: 2px 10px; font: inherit; font-size: 12.5px; cursor: pointer; }
+.pilula-loc button.on { background: var(--destaque); color: var(--fundo); font-weight: 600; }
+/* As quatro FONTES da linha, na ordem de preferência. A que vale fica cheia;
+   a que não tem dado fica riscada, com o motivo no hover. */
+.fontes-loc { display: flex; flex-wrap: wrap; gap: 4px; }
+.fontes-loc button { background: transparent; color: var(--suave); border: 1px solid var(--linha);
+  border-radius: 999px; padding: 1px 9px; font: inherit; font-size: 12px; cursor: pointer; }
+.fontes-loc button.sem { text-decoration: line-through; opacity: .6; cursor: help; }
+.fontes-loc button.vale { background: var(--destaque); border-color: var(--destaque); color: var(--fundo); }
+.fila-loc { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }
+.fila-loc > label { color: var(--suave); min-width: 64px; }
+.tela-localizar input { background: var(--fundo); color: var(--tinta); border: 1px solid var(--linha); border-radius: 4px; padding: 2px 6px; font: inherit; }
+.tela-localizar input.num-loc { width: 82px; text-align: right; font-variant-numeric: tabular-nums; }

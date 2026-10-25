@@ -300,3 +300,69 @@ def test_a_continua_segue_os_trechos_de_taxa():
     curva = envoltoria.calcular(sinal, trechos, 60.0, "dc")
     assert np.all(np.isnan(curva[a.size:a.size + 39]))
     np.testing.assert_allclose(curva[a.size + 39:], 9.0, atol=1e-9)
+
+
+# --- NaN não contamina o resto -------------------------------------------
+
+def test_nan_na_frente_nao_envenena_o_registro_inteiro():
+    """`np.cumsum` faz um NaN contaminar tudo que vem depois dele.
+
+    Não aparecia enquanto a envoltória só via canal do arquivo, que é finito
+    de ponta a ponta. Apareceu quando a calculadora passou a alcançar as
+    colunas derivadas: `[VAY] - [VAY · 60Hz]` tem o primeiro ciclo NaN por
+    construção, e a envoltória DELA saía NaN no registro inteiro — quatro das
+    cinco colunas do sinal, vazias.
+    """
+    import numpy as np
+    from osclab.dsp import envoltoria
+
+    por_ciclo = 32
+    t = np.arange(por_ciclo * 40) / (60.0 * por_ciclo)
+    onda = np.sqrt(2) * np.cos(2 * np.pi * 60.0 * t)
+
+    limpo = envoltoria.media_do_ciclo(onda, por_ciclo)
+    sujo = onda.copy()
+    sujo[:por_ciclo] = np.nan
+    saida = envoltoria.media_do_ciclo(sujo, por_ciclo)
+
+    # Os dois ciclos da frente são desconhecidos — e só eles.
+    assert np.isnan(saida[:2 * por_ciclo - 1]).all()
+    assert np.isfinite(saida[2 * por_ciclo:]).all()
+    # E o que sobrou vale o mesmo que sem o buraco.
+    assert np.allclose(saida[2 * por_ciclo:], limpo[2 * por_ciclo:])
+
+
+def test_buraco_no_meio_so_apaga_as_janelas_que_o_contem():
+    """Depois de passar o buraco, a conta volta ao normal."""
+    import numpy as np
+    from osclab.dsp import envoltoria
+
+    por_ciclo = 32
+    t = np.arange(por_ciclo * 40) / (60.0 * por_ciclo)
+    onda = np.sqrt(2) * np.cos(2 * np.pi * 60.0 * t)
+    limpo = envoltoria.media_do_ciclo(onda, por_ciclo)
+
+    sujo = onda.copy()
+    sujo[500:503] = np.nan
+    saida = envoltoria.media_do_ciclo(sujo, por_ciclo)
+
+    # A última janela tocada pelo buraco termina em 502 + (largura - 1).
+    fim = 502 + por_ciclo
+    assert np.isnan(saida[500:fim]).all()
+    assert np.allclose(saida[fim + 1:], limpo[fim + 1:])
+
+
+def test_sinal_sem_furo_nao_muda_de_resultado():
+    """A guarda não pode cobrar nada de quem não tem NaN — que é o caso de
+    todo canal do arquivo."""
+    import numpy as np
+    from osclab.dsp import envoltoria
+
+    por_ciclo = 20
+    t = np.arange(por_ciclo * 30) / (60.0 * por_ciclo)
+    onda = (np.sqrt(2) * np.cos(2 * np.pi * 60.0 * t)
+            + 0.3 * np.cos(2 * np.pi * 180.0 * t) + 0.1)
+    saida = envoltoria.media_do_ciclo(onda, por_ciclo)
+    assert np.isfinite(saida[por_ciclo - 1:]).all()
+    # A média de um ciclo de uma senoide com 0,1 de contínua é 0,1.
+    assert saida[-1] == pytest.approx(0.1, abs=1e-9)

@@ -14,19 +14,29 @@
       <p class="sub">Leitor e analisador de oscilografia</p>
     </div>
     <div class="acoes">
-      <button type="button" class="tema" id="tema" title="Alternar tema">tema</button>
-      <span class="versao">v{{ versao }}</span>
+      <button type="button" class="chave tema com-icone" id="tema"
+              style="--ic: var(--ic-tema)" title="Alternar tema">tema</button>
+      {#- A seta para a ESQUERDA, e não um ícone de casinha: este botão sobe um
+          nível, e o gesto que ele faz é o mesmo do «voltar» do navegador --
+          quem clica está desistindo desta tela, não indo a um lugar novo. #}
+      <a class="chave voltar com-icone" style="--ic: var(--ic-voltar)"
+         href="/" title="Voltar à tela inicial">menu</a>
+      <span class="versao-etiqueta">v{{ versao }}</span>
     </div>
   </header>
+
 
   <main>
     <section>
       <h2>Arquivos do projeto</h2>
       <p class="ajuda">
-        Arraste as oscilografias para a área abaixo. Um COMTRADE são dois
-        arquivos — o <code>.cfg</code> e o <code>.dat</code> — e os dois
-        precisam vir juntos; um <code>.cev</code> da SEL vem sozinho. Pode
-        mandar vários registros de uma vez: o pareamento é automático.
+        Arraste as oscilografias para a área abaixo. O <strong>mínimo</strong>
+        para o leitor funcionar são dois arquivos — o <code>.cfg</code> e o
+        <code>.dat</code>, que precisam vir juntos; um <code>.cev</code> da SEL
+        vem sozinho e já traz tudo. Para ver também a
+        <strong>lógica e os ajustes</strong> do relé, mande o <code>.hdr</code>
+        junto: é nele que a SEL escreve o relatório do evento. Pode mandar
+        vários registros de uma vez — o pareamento é automático.
       </p>
 
       <form id="envio" class="solta" aria-label="Enviar oscilografias">

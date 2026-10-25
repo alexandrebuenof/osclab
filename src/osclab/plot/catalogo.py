@@ -243,7 +243,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from osclab.dsp import envoltoria, simetricas
+from osclab.dsp import envoltoria, potencia, simetricas
 from osclab.formats import conjuntos, fases
 from osclab.formats.base import Record
 from osclab.plot import conversao, sinais, unidades
@@ -461,6 +461,15 @@ class Sinal:
     #: Por que o canal caiu em `outros`, em uma linha, para a tela mostrar ao
     #: lado dele. Vazio nos outros blocos.
     motivo: str = ""
+    #: O que a conta do usuário tem de estranho mas NÃO impede — a tela escreve
+    #: isto no ⓘ azul, ao lado do nome.
+    #:
+    #: Campo separado de `motivo` por uma razão de leitura: `motivo` explica
+    #: por que o sinal NÃO serve para algo (e o sinal está em `outros`); o
+    #: aviso acompanha um sinal que serve, e está no bloco normal. Juntar os
+    #: dois faria a tela pintar de vermelho uma conta que funciona. Ver a regra
+    #: do projeto: avisa, nunca bloqueia.
+    aviso: str = ""
     #: A coluna da matriz em que este sinal mora: `filtrado.onda`,
     #: `filtrado.rms`, `bruto.onda`, `bruto.rms` ou `bruto.dc`. Ver
     #: `coluna_da_grandeza` — e repare que ela NÃO é a grandeza: num registro
@@ -474,6 +483,36 @@ class Sinal:
     #: quarto canal do relé. A cor ajuda e não basta: cor não se lê, e num
     #: relatório impresso em preto e branco ela não existe.
     nota: str = ""
+    #: A expressão JÁ LIDA, quando este sinal é conta do usuário.
+    #:
+    #: Guardada aqui porque ler custa, e sem ela cada leitura de cursor
+    #: reanalisava a conta — vinte contas na tela viravam vinte análises por
+    #: movimento do mouse. O catálogo já leu uma vez; quem desenha aproveita.
+    analise: object = None
+    #: As contas criadas ANTES desta, quando este sinal é conta do usuário.
+    #:
+    #: Existe porque a conta pode usar outra conta, e quem for recalcular a
+    #: série dela precisa saber quais nomes ela enxergava. Só as anteriores:
+    #: é a ordem de criação que torna a referência circular impossível, sem
+    #: grafo de dependência nenhum. Ver `plot/contas.analisar`.
+    contas_antes: tuple = ()
+    #: O DOMÍNIO da conta do usuário: `componente`, `modulo` ou `misto`.
+    #: Vazio quando o sinal não é conta.
+    #:
+    #: `componente` é conta entre parcelas com sinal da onda — ela TEM onda,
+    #: contínua e eficaz, como qualquer canal. `modulo` tem uma folha só: a
+    #: série já É o valor, e aplicar eficaz ou contínua em cima dela seria
+    #: suavizar um número que ninguém pediu para suavizar. `misto` é o que não
+    #: sabemos: fica com tudo de pé e o ⓘ ao lado. Ver `contas.Analise`.
+    dominio: str = ""
+    #: A expressão que o usuário escreveu, quando este sinal é conta dele.
+    #:
+    #: Campo próprio, e não `origem`: `origem` responde "de que canais isto
+    #: saiu" e é o que a tela mostra ao lado do nome — a expressão responde
+    #: "como", e é o que o servidor precisa para refazer a onda. Guardar as
+    #: duas no mesmo campo fez a conta sair vazia no primeiro teste, porque a
+    #: série tentou interpretar "Current IA, Current IB" como expressão.
+    expressao: str = ""
 
 
 #: O que cada grandeza é, em uma linha, para o hover da lista.
@@ -486,7 +525,8 @@ _O_QUE_E = {
 }
 
 
-def de_registro(registro: Record, lado: str = "arquivo") -> list[Sinal]:
+def de_registro(registro: Record, lado: str = "arquivo",
+                contas_do_usuario=()) -> list[Sinal]:
     """Tudo que se pode acrescentar a um gráfico deste registro.
 
     A lista sai inteira, das duas famílias, e a tela separa em abas. O servidor
@@ -602,12 +642,19 @@ def de_registro(registro: Record, lado: str = "arquivo") -> list[Sinal]:
         # programa escolheu olhando nomes. Ver o campo `conjunto` de `Sinal`.
         trinca = {"chave": conjunto.nome,
                   "unidade": conjunto.unidade,
-                  "canais": {f: conjunto.canais[f] for f in ("A", "B", "C")}}
+                  "base": conjunto.base,
+                  "canais": {f: conjunto.canais[f] for f in conjunto.rotulos}}
 
         # --- o resíduo no tempo: `IN G1`, `IN G1 · RMS` ------------------
+        #
+        # Em DELTA ele não existe, e some da lista em vez de sair zerado:
+        # `VAB + VBC + VCA ≡ 0` por identidade, e esse zero apareceria como
+        # `VN G3` plano na tela — "não há falta à terra", medido em nada.
+        # Some também o `3V0` logo abaixo, pelo mesmo motivo. Ver
+        # `dsp/simetricas.de_lacos`.
         base = conjuntos.juntar(f"{conjunto.grandeza}N", conjunto.rotulo)
-        oferta_do_residuo = (RESIDUO_DE_FILTRADO if ja_filtrado
-                             else RESIDUO_DE_BRUTO)
+        oferta_do_residuo = () if conjunto.e_de_linha else (
+            RESIDUO_DE_FILTRADO if ja_filtrado else RESIDUO_DE_BRUTO)
         for grandeza, conta in oferta_do_residuo:
             saida.append(Sinal(
                 id=f"q{i}:{RESIDUAL}:{grandeza}",
@@ -633,6 +680,8 @@ def de_registro(registro: Record, lado: str = "arquivo") -> list[Sinal]:
             ))
 
         for chave, (_, molde, descricao) in COMPONENTES.items():
+            if chave == "0" and conjunto.e_de_linha:
+                continue
             nome = molde.format(g=conjunto.grandeza)
             descricao = descricao.format(g=conjunto.grandeza)
             inteiro = conjuntos.juntar(nome, conjunto.rotulo)
@@ -657,11 +706,351 @@ def de_registro(registro: Record, lado: str = "arquivo") -> list[Sinal]:
                 conjunto=trinca,
             ))
 
+    saida.extend(_potencias_dos_vinculos(
+        registro, conjuntos.de_registro(registro), escalas))
+    saida.extend(_contas_do_usuario(registro, lado, escalas, ja_filtrado, hz,
+                                    contas_do_usuario))
     return saida
 
 
-def por_id(registro: Record, lado: str = "arquivo") -> dict[str, Sinal]:
-    return {s.id: s for s in de_registro(registro, lado)}
+def _por_que_nao_e_senoide(analise) -> str:
+    """Em quatro palavras, por que esta conta perdeu fasor e espectro.
+
+    Vazio quando ela não perdeu. Antes disto só o caso do produto tinha
+    motivo escrito, e as contas que caíam em «outros» por causa do DOMÍNIO —
+    somar a contínua, usar um RMS — caíam caladas: quatro risquinhos e nenhuma
+    palavra. Linha muda é pior que coluna a mais.
+    """
+    if analise.alternado:
+        return ""
+    if analise.tem_produto:
+        return "não é senoidal: produto entre sinais"
+    return "não é senoidal: usa RMS ou contínua"
+
+
+def _oferecer(por_nome: dict, conta, analise, contas_mod) -> None:
+    """Põe esta conta no mapa, para as PRÓXIMAS poderem usá-la pelo nome.
+
+    Fica de fora a conta que não compila — quem a usasse herdaria o erro sem
+    saber de onde ele veio — e o nome repetido vira `None`, que é como o
+    leitor marca "existem dois com este nome, escolha outro".
+    """
+    chave = contas_mod.chave_do_nome(conta.nome or "")
+    if not chave or not analise.vale:
+        return
+    if chave in por_nome:
+        por_nome[chave] = None
+        return
+    por_nome[chave] = contas_mod.Referencia(
+        linha=conta.nome,
+        unidade=analise.unidade_escrita,
+        bloco="alternado" if analise.alternado else "outros",
+        analise=analise)
+
+
+def _base_do_vinculo(tensao, vinculo) -> str:
+    """Fase ou linha — e a TRINCA ganha do que o usuário marcou no vínculo.
+
+    O botão «fase ou linha» do vínculo existia porque nada no programa sabia a
+    resposta: `VAB` e `VA` são duas senoides, e só o nome do canal distingue.
+    Agora a trinca sabe — ela é montada de `AB/BC/CA` ou de `A/B/C` —, e o que
+    ela sabe não é palpite: é o vínculo canal→fase, que o usuário já conferiu
+    na tela dos canais.
+
+    Marcar «fase» num vínculo cuja tensão é de linha dividiria a potência
+    trifásica por √3 e repartiria entre três fases que não existem ali. Por
+    isso a trinca manda, e o botão só decide quando ela não tem opinião — que
+    é o caso de hoje, em que `VAB` ainda é DEDUZIDO como fase A.
+    """
+    if getattr(tensao, "e_de_linha", False):
+        return "linha"
+    return str((vinculo or {}).get("base") or "fase")
+
+
+def _potencias_dos_vinculos(registro: Record, achados, escalas: dict) -> list:
+    """P, Q, S e FP de cada vínculo que o USUÁRIO fez.
+
+    Sem vínculo, nada aqui existe — e é de propósito. O programa não casa
+    corrente com tensão sozinho: dois vãos de uma subestação têm nomes
+    parecidos, e o par errado produz uma potência na unidade certa, na ordem
+    de grandeza certa, e errada. Quem sabe qual TC pertence a qual TP é quem
+    leu o unifilar. Ver `Record.vinculos_de_potencia`.
+
+    Saem como MÓDULO, na coluna do eficaz filtrado, como a componente
+    simétrica: são contas entre fasores de 60 Hz, não ondas. Quem quiser a
+    onda da potência instantânea escreve `[VAY] × [IAW]` na calculadora —
+    ela mostra a ondulação de 120 Hz, que esta aqui não tem.
+    """
+    vinculos = getattr(registro, "vinculos_de_potencia", None) or {}
+    if not vinculos:
+        return []
+    por_chave = {c.nome: c for c in achados}
+    saida: list[Sinal] = []
+    for chave, vinculo in sorted(vinculos.items()):
+        conjunto = por_chave.get(chave)
+        outro = por_chave.get(str(vinculo.get("com") or ""))
+        if conjunto is None or outro is None:
+            continue
+        # UM lado só gera os sinais, senão cada potência apareceria duas
+        # vezes — uma no grupo da corrente e outra no da tensão. O lado da
+        # CORRENTE, porque é o vão que ela mede: a tensão de um barramento
+        # pode servir a vários vãos, a corrente não.
+        if conjunto.grandeza != "I":
+            continue
+        base = _base_do_vinculo(outro, vinculo)
+        rotulos = potencia.GRANDEZAS_POR_BASE.get(base,
+                                                  potencia.GRANDEZAS_POR_BASE["fase"])
+        origem = f"{conjunto.rotulo} × {outro.rotulo}"
+        # O nome carrega o PAR, não o grupo: `P G1↔G3`.
+        #
+        # `P G1` seria mentira por omissão — a potência não sai de G1, sai do
+        # par. Num registro com dois vãos, duas linhas chamadas `P G1` e
+        # `P G2` não diriam com que tensão cada uma foi calculada, e trocar o
+        # vínculo mudaria o número sem mudar o nome. Com o par escrito, o
+        # nome muda junto com a conta.
+        par = f"{conjunto.rotulo}{SETA_DO_VINCULO}{outro.rotulo}"
+        for grandeza in rotulos:
+            unidade = potencia.UNIDADE[grandeza]
+            _, mostrada = escalas.get(unidade, (1.0, unidade))
+            nome = conjuntos.juntar(grandeza, par)
+            saida.append(Sinal(
+                id=f"w{conjunto.rotulo}:{grandeza}:rms",
+                nome=nome,
+                unidade=unidade,
+                unidade_mostrada=mostrada,
+                familia="calculado",
+                grandeza="fundamental",
+                conta="fundamental",
+                coluna="filtrado.rms",
+                descricao=_DESCRICAO_DA_POTENCIA[grandeza],
+                origem=origem,
+                linha=nome,
+                # O grupo é o PAR, não G1: é dele que estes sinais saem, e é
+                # com esse nome que a caixinha ao lado do nome tem de casar.
+                grupo=par,
+                bloco="sequencia",
+                nota=f"calculado: vínculo {origem}, tensão de {base}",
+                sem_sinal=conjunto.sem_sinal or outro.sem_sinal,
+            ))
+    return saida
+
+
+#: O que liga os dois grupos no nome de uma potência: `P G1↔G3`.
+#:
+#: Seta de duas pontas porque o vínculo vale nos dois sentidos — ligar G1 a G3
+#: é a mesma afirmação que ligar G3 a G1. Uma seta de uma ponta sugeriria uma
+#: direção de fluxo, que é outra coisa e que este nome não diz.
+SETA_DO_VINCULO = "↔"
+
+
+#: O que cada potência é, em uma linha, para o hover da lista.
+_DESCRICAO_DA_POTENCIA = {
+    "P": "potência ativa trifásica — a que faz trabalho",
+    "Q": "potência reativa trifásica — a que só circula",
+    "S": "potência aparente trifásica — o módulo de P + jQ",
+    "FP": "fator de potência — P dividido por S, entre −1 e 1",
+    "Pa": "potência ativa da fase A",
+    "Pb": "potência ativa da fase B",
+    "Pc": "potência ativa da fase C",
+}
+
+
+def _contas_do_usuario(registro: Record, lado: str, escalas: dict,
+                       ja_filtrado: bool, hz: float, pedidas) -> list[Sinal]:
+    """As contas que o usuário escreveu, como linhas do catálogo.
+
+    Uma conta é ONDA: entra com as mesmas cinco colunas de um canal, no bloco
+    «Calculados», exatamente como o resíduo `IN` — que é, afinal, a conta
+    `[IAW] + [IBW] + [ICW]` com nome fixo.
+
+    Conta que não compila não some da lista: ela aparece com o motivo do erro,
+    para o usuário poder corrigi-la. Some seria pior — o sinal desapareceria da
+    tela sem dizer por quê.
+    """
+    from osclab.plot import contas as contas_mod
+
+    saida: list[Sinal] = []
+    anteriores: list = []
+    # O mapa de nomes montado UMA vez e crescendo a cada conta: é o que mantém
+    # o custo linear. Remontá-lo por conta fazia o tempo dobrar a cada elo de
+    # uma cadeia — ver `contas.Referencia`.
+    por_nome = contas_mod.referenciaveis(registro) if pedidas else {}
+    for conta in (pedidas or ()):
+        # Só as contas ANTERIORES: ver `Sinal.contas_antes`.
+        antes = tuple(anteriores)
+        anteriores.append(conta)
+        analise = contas_mod.analisar_com(conta.expressao, registro, por_nome)
+        _oferecer(por_nome, conta, analise, contas_mod)
+        unidade = analise.unidade_escrita
+        divisor, mostrada = escalas.get(unidade, (1.0, unidade))
+        if not analise.vale:
+            # Uma linha só, inerte, carregando o erro. Sem contas: não há
+            # número nenhum a oferecer.
+            saida.append(Sinal(
+                id=f"{conta.id}:instantaneo", nome=conta.nome,
+                unidade="", unidade_mostrada="", familia="conta",
+                grandeza="instantaneo", conta="instantaneo",
+                coluna=coluna_da_grandeza("instantaneo", ja_filtrado),
+                descricao=f"conta do usuário: {conta.expressao}",
+                origem=conta.expressao, expressao=conta.expressao,
+                contas_antes=antes, analise=analise, linha=conta.nome,
+                bloco="outros", motivo=analise.erro,
+                nota="conta do usuário — não compilou"))
+            continue
+        # A oferta do RESÍDUO, e não a do canal: a conta é uma onda sem canal
+        # no arquivo, exatamente como `IN`. A do canal não traz `instantaneo`
+        # porque ali a onda crua É o canal — aqui não há canal nenhum a que
+        # apontar, e sem essa linha a conta nasceria sem a própria onda.
+        oferta = RESIDUO_DE_FILTRADO if ja_filtrado else RESIDUO_DE_BRUTO
+        # Conta entre MÓDULOS tem uma folha só, e é a série como ela sai.
+        #
+        # `[IN G1 · RMS] − [3I0 G1]` já é um valor: cada amostra é a diferença
+        # entre dois eficazes. Oferecer «eficaz» em cima dela recalcularia um
+        # eficaz de um eficaz — uma janela de um ciclo passada num patamar, que
+        # é suavizar; e «contínua» faria o mesmo com outro nome. A única conta
+        # honesta ali é nenhuma.
+        #
+        # É `instantaneo` porque é a série sem conta aplicada — o nome da
+        # coluna, não uma afirmação de que aquilo é onda. Quem diz o que é fica
+        # em `dominio`, e é dele que a tela tira o rótulo «valor».
+        if analise.tem_onda is False:
+            oferta = (("instantaneo", "instantaneo"),)
+        # MEDE o que a conta contém, em vez de deduzir da expressão. Sem 60 Hz
+        # dentro, as colunas do filtrado desenhariam uma reta no zero com cara
+        # de medida — `[VAY] - [VAY · 60Hz]` é a onda da distorção, e
+        # `[VAY] × [IAW]` é potência: nenhuma das duas tem 60 Hz. Ver
+        # `contas.tem_60hz`, que traz a medição do limiar.
+        onda = contas_mod.serie(registro, analise, lado, divisor)
+        com_60hz = contas_mod.tem_60hz(onda, registro)
+        if not com_60hz:
+            oferta = tuple((g, c) for g, c in oferta
+                           if not coluna_da_grandeza(g, ja_filtrado)
+                                   .startswith("filtrado."))
+        sem_60hz = "" if com_60hz else (
+            "não tem 60 Hz: o filtro não acha o que extrair daqui")
+        origem = ", ".join(analise.fontes)
+        for grandeza, qual in oferta:
+            saida.append(Sinal(
+                id=f"{conta.id}:{grandeza}",
+                nome=sinais.nome(conta.nome, grandeza, hz),
+                unidade=unidade,
+                unidade_mostrada=mostrada,
+                familia="conta",
+                grandeza=grandeza,
+                conta=qual,
+                coluna=coluna_da_grandeza(grandeza, ja_filtrado),
+                descricao=f"conta do usuário: {conta.expressao}",
+                origem=origem,
+                expressao=conta.expressao,
+                contas_antes=antes,
+                analise=analise,
+                linha=conta.nome,
+                # Produto entre sinais não é senoide: potência instantânea
+                # oscila no dobro da frequência com nível contínuo, e fasor de
+                # 60 Hz disso não significa nada. Ver `plot/contas.py`.
+                #
+                # E repare que o BLOCO aqui não é onde a tela LISTA a conta:
+                # conta do usuário é sempre listada em «Calculados», porque
+                # «Senoidais» e «Outros sinais» são do que o relé gravou. O
+                # bloco responde a outra pergunta — se dá para tirar fasor e
+                # espectro dela. Ver `blocosDoCatalogo` em `onda.js`.
+                bloco="alternado" if analise.alternado else "outros",
+                # O motivo tem que caber em três ou quatro palavras: ao lado do
+                # nome ele divide a largura com ele, e um motivo longo come o
+                # nome. A frase inteira fica no hover.
+                # A falta de senoide vem primeiro: ela diz a CAUSA («produto
+                # entre sinais»), e a falta de 60 Hz é consequência dela — que
+                # os risquinhos nas duas colunas já mostram sem precisar de
+                # palavra.
+                motivo=_por_que_nao_e_senoide(analise) or sem_60hz,
+                aviso="; ".join(analise.avisos),
+                nota=f"calculado: {conta.expressao}",
+                grandeza_do_canal=next(iter(analise.unidade), ""),
+                dominio=("misto" if analise.tem_onda is None
+                         else "componente" if analise.tem_onda else "modulo"),
+            ))
+    return saida
+
+
+def energia_das_linhas(registro: Record, disponiveis, lado: str,
+                       escalas: dict, trechos) -> dict:
+    """Onde mora a energia de cada linha: 60 Hz, harmônicos e contínua.
+
+    É a identidade de Parseval, medida no tempo em vez de somada no espectro::
+
+        RMS² = DC² + RMS₆₀² + RMS_harmônicos²
+
+    Conferida em `tests/test_harmonicos.py`: fecha com erro de 2,4·10⁻¹³ %.
+
+    MEDE as amostras — não pergunta ao `Record.filtering`. A diferença
+    importa: `filtering` é dedução (ver `analysis`, marco 0.5), e um inrush
+    com 17 % de harmônico já foi deduzido como «já filtrado» aqui dentro.
+    Uma barra que herdasse esse palpite diria 100 % de 60 Hz num sinal que
+    tem 80 %, e seria a tela afirmando o que ninguém mediu. Medindo, o
+    palpite errado fica VISÍVEL: cabeçalho dizendo «já filtrado» com a
+    barra mostrando harmônico é a evidência contra ele.
+
+    Medir também apaga o caso especial do `.CEV`, que nunca traz bruto: lá
+    as amostras são a componente de 60 Hz de verdade, então a medição dá
+    100 % sozinha, sem ninguém ter escrito `if cev`.
+
+    Sobre o REGISTRO INTEIRO, e não sobre a janela à vista. A barra mora no
+    menu, onde não há cursor nem tempo: uma barra que mudasse conforme o
+    gráfico rolou atrás da janelinha seria uma medida sem pergunta. Quem
+    quer a energia de um instante tem o painel de harmônicos, que é onde
+    essa pergunta tem janela.
+
+    Devolve `{linha: (f60, fharm, fdc)}`, frações que somam 1. Fica de fora
+    a linha que não tem ONDA com que medir — a componente simétrica, a
+    conta entre módulos —, e a tela não desenha barra nenhuma para ela:
+    barra inventada é pior que barra ausente.
+    """
+    ondas: dict[str, Sinal] = {}
+    for x in disponiveis:
+        # A onda CRUA da linha, que é a mesma série nos dois nomes de coluna:
+        # `bruto.onda` num registro bruto, `filtrado.onda` num já filtrado.
+        # O que muda é o rótulo, não as amostras.
+        if x.sem_sinal or x.grandeza != "instantaneo":
+            continue
+        if x.dominio == "modulo":
+            continue
+        ondas.setdefault(x.linha, x)
+
+    n = registro.analog.shape[1]
+    hz = registro.line_frequency
+    saida: dict[str, tuple] = {}
+    for linha, sinal in ondas.items():
+        onda = serie(registro, sinal, 0, n, trechos, lado, escalas)
+        if onda.size == 0:
+            continue
+        medidas = {}
+        for grandeza in ("rms", "fundamental", "dc"):
+            v = envoltoria.calcular(onda, trechos, hz, grandeza)
+            v = v[np.isfinite(v)]
+            medidas[grandeza] = float(np.mean(v * v)) if v.size else float("nan")
+        total, f60, dc = (medidas["rms"], medidas["fundamental"],
+                          medidas["dc"])
+        if not (total > 0.0) or not np.isfinite(total) or not np.isfinite(f60):
+            continue
+        if not np.isfinite(dc):
+            dc = 0.0
+        # Os `max(0, ...)` não são covardia: as três envoltórias saem de
+        # janelas que começam na mesma amostra mas arredondam diferente, e no
+        # último dígito uma parcela pode passar o total. Recortar em zero é
+        # dizer "nada", que é o que aquele resto significa.
+        a60 = max(0.0, f60) / total
+        adc = max(0.0, dc) / total
+        aharm = max(0.0, 1.0 - a60 - adc)
+        soma = a60 + adc + aharm
+        if soma <= 0.0:
+            continue
+        saida[linha] = (a60 / soma, aharm / soma, adc / soma)
+    return saida
+
+
+def por_id(registro: Record, lado: str = "arquivo",
+           contas_do_usuario=()) -> dict[str, Sinal]:
+    return {s.id: s for s in de_registro(registro, lado, contas_do_usuario)}
 
 
 #: A coluna do grupo `filtrado` que corresponde a cada coluna do `bruto`: é
@@ -746,6 +1135,14 @@ def serie(registro: Record, sinal: Sinal, j0: int, i1: int, trechos,
     """
     divisor, _ = escalas.get(sinal.unidade, (1.0, sinal.unidade))
 
+    if sinal.familia == "conta":
+        return _serie_de_conta(registro, sinal, j0, i1, trechos, lado,
+                               escalas, divisor)
+
+    if sinal.id[0] == "w":
+        return _serie_de_potencia(registro, sinal, j0, i1, trechos, lado,
+                                  divisor)
+
     if sinal.id[0] in ("c", "v"):
         canal = _canal_por_indice(registro).get(int(sinal.id[1:].split(":")[0]))
         if canal is None:
@@ -759,6 +1156,27 @@ def serie(registro: Record, sinal: Sinal, j0: int, i1: int, trechos,
         return convertido / divisor
 
     return _serie_de_componente(registro, sinal, j0, i1, trechos, lado, divisor)
+
+
+def _serie_de_conta(registro: Record, sinal: Sinal, j0: int, i1: int,
+                    trechos, lado: str, escalas: dict,
+                    divisor: float) -> np.ndarray:
+    """A série de uma conta do usuário, com a envoltória por cima.
+
+    A onda sai do registro INTEIRO e só depois é recortada: as envoltórias
+    precisam do ciclo que vem antes de `j0`, e para uma conta esse ciclo pode
+    cair fora da janela — o mesmo motivo do resíduo.
+    """
+    from osclab.plot import contas as contas_mod
+
+    # A análise que o catálogo já fez, quando há: ver `Sinal.analise`.
+    analise = sinal.analise or contas_mod.analisar(
+        sinal.expressao, registro, escalas, sinal.contas_antes)
+    onda = contas_mod.serie(registro, analise, lado, divisor)
+    if onda is None or onda.size < i1:
+        return np.full(i1 - j0, np.nan)
+    return envoltoria.calcular(onda[j0:i1], trechos, registro.line_frequency,
+                               sinal.conta)
 
 
 def residuo(registro: Record, conjunto, j0: int, i1: int, lado: str,
@@ -817,8 +1235,73 @@ def _serie_de_componente(registro: Record, sinal: Sinal, j0: int, i1: int,
     # `de_fasores` é escrita com escalares e roda igual sobre vetores: as
     # operações são soma e multiplicação por complexo, que o numpy faz elemento
     # a elemento. Uma implementação, dois usos — é assim que elas não divergem.
-    componentes = simetricas.de_fasores(*fasores)
+    componentes = _fortescue(conjunto)(*fasores)
     return np.abs(componentes[posicao]) / math.sqrt(2.0) / divisor
+
+
+def _fortescue(conjunto):
+    """Qual transformação esta trinca pede — pela BASE, não pelos números.
+
+    Em delta os três fasores são diferenças entre fases, e a transformação
+    crua devolveria `V1` e `V2` esticados de √3 e girados de 30°: números
+    plausíveis, na unidade certa, errados por 73 %. `de_lacos` desfaz o giro e
+    recusa a sequência zero. Ver `formats/conjuntos.Conjunto.base`.
+    """
+    return simetricas.de_lacos if conjunto.e_de_linha else simetricas.de_fasores
+
+
+def _serie_de_potencia(registro: Record, sinal: Sinal, j0: int, i1: int,
+                       trechos, lado: str, divisor: float) -> np.ndarray:
+    """P, Q, S ou FP de um vínculo, janela a janela.
+
+    Os fasores das seis ondas vão para `dsp/potencia`, que faz a conta. A
+    conversão de TC/TP entra ANTES — como no resíduo e na componente
+    simétrica —, porque somar um lado primário com um secundário erraria por
+    mil sem nada na tela denunciando.
+
+    O `divisor` do prefixo (`k`, `M`) entra DEPOIS, e só aqui: a potência é
+    um PRODUTO de duas grandezas, então o prefixo dela não é o prefixo de
+    nenhuma das duas. Dividir cada onda pelo seu prefixo antes do produto
+    daria um número errado por mil ou por um milhão.
+    """
+    cabeca, grandeza, _ = sinal.id.split(":")
+    vinculos = getattr(registro, "vinculos_de_potencia", None) or {}
+    achados = conjuntos.de_registro(registro)
+    por_rotulo = {c.rotulo: c for c in achados}
+    por_chave = {c.nome: c for c in achados}
+    # O rótulo do grupo da CORRENTE sai do id (`wG1:P:rms`), e não de
+    # `sinal.grupo`: desde que o nome passou a carregar o par, `grupo` é
+    # `G1↔G3` — que é o que a caixinha do nome precisa, e não esta busca.
+    desta = por_rotulo.get(cabeca[1:])
+    vinculo = vinculos.get(desta.nome) if desta else None
+    outra = por_chave.get(str((vinculo or {}).get("com") or ""))
+    if desta is None or outra is None:
+        return np.full(i1 - j0, np.nan)
+
+    canais = _canal_por_indice(registro)
+
+    def fasores(conjunto):
+        saida = []
+        for indice in conjunto.abc:
+            canal = canais.get(indice)
+            if canal is None:
+                return None
+            convertido, _, _ = conversao.converter(
+                registro.analog[indice, j0:i1], canal, lado)
+            saida.append(envoltoria.calcular_fasores(
+                convertido, trechos, registro.line_frequency))
+        return saida
+
+    tensoes, correntes = fasores(outra), fasores(desta)
+    if tensoes is None or correntes is None:
+        return np.full(i1 - j0, np.nan)
+    base = _base_do_vinculo(outra, vinculo)
+    valores = potencia.serie(grandeza, tensoes, correntes, base)
+    # O fator de potência é razão entre dois VA: não tem unidade, e portanto
+    # não tem prefixo para dividir.
+    if grandeza == "FP":
+        return valores
+    return valores / divisor
 
 
 def conjunto_do_sinal(registro: Record, sinal: Sinal):
@@ -872,5 +1355,7 @@ def fasor_de_componente(registro: Record, sinal: Sinal, i: int,
         pico = f.fundamental * math.sqrt(2.0) * fator / divisor
         fasores.append(pico * np.exp(1j * math.radians(f.angulo)))
 
-    x = simetricas.de_fasores(*fasores)[posicao]
+    x = _fortescue(conjunto)(*fasores)[posicao]
+    if not np.isfinite(x):
+        return None
     return (float(abs(x)) / math.sqrt(2.0), float(np.degrees(np.angle(x))))

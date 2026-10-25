@@ -55,8 +55,8 @@ import numpy as np
 
 from osclab.dsp.fasor import (
     MINIMO_POR_CICLO,
-    amostras_por_ciclo,
     ciclo_em_amostras,
+    estimador,
     pesos_do_ciclo,
 )
 
@@ -109,6 +109,29 @@ def media_do_ciclo(v: np.ndarray, por_ciclo: float) -> np.ndarray:
     if n < largura:
         return saida
 
+    # NaN não pode vazar para as amostras seguintes.
+    #
+    # `np.cumsum` é o que torna esta conta linear no tamanho do registro — e é
+    # também o que faz um único NaN envenenar TUDO que vem depois dele. Isso
+    # não era visível enquanto a envoltória só via canal do arquivo, que é
+    # finito do começo ao fim. Passou a ser no dia em que a calculadora
+    # alcançou as colunas derivadas: `[VAY] - [VAY · 60Hz]` tem o primeiro
+    # ciclo NaN por construção (a envoltória não tem história ali), e a
+    # envoltória DELA saía NaN nas 600 amostras do registro — quatro das cinco
+    # colunas do sinal, vazias.
+    #
+    # O conserto é somar com zero no lugar do NaN e, em paralelo, contar
+    # quantos NaN cada janela contém. A janela que contém algum sai NaN; as
+    # outras saem certas. Vale para o bloco da frente e para um buraco no
+    # meio, e continua O(n).
+    #
+    # Zero no lugar do NaN entra só na SOMA, nunca na saída: zero na tela
+    # seria afirmar "medi, e deu isso" onde não há o que medir.
+    furos = ~np.isfinite(v)
+    tem_furo = bool(furos.any())
+    if tem_furo:
+        v = np.where(furos, v.dtype.type(0), v)
+
     acumulado = np.concatenate(
         (np.zeros(v.shape[:-1] + (1,), dtype=v.dtype), np.cumsum(v, axis=-1)),
         axis=-1)
@@ -126,6 +149,10 @@ def media_do_ciclo(v: np.ndarray, por_ciclo: float) -> np.ndarray:
                  + pesos[1] * v[..., inicio + 1]
                  + pesos[-1] * v[..., i])
     saida[..., largura - 1:] = total / float(por_ciclo)
+    if tem_furo:
+        # Soma retangular da máscara: quantos NaN em cada janela de `largura`.
+        quantos = _soma_movel(furos.astype(np.float64), largura)
+        saida[quantos > 0] = np.nan
     return saida
 
 
@@ -138,9 +165,34 @@ def fundamental(sinal: np.ndarray, por_ciclo: int) -> np.ndarray:
     É o número com que o relé decide atuar: o filtro dele joga fora DC e
     harmônicos de propósito. Confira contra `fasor.no_instante` — os dois têm
     que dar o mesmo valor em toda amostra, e há teste para isso.
+
+    Com o estimador `pico_a_pico` o número é outro: o meio pico a pico do
+    último ciclo, em eficaz. Não é fasor — ver `pico_a_pico`.
     """
+    if estimador() == "pico_a_pico":
+        return pico_a_pico(sinal, por_ciclo)
     return _fasor_deslizante(sinal, por_ciclo,
                              lambda x: np.abs(x) / math.sqrt(2.0))
+
+
+def pico_a_pico(sinal: np.ndarray, por_ciclo: float) -> np.ndarray:
+    """(máximo − mínimo) do ciclo que termina em cada amostra, ÷ 2√2.
+
+    O «Peak-to-Peak» da ABB: a média dos dois picos cancela a contínua, e
+    numa senoide pura dá o eficaz exato. Não rejeita harmônico — o 3º soma
+    ou subtrai conforme a fase dele —, e é por isso mesmo que o relé o usa com
+    TC saturado: ali o Fourier subestima. A janela é a MESMA quantidade de
+    amostras da janela de um ciclo (`pesos_do_ciclo`); antes dela, `NaN`.
+    """
+    x = _valida(sinal, por_ciclo)
+    if x is None:
+        return np.full(np.shape(sinal), np.nan, dtype=np.float64)
+    largura = pesos_do_ciclo(por_ciclo).size
+    janelas = np.lib.stride_tricks.sliding_window_view(x, largura, axis=-1)
+    saida = np.full(x.shape, np.nan, dtype=np.float64)
+    saida[..., largura - 1:] = ((janelas.max(axis=-1) - janelas.min(axis=-1))
+                                / (2.0 * math.sqrt(2.0)))
+    return saida
 
 
 def fasores(sinal: np.ndarray, por_ciclo: int) -> np.ndarray:
@@ -166,8 +218,48 @@ def fasores(sinal: np.ndarray, por_ciclo: int) -> np.ndarray:
     k = np.arange(x.shape[-1], dtype=np.float64)
     giro = np.exp(-2j * np.pi * k / n)
 
-    return 2.0 * np.conj(giro) * media_do_ciclo(x.astype(np.complex128) * giro,
-                                                n)
+    # A JANELA é o que separa Fourier, dois ciclos e meio ciclo: a mesma média
+    # do sinal girado, sobre um ciclo, dois ou meio. Em meio ciclo a parcela
+    # que gira a 120 Hz fecha uma volta inteira e some — por isso o fasor é
+    # exato numa senoide pura, e só a contínua e os pares o fazem oscilar.
+    qual = estimador()
+    janela = {"dois_ciclos": 2.0 * n, "meio_ciclo": n / 2.0}.get(qual, n)
+    fourier = 2.0 * np.conj(giro) * media_do_ciclo(x.astype(np.complex128) * giro,
+                                                   janela)
+    if qual == "cosseno":
+        return _cosseno(fourier.real, n)
+    return fourier
+
+
+def _cosseno(y: np.ndarray, n: float) -> np.ndarray:
+    """O fasor do filtro cosseno da SEL: `y[k] + j·y[k − n/4]`.
+
+    `y` é a saída do filtro cosseno de um ciclo, que é a PARTE REAL do Fourier
+    — a mesma correlação com `cos`, sem o meio `π/N` de avanço que a SEL
+    compensa atrasando a entrada (AG2022-09). A quadratura não vem do seno,
+    que é justamente o filtro que deixa passar a exponencial da falta: vem do
+    próprio cosseno, 1/4 de ciclo antes. Daí o primeiro fasor válido em 1,25
+    ciclo, e não em 1.
+
+    Com `n/4` fracionário (33,3 amostras por ciclo a 2000 Hz) o atraso cai
+    entre duas amostras. A interpolação é a de DUAS amostras exata para uma
+    senoide de 60 Hz: `[sen((1−f)ω)·y₀ + sen(fω)·y₁] / sen(ω)`. A linear
+    erraria até 0,4 % no módulo, que é do tamanho do que se está comparando.
+    """
+    quarto = n / 4.0
+    m = int(math.floor(quarto))
+    f = quarto - m
+    total = y.shape[-1]
+    atrasado = np.full(y.shape, np.nan, dtype=np.float64)
+    if f < 1e-9:
+        if total > m:
+            atrasado[..., m:] = y[..., :total - m]
+    elif total > m + 1:
+        w = 2.0 * math.pi / n
+        a = math.sin((1.0 - f) * w) / math.sin(w)
+        b = math.sin(f * w) / math.sin(w)
+        atrasado[..., m + 1:] = a * y[..., 1:total - m] + b * y[..., :total - m - 1]
+    return y + 1j * atrasado
 
 
 def _fasor_deslizante(sinal: np.ndarray, por_ciclo: int, extrair) -> np.ndarray:

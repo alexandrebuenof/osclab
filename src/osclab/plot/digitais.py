@@ -59,6 +59,9 @@ class Resumo:
     instante: float | None
     #: Como o canal começou o registro: 0 ou 1.
     inicial: int
+    #: O relé grava este canal, mas a placa dele não tem esta entrada/saída
+    #: (`Record.digitais_sem_placa`). O que muda ali não é sinal de nada.
+    sem_placa: bool = False
 
 
 def resumos(registro: Record) -> tuple[Resumo, ...]:
@@ -71,6 +74,7 @@ def resumos(registro: Record) -> tuple[Resumo, ...]:
     dados = registro.status
     tempo = registro.time
     saida: list[Resumo] = []
+    sem_placa = getattr(registro, "digitais_sem_placa", frozenset())
 
     for canal in registro.status_channels:
         linha = dados[canal.index] if canal.index < dados.shape[0] else np.empty(0)
@@ -83,6 +87,7 @@ def resumos(registro: Record) -> tuple[Resumo, ...]:
             instante=float(tempo[amostra]) if amostra is not None
             and amostra < tempo.size else None,
             inicial=int(linha[0]) if linha.size else 0,
+            sem_placa=canal.name in sem_placa,
         ))
 
     # `not r.mudou` primeiro: `False` ordena antes de `True`, então quem mudou
@@ -166,6 +171,11 @@ def escolhidos_por_padrao(registro: Record, limite: int | None = None) -> list[i
     `limite` continua existindo para um registro esquisito (um relé com ruído
     em entrada binária pode ter centenas mudando). Quem o usar tem que dizer
     na tela quantos ficaram de fora.
+
+    A única exceção são os digitais que a placa do relé NÃO TEM
+    (`Resumo.sem_placa`): o 487E grava IN317–IN324 sem placa para eles, e um
+    contador de amostras pisca nesses bits. Não é sinal — fica de fora, e a
+    busca os mostra marcados.
     """
-    escolhidos = [r.indice for r in resumos(registro) if r.mudou]
+    escolhidos = [r.indice for r in resumos(registro) if r.mudou and not r.sem_placa]
     return escolhidos if limite is None else escolhidos[:limite]

@@ -340,6 +340,27 @@ def test_escolha_vazia_tira_o_vinculo(tmp_path):
     assert not (acervo._raiz() / sha / acervo.VINCULOS).exists()
 
 
+def test_o_laco_escolhido_tambem_fica_gravado(tmp_path):
+    """A tela oferece `AB`, `BC`, `CA` e `vinculos` os lê; `gravar_vinculos`
+    os apagava em silêncio, e a dedução voltava a valer."""
+    sha = acervo.guardar(_par(tmp_path, n=64)).aceitos[0].sha
+    acervo.gravar_vinculos(sha, {"0": "ab", "1": "BC", "2": "CA"})
+    assert acervo.vinculos(sha) == {0: "AB", 1: "BC", 2: "CA"}
+
+
+def test_limpar_a_correcao_muda_a_versao_que_o_cache_da_localizacao_usa(tmp_path):
+    """A versão era a hora MAIS NOVA da pasta: corrigir, gravar o apelido e
+    limpar a correção deixava o máximo igual, e a localização guardada
+    continuava com a fase antiga."""
+    from osclab.web.server import _versao_do_registro
+    sha = acervo.guardar(_par(tmp_path, n=64)).aceitos[0].sha
+    acervo.gravar_vinculos(sha, {"0": "C"})
+    acervo.gravar_apelido(sha, "curto de teste")
+    antes = _versao_do_registro(sha)
+    acervo.gravar_vinculos(sha, {"0": ""})
+    assert _versao_do_registro(sha) != antes
+
+
 def test_vinculo_com_lixo_e_ignorado(tmp_path):
     """A tela manda texto, e o servidor não confia nele."""
     sha = acervo.guardar(_par(tmp_path, n=64)).aceitos[0].sha

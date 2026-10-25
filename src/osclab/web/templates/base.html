@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OscLab — Base de dados</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/osclab.css') }}">
+  <script src="{{ url_for('static', filename='js/tema.js') }}"></script>
+</head>
+<body>
+  <header class="topo">
+    <div class="marca">
+      <h1>OscLab</h1>
+      <p class="sub">Base de dados</p>
+    </div>
+    <div class="acoes">
+      <button type="button" class="chave tema com-icone" id="tema"
+              style="--ic: var(--ic-tema)" title="Alternar tema">tema</button>
+      {#- «voltar» fecha o painel aberto e volta ao passo anterior; aparece
+          só quando há painel. Fica aqui em CIMA, ao lado de «menu», porque
+          são a mesma coisa -- sair de onde se está -- e botão de sair que
+          muda de lugar e' botao que se procura. Decisao dele, 19/10/2026. #}
+      <button type="button" class="chave voltar-passo com-icone" id="voltar-passo"
+              style="--ic: var(--ic-voltar)" hidden
+              title="Voltar ao passo anterior">voltar</button>
+      <a class="chave voltar com-icone" style="--ic: var(--ic-voltar)"
+         href="/" title="Voltar à tela inicial">menu</a>
+      <span class="versao-etiqueta">v{{ versao }}</span>
+    </div>
+  </header>
+
+  {#- A tela inteira e' desenhada pelo `base.js`, a partir do estado que vem
+      aqui embaixo ja' pronto. O estado viaja NO HTML, e nao numa primeira
+      chamada da API, para a tela nao piscar vazia antes de saber se existe
+      base -- justamente a tela em que o «ainda nao tem» e' o assunto. #}
+  <main class="base" id="tela"></main>
+
+  <script id="estado-da-base" type="application/json">{{ base|tojson }}</script>
+
+  {#- A gaveta abre em JANELA, e nao em outra pagina: quem esta' catalogando
+      alterna entre a tabela e a lista de gavetas o tempo todo, e cada ida e
+      volta seria um carregamento. #}
+  <dialog class="busca janela-da-gaveta" id="janela-da-gaveta">
+    <div class="cabeca">
+      <h3 id="titulo-da-gaveta">Sinais digitais</h3>
+      <button type="button" class="fechar" id="fechar-gaveta"
+              title="fechar">×</button>
+    </div>
+    <div id="corpo-da-gaveta"></div>
+  </dialog>
+
+  <input type="file" id="arquivo-csv" hidden accept=".csv,.CSV,.txt,.TXT">
+
+  {#- O NAVEGADOR DE PASTAS. Quem lista e' o servidor: o navegador nao entrega
+      caminho absoluto de pasta, e o OscLab roda na maquina do usuario. #}
+  <dialog class="busca janela-do-navegador" id="janela-do-navegador">
+    <div class="cabeca">
+      <h3>Escolher a pasta</h3>
+      <button type="button" class="fechar" id="fechar-navegador"
+              title="fechar">×</button>
+    </div>
+    <div class="atalhos-de-pasta" id="atalhos-de-pasta"></div>
+    <p class="caminho-atual" id="caminho-atual"></p>
+    <div class="lista-de-pastas" id="lista-de-pastas"></div>
+    <div class="pe-do-navegador">
+      <button type="button" class="chave" id="cancelar-navegador">cancelar</button>
+      <button type="button" class="chave escolhido" id="usar-pasta">usar esta pasta</button>
+    </div>
+  </dialog>
+
+  <script src="{{ url_for('static', filename='js/base.js') }}"></script>
+</body>
+</html>

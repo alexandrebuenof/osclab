@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OscLab — oscilografias</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/osclab.css') }}">
+  <script src="{{ url_for('static', filename='js/tema.js') }}"></script>
+</head>
+{#- AS ABAS, como as de um navegador. Cada aba é a página de oscilografia
+    INTEIRA, num quadro próprio, e não depende das outras: o arranjo, o zoom,
+    os cursores e os registros de uma aba ficam nela. Trocar de aba não
+    recarrega nada — o quadro só fica escondido. A lista das abas abertas
+    mora na sessão deste navegador. Pedido dele, 22/10/2026. #}
+<body class="corpo-das-abas">
+  <nav class="barra-de-abas" id="barra-de-abas" aria-label="Oscilografias abertas"></nav>
+  <div class="quadros-das-abas" id="quadros-das-abas"></div>
+  <script src="{{ url_for('static', filename='js/abas.js') }}"></script>
+</body>
+</html>

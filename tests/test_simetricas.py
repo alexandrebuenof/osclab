@@ -384,3 +384,137 @@ def test_ccbm_de_verdade_continua_mandando():
     ))
     assert len(achados) == 1
     assert achados[0].origem == conjuntos.OrigemDoConjunto.DECLARADA
+
+
+# ---------------------------------------------------------------------------
+# A trinca em DELTA: o relé mediu entre fases
+# ---------------------------------------------------------------------------
+#
+# O que se amarra aqui é a diferença que não aparece olhando a onda. `VAB` e
+# `VA` são duas senoides; qual das duas está no arquivo só se sabe pelo nome do
+# canal, e errar isso produz `3V0 = 0` sempre e `V1` 73 % maior — tudo na
+# unidade certa, sem aviso nenhum.
+
+def _lacos(a, b, c):
+    """As três diferenças, na ordem AB, BC, CA."""
+    return (a - b, b - c, c - a)
+
+
+def test_de_lacos_recupera_a_positiva_e_a_negativa_exatas():
+    """O coração da conta: desfazer o √3∠±30° devolve o valor DE FASE.
+
+    Com desequilíbrio, que é quando alguém olha. Equilibrado, a negativa é
+    zero e o teste passaria com a rotação errada.
+    """
+    a, b, c = V, 0.4 * V * giro(-150), 0.8 * V * giro(95)
+    _, p_fase, n_fase = simetricas.de_fasores(a, b, c)
+    _, p_laco, n_laco = simetricas.de_lacos(*_lacos(a, b, c))
+
+    assert p_laco == pytest.approx(p_fase, rel=1e-12)
+    assert n_laco == pytest.approx(n_fase, rel=1e-12)
+
+
+def test_de_lacos_recusa_a_sequencia_zero():
+    """`VAB + VBC + VCA ≡ 0`. Devolver esse zero como `3V0` seria afirmar
+    «não há falta à terra» a partir de uma identidade algébrica."""
+    # Uma falta à terra franca na fase A: há MUITO 3V0 de verdade.
+    a, b, c = 0.0, V * giro(-120), V * giro(120)
+    zero_de_fase, _, _ = simetricas.de_fasores(a, b, c)
+    assert abs(zero_de_fase) == pytest.approx(V, rel=1e-12)
+
+    zero, _, _ = simetricas.de_lacos(*_lacos(a, b, c))
+    assert cmath.isnan(zero)
+
+
+def test_sem_desfazer_o_giro_o_erro_seria_de_73_por_cento():
+    """O tamanho do erro que esta função existe para impedir — escrito.
+
+    Se alguém um dia simplificar `de_lacos` para chamar `de_fasores` direto,
+    este número é o que muda na tela de quem está analisando uma falta.
+    """
+    a, b, c = V, V * giro(-120), V * giro(120)
+    _, cru, _ = simetricas.de_fasores(*_lacos(a, b, c))
+    assert abs(cru) / V == pytest.approx(math.sqrt(3.0), rel=1e-12)
+
+
+def test_canais_entre_fases_formam_uma_trinca_em_delta():
+    """`VAB`, `VBC`, `VCA` viram UMA trinca, marcada como de linha.
+
+    Antes eles nem viravam trinca: `_normalizar` só conhecia A, B e C, e os
+    três canais ficavam soltos — sem `V1`, sem `V2` e sem grupo.
+    """
+    achados = conjuntos.de_registro(registro(
+        canal(0, "VAB", "kV", fase="AB"),
+        canal(1, "VBC", "kV", fase="BC"),
+        canal(2, "VCA", "kV", fase="CA"),
+    ))
+    assert len(achados) == 1
+    assert achados[0].e_de_linha
+    assert achados[0].base == conjuntos.LINHA
+    assert achados[0].abc == (0, 1, 2)
+    assert achados[0].rotulos == ("AB", "BC", "CA")
+
+
+def test_fase_e_delta_no_mesmo_nome_nao_viram_trinca_misturada():
+    """Volt de fase somado com volt de linha dá três números plausíveis e sem
+    significado. A base completa vence; com as duas, vence a de fase."""
+    achados = conjuntos.de_registro(registro(
+        canal(0, "VA", "kV", fase="A"), canal(1, "VB", "kV", fase="B"),
+        canal(2, "VC", "kV", fase="C"), canal(3, "VAB", "kV", fase="AB"),
+    ))
+    assert len(achados) == 1
+    assert achados[0].base == conjuntos.FASE
+    assert achados[0].abc == (0, 1, 2)
+
+
+def test_o_nome_do_conjunto_tira_as_DUAS_letras_do_laco():
+    """`sem_a_fase` tirava um caractere só: `IAB` virava `I*B` contra o `I*C`
+    de `IBC` — três conjuntos de um canal cada, onde há uma trinca."""
+    assert conjuntos.sem_a_fase("IAB", "AB") == "I*"
+    assert conjuntos.sem_a_fase("IBC", "BC") == "I*"
+    assert conjuntos.sem_a_fase("ICA", "CA") == "I*"
+    assert conjuntos.sem_a_fase("IAW", "A") == "I*W"
+
+
+@pytest.mark.parametrize("fase", ["A", "B", "C"])
+def test_sem_as_marcas_tira_a_letra_solta_e_nao_a_da_palavra(fase):
+    """O religador escreve `T1 Phase C Current`: a ÚLTIMA ocorrência do C é a
+    de `CURRENT`. A segunda tentativa tira a letra onde ela é marca de fase."""
+    assert (conjuntos._sem_as_marcas(f"T1 Phase {fase} Current", fase)
+            == "T1 PHASE * CURRENT")
+    assert (conjuntos._sem_as_marcas(f"T0 Phase {fase} Voltage Res.Sensor", fase)
+            == "T0 PHASE * VOLTAGE RES.SENSOR")
+    # O PL300 escreve a fase DUAS vezes; as duas saem.
+    assert (conjuntos._sem_as_marcas(f"I{fase}-Int.Fase {fase}", fase)
+            == "I*-INT.FASE *")
+
+
+def test_a_chave_principal_nao_mudou():
+    assert conjuntos.sem_a_fase("BARRA A", "A") == "BARRA *"
+    assert conjuntos.sem_a_fase("TC BUC 69kV:I A", "A") == "TC BUC 69KV:I *"
+    assert conjuntos.sem_a_fase("Current IA", "A") == "CURRENT I*"
+    assert conjuntos.sem_a_fase("Voltage A-G", "A") == "VOLTAGE *-G"
+    assert conjuntos.sem_a_fase("IAW1", "A") == "I*W1"
+    # O `IC` do começo é o nome do equipamento, não a fase.
+    assert conjuntos.sem_a_fase("IC 13.8kV:I C", "C") == "IC 13.8KV:I *"
+
+
+def _so_nomes(nomes) -> Record:
+    canais = tuple(AnalogChannel(index=i, name=n, unit="A", phase="")
+                   for i, n in enumerate(nomes))
+    return Record(source=None, format_name="teste", station="", line_frequency=60.0,
+                  start_time=None, analog_channels=canais,
+                  analog=np.zeros((len(nomes), 10)), time=np.arange(10) / 1200.0)
+
+
+@pytest.mark.parametrize("molde", ["T1 Phase {} Current", "I{}-Int.Fase {}"])
+def test_a_trinca_do_religador_e_do_pl300_fecha(molde):
+    r = _so_nomes([molde.format(f, f) for f in "ABC"])
+    achados = conjuntos.de_registro(r)
+    assert len(achados) == 1 and achados[0].abc == (0, 1, 2)
+
+
+def test_a_segunda_tentativa_nao_rouba_canal_de_trinca_que_ja_fechou():
+    r = _so_nomes(["IC 13.8kV:I A", "IC 13.8kV:I B", "IC 13.8kV:I C",
+                   "IC 138kV:I A", "IC 138kV:I B", "IC 138kV:I C"])
+    assert [c.abc for c in conjuntos.de_registro(r)] == [(0, 1, 2), (3, 4, 5)]

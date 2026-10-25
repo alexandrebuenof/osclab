@@ -47,7 +47,9 @@ dois registros diferentes na mesma base.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -73,6 +75,59 @@ MINIMO_POR_CICLO = 4
 #: O limite NÃO afeta `fundamental`, `rms`, `dc` nem `angulo`. Esses continuam
 #: sendo medidas honestas, com unidade, em qualquer janela.
 MINIMO_FUNDAMENTAL = 0.25
+
+
+# ---------------------------------------------------------------------------
+# O ESTIMADOR do fasor: Fourier de um ciclo ou cosseno da SEL
+# ---------------------------------------------------------------------------
+
+#: Os estimadores que o programa sabe usar. Fourier é o padrão: foi ele que se
+#: conferiu contra o SIGRA e contra o gabarito dos relés. O cosseno é o da
+#: linha SEL (AG2022-09, Eq. 3): a parte real do Fourier (o filtro cosseno) e,
+#: como quadratura, ela mesma 1/4 de ciclo atrás. Rejeita muito melhor a
+#: exponencial decrescente da falta — o seno é que vazava — e custa 1/4 de
+#: ciclo a mais para o primeiro fasor válido.
+ESTIMADORES = ("fourier", "cosseno", "dois_ciclos", "meio_ciclo", "pico_a_pico")
+
+#: Os três de baixo vieram dos manuais do parque (22/10/2026):
+#:
+#: - `dois_ciclos` — Fourier com janela de DOIS ciclos, o «2-cycle filter» da
+#:   sobrecorrente do SIPROTEC 5. Rejeita mais harmônico e inter-harmônico e
+#:   atrasa um ciclo a mais. A Siemens não publica os coeficientes: esta é a
+#:   DFT canônica de dois ciclos.
+#: - `meio_ciclo` — Fourier de MEIO ciclo, o da distância rápida do RET670 e o
+#:   da tensão no GE T60. Sobe em meio ciclo e oscila com a contínua e com os
+#:   harmônicos pares, que meio ciclo não rejeita. É exato numa senoide pura.
+#: - `pico_a_pico` — (máximo − mínimo do último ciclo) ÷ 2√2, o «Peak-to-Peak»
+#:   da sobrecorrente ABB 615/620. Cancela a contínua, não rejeita harmônico e
+#:   aguenta TC saturado. **Só dá MÓDULO**: o ângulo, as sequências e os planos
+#:   continuam saindo do Fourier, e a tela diz isso no menu.
+
+#: Qual vale NESTE pedido. É contexto e não argumento: o estimador muda o
+#: fasor de tudo — cursor, curvas de 60 Hz, sequências, fasorial, complexo,
+#: impedância — e passá-lo de mão em mão por quinze assinaturas é o jeito de
+#: um caminho esquecer e calcular com o outro. O servidor abre o contexto por
+#: pedido (`usando`); fora dele vale Fourier, e é o que os testes antigos usam.
+_ESTIMADOR: ContextVar[str] = ContextVar("estimador_do_fasor", default="fourier")
+
+
+def estimador() -> str:
+    """O estimador em vigor: `fourier` ou `cosseno`."""
+    return _ESTIMADOR.get()
+
+
+@contextmanager
+def usando(nome: str | None):
+    """Calcula o que estiver dentro com o estimador `nome`.
+
+    Nome desconhecido vira Fourier: um parâmetro estranho na URL não pode
+    virar erro 500, e o padrão é o conferido.
+    """
+    marca = _ESTIMADOR.set(nome if nome in ESTIMADORES else "fourier")
+    try:
+        yield
+    finally:
+        _ESTIMADOR.reset(marca)
 
 
 @dataclass(frozen=True)
@@ -281,7 +336,7 @@ def ordens_mediveis(por_ciclo: float) -> int:
 
 def espectro(amostras: np.ndarray, por_ciclo: float | None = None,
              pesos: np.ndarray | None = None, ate: int | None = None,
-             ciclos: float = 1.0) -> np.ndarray | None:
+             ciclos: float = 1.0, fino: bool = False) -> np.ndarray | None:
     """O valor EFICAZ de cada harmônico de 1 até `ate`, na janela recortada.
 
     É a mesma DFT de `de_janela` — mesma janela, mesmos pesos, mesma referência
@@ -351,10 +406,90 @@ def espectro(amostras: np.ndarray, por_ciclo: float | None = None,
     # referência no cursor. Aqui o giro é de `h` voltas por ciclo em vez de uma.
     janela = (amostras[::-1] * pesos[::-1]).astype(np.float64)
     k = np.arange(tamanho)
-    ordens = np.arange(1, quantas + 1, dtype=np.float64) * float(ciclos)
+    if fino:
+        # TODAS as raias da janela, e não só as dos múltiplos de 60 Hz: numa
+        # janela de 5 ciclos a resolução é 12 Hz, e o que cai entre dois
+        # harmônicos (inter-harmônico, batimento) só aparece aqui. A raia `m`
+        # é a ordem `m / ciclos`. Com 1 ciclo é o mesmo que sem `fino`.
+        ordens = np.arange(1, quantas * int(round(ciclos)) + 1, dtype=np.float64)
+    else:
+        ordens = np.arange(1, quantas + 1, dtype=np.float64) * float(ciclos)
     giro = np.exp(1j * 2.0 * np.pi * np.outer(ordens, k) / n)
     x = (2.0 / n) * (giro @ janela)
     return np.abs(x) / math.sqrt(2.0)
+
+
+def regime_da_janela(janela: np.ndarray,
+                     anterior: np.ndarray | None) -> float:
+    """Quanto esta janela difere da ANTERIOR, de 0 a 1.
+
+    Zero quer dizer que o ciclo se repetiu: a DFT de um ciclo supõe
+    exatamente isso, e aí ela mede o que promete. Perto de 1 quer dizer que a
+    janela pegou o sinal mudando de patamar — energização, início de falta — e
+    que a diferença entre o antes e o depois escorre para TODAS as raias, com
+    a forma lisa de 1/h.
+
+    `anterior` é a janela de mesmo tamanho um ciclo atrás. Sem ela — o cursor
+    está no primeiro ciclo do arquivo — devolve 0: não se pode comparar com o
+    que não foi gravado, e avisar por falta de dado seria pior que calar.
+
+    ## Por que a comparação é com o ciclo ANTERIOR
+
+    A primeira versão disto comparava as duas METADES da mesma janela, e
+    estava errada. Num inrush a corrente é unipolar: os dois meios-ciclos
+    têm eficazes muito diferentes o tempo todo, e não porque haja transição —
+    é a forma de onda. O aviso ficava aceso do começo ao fim do registro, e
+    aviso que nunca apaga é aviso que ninguém lê. Medido naquela versão, com
+    a constante de tempo do inrush:
+
+        tau do inrush      em que ciclo o aviso apagava
+          40 ms                   6
+         100 ms                  12
+         250 ms                  29
+         500 ms                  nunca
+
+    Comparar com o ciclo anterior separa as duas coisas. A assimetria some da
+    conta — ela é igual nos dois ciclos —, e o que sobra é só o que MUDOU:
+
+        ciclos após o evento       0,5    1      2      3     10     30
+        falta franca, 1 → 8 pu    0,82   0,87   0,01   0,00   0,00   0,00
+        inrush, tau = 40 ms       1,00   1,00   0,20   0,15   0,01   0,00
+        inrush, tau = 500 ms      1,00   1,00   0,02   0,02   0,02   0,01
+        inrush, tau = 2 s         1,00   1,00   0,00   0,01   0,01   0,01
+        senoide pura              0,00   0,00   0,00   0,00   0,00   0,00
+        40 % de 3ª + 20 % de 5ª   0,00   0,01   0,00   0,01   0,01   0,01
+
+    Duas leituras importam aí. A penúltima linha e a última: distorção
+    verdadeira de 44 % não move este número — ele não mede harmônico, mede se
+    a janela tem direito de medir harmônico. E a coluna do ciclo 2: em todos
+    os transitórios o aviso já apagou, porque a janela tem um ciclo de largura
+    e a essa altura ela já não toca o evento.
+
+    ## O limiar
+
+    `LIMIAR_DE_REGIME = 0,30`. Acima dele só ficam as janelas que tocam a
+    transição (0,82 a 1,00); o maior valor fora delas é 0,20, e o maior em
+    regime é 0,01.
+
+    **Isto é AVISO, nunca bloqueio.** As barras continuam desenhadas: na
+    janela da transição o 2º harmônico ainda é informação de verdade, e quem
+    analisa é que decide. Ver a regra do projeto em `plot/contas.py`.
+    """
+    if anterior is None or janela.size < 4 or anterior.size < 4:
+        return 0.0
+    if not np.all(np.isfinite(janela)) or not np.all(np.isfinite(anterior)):
+        return 0.0
+    agora = float(np.sqrt(np.mean(janela.astype(np.float64) ** 2)))
+    antes = float(np.sqrt(np.mean(anterior.astype(np.float64) ** 2)))
+    maior = max(agora, antes)
+    if maior <= 0.0:
+        return 0.0
+    return abs(agora - antes) / maior
+
+
+#: A partir de quanto a janela deixa de estar em regime — ver
+#: `regime_da_janela`, que traz a medição que escolheu este número.
+LIMIAR_DE_REGIME = 0.30
 
 
 def distorcao_do_espectro(eficazes: np.ndarray) -> float | None:
@@ -390,8 +525,34 @@ def no_instante(sinal: np.ndarray, i: int, por_ciclo: float) -> Fasor | None:
     inicio = i - pesos.size + 1
     if inicio < 0 or i >= sinal.size:
         return None
-    return de_janela(np.asarray(sinal[inicio:i + 1], dtype=np.float64),
-                     por_ciclo, pesos)
+    f = de_janela(np.asarray(sinal[inicio:i + 1], dtype=np.float64),
+                  por_ciclo, pesos)
+    qual = estimador()
+    if f is None or qual == "fourier":
+        return f
+    from osclab.dsp import envoltoria  # aqui: envoltoria importa este módulo
+    if qual == "pico_a_pico":
+        # Só o MÓDULO muda: o ângulo segue o Fourier (o pico a pico não tem
+        # ângulo), e o menu do filtro diz isso.
+        pp = envoltoria.pico_a_pico(np.asarray(sinal[inicio:i + 1],
+                                               dtype=np.float64), por_ciclo)[-1]
+        return replace(f, fundamental=float(pp)) if np.isfinite(pp) else None
+    # COSSENO, DOIS CICLOS e MEIO CICLO: módulo e ângulo saem do mesmo caminho
+    # das curvas (`envoltoria.fasores`), com a história que cada um pede — 1/4
+    # de ciclo a mais no cosseno, um ciclo a mais nos dois ciclos. RMS, DC e
+    # extremos continuam da janela de um ciclo: são medidas da janela, não do
+    # estimador.
+    recuo = (int(math.ceil(por_ciclo)) + 1 if qual == "dois_ciclos"
+             else 0 if qual == "meio_ciclo"
+             else int(math.ceil(por_ciclo / 4.0)) + 1)
+    if inicio - recuo < 0:
+        return None
+    x = envoltoria.fasores(np.asarray(sinal[inicio - recuo:i + 1],
+                                      dtype=np.float64), por_ciclo)[-1]
+    if not np.isfinite(x):
+        return None
+    return replace(f, fundamental=float(abs(x)) / math.sqrt(2.0),
+                   angulo=float(np.degrees(np.angle(x))))
 
 
 def em_relacao_a(angulo: float, referencia: float | None) -> float:

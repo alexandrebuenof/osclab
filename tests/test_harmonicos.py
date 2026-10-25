@@ -261,3 +261,49 @@ def test_sem_painel_de_harmonicos_nao_se_calcula_espectro_de_trecho():
                           (float(r.time[-1]), 0, 0.0)],
                       layout=[arranjo.analogico(["c0:instantaneo"])])
     assert lido["espectro_entre"] is None
+
+
+# --- a janela fora de regime -----------------------------------------------
+
+def test_a_janela_fora_de_regime_apaga_depois_da_transicao():
+    """O aviso tem que APAGAR. A primeira versão comparava as duas metades da
+    mesma janela e, num inrush (corrente unipolar), ficava aceso do começo ao
+    fim do registro — ver `fasor.regime_da_janela`.
+    """
+    import numpy as np
+    from osclab.dsp import fasor
+
+    por_ciclo = 32
+    t = np.arange(por_ciclo * 40) / (60.0 * por_ciclo)
+    pesos = fasor.pesos_do_ciclo(por_ciclo)
+    L = pesos.size
+
+    def em(x, ciclo):
+        i = int(por_ciclo * ciclo)
+        return fasor.regime_da_janela(x[i - L:i], x[i - L - por_ciclo:i - por_ciclo])
+
+    # Inrush com constante de tempo LONGA: é o caso que a versão antiga nunca
+    # deixava apagar.
+    env = np.where(t < 4 / 60.0, 0.0, np.exp(-(t - 4 / 60.0) / 0.5))
+    inrush = np.where(t < 4 / 60.0, 0.0,
+                      env + (1 + 0.5 * env) * np.sin(2 * np.pi * 60.0 * t)
+                      + 0.35 * env * np.sin(2 * np.pi * 120.0 * t))
+    assert em(inrush, 5) > fasor.LIMIAR_DE_REGIME        # a janela toca o evento
+    for ciclo in (6, 10, 20, 30):
+        assert em(inrush, ciclo) < fasor.LIMIAR_DE_REGIME, ciclo
+
+    # E o aviso não confunde distorção verdadeira com transição.
+    sujo = (np.sin(2 * np.pi * 60.0 * t) + 0.4 * np.sin(2 * np.pi * 180.0 * t)
+            + 0.2 * np.sin(2 * np.pi * 300.0 * t))
+    for ciclo in (5, 10, 30):
+        assert em(sujo, ciclo) < 0.05, ciclo
+
+
+def test_sem_ciclo_anterior_nao_ha_aviso():
+    """No primeiro ciclo do arquivo não há com o que comparar. Avisar por falta
+    de dado seria pior que calar."""
+    import numpy as np
+    from osclab.dsp import fasor
+    assert fasor.regime_da_janela(np.ones(32), None) == 0.0
+    assert fasor.regime_da_janela(np.zeros(32), np.zeros(32)) == 0.0
+    assert fasor.regime_da_janela(np.ones(2), np.ones(2)) == 0.0

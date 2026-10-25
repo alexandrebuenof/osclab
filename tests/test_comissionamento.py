@@ -50,8 +50,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from osclab.dsp import envoltoria, fasor as dspf
-from osclab.formats import conjuntos, registry
+from osclab.dsp import envoltoria
+from osclab.dsp import fasor as dspf
+from osclab.formats import cev, conjuntos, registry
 from osclab.formats.base import Record, Trecho
 from osclab.plot import catalogo, conversao, unidades
 
@@ -133,12 +134,19 @@ CAMINHOS = _arquivos()
 # ---------------------------------------------------------------------------
 
 def _serie(registro: Record, identidade: str) -> np.ndarray:
-    """A série de um sinal do catálogo, pelo caminho que a tela usa."""
+    """A série de um sinal do catálogo, pelo caminho que a tela usa — mas na
+    unidade do ARQUIVO.
+
+    A tela divide pelo prefixo que ela escolheu (`kA` acima de 10 000 A), e o
+    gabarito do relé está em A: comparar sem desfazer isso reprovava todo
+    registro com corrente acima de 10 kA (comissionamento em massa, 24/10).
+    """
     n = registro.analog.shape[1]
     trechos = [Trecho(t.inicio, t.fim, t.taxa_hz) for t in registro.trechos]
     escalas = unidades.por_unidade(registro, "arquivo")
     sinal = catalogo.por_id(registro)[identidade]
-    return catalogo.serie(registro, sinal, 0, n, trechos, "arquivo", escalas)
+    divisor, _ = escalas.get(sinal.unidade, (1.0, sinal.unidade))
+    return catalogo.serie(registro, sinal, 0, n, trechos, "arquivo", escalas) * divisor
 
 
 def _mesma_base(registro: Record, a: int, b: int) -> bool:
@@ -641,6 +649,11 @@ def test_o_instantaneo_do_cabecalho_aparece_na_nossa_conta(caminho: Path):
     # O título da coluna, como está no arquivo, é `nome(unidade)`.
     alvos = {}
     for canal in registro.analog_channels:
+        # Só coluna de ONDA: `FREQ`, `IOPA` (pu) e as sem unidade não têm
+        # fundamental a conferir — casá-las reprovava 19 arquivos que, em A e
+        # V, conferem.
+        if canal.unit.strip().upper() not in cev.UNIDADES_DE_ONDA:
+            continue
         titulo = f"{canal.name}({canal.unit})" if canal.unit else canal.name
         if titulo in cabecalho and abs(cabecalho[titulo]) > 0:
             alvos[canal.name] = cabecalho[titulo]

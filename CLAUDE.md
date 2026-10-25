@@ -24,6 +24,15 @@ e NOJA.
    escolha entre um número mais exato e uma tela mais bonita, ganha o número;
    o trabalho é então fazer o número caber bem. Um dígito a mais que reduz o
    erro de leitura vale a largura que custa.
+6. **Dez maquetes antes de implementar coisa nova** *(decidido em 19/10/2026)*.
+   Antes de escrever o código de uma função nova, entregar **dez maquetes
+   funcionais, com dados fictícios**, mostrando como o programa se comportaria
+   com ela. Funcionais quer dizer que se clica e se vê o resultado — não
+   desenho parado —, e os dados fictícios existem para a maquete mostrar os
+   casos difíceis (o canal sem sinal, o nome comprido, a falta que satura o
+   TC) sem depender de achar um registro que os tenha. Dez porque a terceira
+   ideia raramente é a melhor, e porque é olhando a quinta ao lado da nona que
+   ele decide. Ajuste pequeno e correção de defeito não precisam de maquete.
 
 ## Versionamento — decidido pelo Alexandre em 12/10/2026
 
@@ -43,6 +52,14 @@ conta nada.
 
 Até a aprovação, o que muda é só o código: `VERSION` e a tabela de marcos
 ficam como estão.
+
+## Onde o trabalho parou
+
+Antes de começar qualquer coisa, leia **`docs/estado-do-trabalho.md`**: o ponto
+exato em que a última rodada parou, a fila do que vem depois e as pendências
+conhecidas. O registro completo das discussões vive no projeto "Leitor de
+Oscilografia" no Claude; o `docs/` é a cópia versionada do que pode ser
+público.
 
 ## O que é o programa
 
@@ -69,9 +86,12 @@ No Windows há também o `osclab.cmd`, que abre um menu.
 
 ## Git — quem faz o quê
 
-O Claude **grava os arquivos** na pasta; **o Alexandre faz o commit**. É de
-propósito: o commit é a chance de conferir o que entrou antes de virar
-história. Ao entregar uma mudança, o Claude sugere a mensagem.
+**O Claude faz o commit** (decidido pelo Alexandre em 25/10/2026; antes era
+ele quem fazia). Antes de cada commit o Claude confere o `git status`: nada
+de `docs-privados/`, `config/config.ini`, acervo (`library/`) ou oscilografia
+real pode entrar — o repositório é público. A suíte tem de estar passando.
+A mensagem diz o que mudou e por quê, em português. O **`git push`** publica
+no GitHub, e esse continua pedindo a confirmação do Alexandre.
 
 ```bash
 git status              # o que mudou desde a última fotografia
@@ -419,7 +439,11 @@ osclab/
   esconderia o religamento e o segundo trip, que são o fim da história. O
   `limite` continua a um argumento de distância para o registro esquisito (ruído
   em entrada binária), e quem o usar tem que dizer na tela quantos ficaram de
-  fora.
+  fora. **A única exceção é o digital que a placa do relé não tem** (seção
+  `[IOBOARDS]` do `.hdr` da SEL): um 487E-3 com placa de 8 entradas grava
+  IN301–IN324 assim mesmo, com um contador de amostras em IN317–IN324. Fica
+  fora da tela padrão e aparece riscado na busca, com o porquê
+  (`formats/ajustes.digitais_sem_placa`, 24/10/2026).
 - **Só os digitais que MUDARAM entram na tela, ordenados pela hora da primeira
   mudança.** Um SEL-487E tem 5760 entradas binárias; foi a falta deste critério
   que segurou este marco. A ordem faz a tela contar a sequência do evento de
@@ -904,6 +928,7 @@ Três consequências para quem programa isto:
 | **0.5** | **Diagrama fasorial fechado.** Painel próprio, em pu com uma régua por grandeza tirada do registro inteiro, base derivada do RTC/RTP e conferida contra o que o registro mede, cursor e referência angular por diagrama, diagrama lateral, arrastar para reordenar, e o catálogo em blocos | **feito** — `0.5.0` |
 | 0.5+ | Marcar um sinal no catálogo já o manda para «já na tela», com a cor; e **a leitura do cursor passou a ser refeita quando a lista de sinais muda** — `carregar()` traz a janela e as séries, mas o pacote do cursor é outro pedido, e sem ele o sinal novo entrava sem módulo nem ângulo: só desenhava quando o usuário mexia o cursor | **feito** — `0.5.1` |
 | **0.6** | **Painel de harmônicos.** Espectro em barras no instante de um cursor, em % da fundamental de cada sinal, com o THD das barras ao lado; janela de 1 ciclo (a do relé) ou do TRECHO entre os dois cursores, cortado em ciclos inteiros; só entra onda (canal e resíduo), o teto de ordens é o Nyquist da taxa e vai escrito, e o painel só se cria no modo avançado | **feito** — `0.6.0` |
+| **0.7** | **Calculadora de sinais — domínio ONDA.** `([VAY] - [VBY]) / 1.732` vira um sinal novo, amostra por amostra, no bloco «Calculados» com as cinco colunas de um canal. Tem teclado de calculadora (operações, √2, √3, ÷√3, ÷3) e completa o nome do canal com Tab. Unidades conferidas, mas **nada é bloqueado** — a regra do projeto: A+A passa em A, V×A vira V·A, e A+V faz a conta assim mesmo, sem unidade e com ⓘ ao lado; só o que não se LÊ é erro (parêntese aberto, canal inexistente). A conversão de TC/TP vem ANTES da conta; divisão sinal÷sinal e produto entre sinais caem em «Outros» porque não são senoidais. A expressão é conferida pelo servidor enquanto se digita, para a gramática morar num lugar só. E o painel de harmônicos ganhou a mesma largura e o mesmo alinhamento do analógico | **feito** — `0.7.0` |
 | 0.5 | Bruto/filtrado, descontinuidade, alinhamento | |
 | 0.6 | Localização de faltas (um e dois terminais) | |
 | 0.7 | Mini relatório | |

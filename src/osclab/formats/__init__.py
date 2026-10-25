@@ -24,9 +24,12 @@ from osclab.formats.base import (
 # --- leitores registrados ---------------------------------------------------
 from osclab.formats.cev import CevReader  # noqa: E402
 from osclab.formats.comtrade import ComtradeReader  # noqa: E402
+from osclab.formats.sel_texto import SelTextoReader  # noqa: E402
 
 registry.register(ComtradeReader())
 registry.register(CevReader())
+# Depois do CEV: os dois aceitam `.cev`, e quem decide é o conteúdo (`sniff`).
+registry.register(SelTextoReader())
 
 __all__ = [
     "AnalogChannel",

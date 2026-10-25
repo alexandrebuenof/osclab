@@ -7,9 +7,43 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/osclab.css') }}">
   <script src="{{ url_for('static', filename='js/tema.js') }}"></script>
 </head>
-<body data-sha="{{ item.sha }}">
+<body data-sha="{{ item.sha }}" data-laco="{{ item.falta_laco or '' }}">
+{# O laço em falta que o classificador achou (`analysis/falta.py`).
+   Vem para a tela porque é com ele que um plano de impedância novo
+   nasce: abrir sempre em AN faria o usuário trocar o laço à mão em
+   toda falta que não fosse da fase A -- e quem acabou de ler «BCG»
+   no selo não espera ver o plano de outro laço. #}
+  {#- A BARRA DO APLICATIVO: o que leva para FORA deste registro. À esquerda
+      as duas voltas (ao acervo e à tela inicial), à direita o que sai daqui
+      (exportar) e o que vale para o programa inteiro (a base de dados). O
+      cabeçalho de baixo fica só com o registro. Maquete 9 de «cabecalho-10»,
+      escolha dele em 22/10/2026. #}
+  <nav class="barra-do-app" aria-label="Navegação">
+    {#- «arquivos» ganhou a seta para a esquerda: é o «voltar à tela
+        anterior». O «menu», que é o começo de tudo, ficou com a casa. #}
+    <a class="chave com-icone" style="--ic: var(--ic-voltar)"
+       href="/arquivos" target="_top"
+       title="Voltar ao acervo de arquivos">arquivos</a>
+    <a class="chave com-icone" style="--ic: var(--ic-casa)"
+       href="/" target="_top" title="Voltar à tela inicial">menu</a>
+    <span class="espaco-da-barra"></span>
+    {#- LOCALIZAR FALTA troca as ondas por uma tela própria (painel 1 da
+        maquete, escolha dele em 23/10/2026); clicar de novo volta às ondas.
+        O cursor 1 é o mesmo nas duas. #}
+    <button type="button" class="chave com-icone" id="localizar"
+            style="--ic: var(--ic-localizar)"
+            title="Localização de falta: a LDL no tempo pela sequência negativa (com a oscilografia do outro terminal na aba) e pelo laço da falta. Clique de novo para voltar às ondas.">localizar falta</button>
+    <a class="chave com-icone" id="exportar" style="--ic: var(--ic-exportar)"
+       href="/api/acervo/{{ item.sha }}/exportar"
+       download
+       title="Baixa os arquivos deste registro com o nome que está no título. Mais de um arquivo sai em .zip, porque o leitor acha o .dat a partir do nome do .cfg — renomear um sem o outro entregaria um par que não abre.">exportar</a>
+    <a class="chave com-icone" id="base-de-dados"
+       style="--ic: var(--ic-base)" href="/base"
+       title="A base de dados: o dicionário dos sinais e os parâmetros das linhas.">base de dados</a>
+  </nav>
   <header class="topo registro">
     <div class="marca">
+      <div class="titulo-do-registro">
       {#- O título é EDITÁVEL: `UPC1 ALIMENTADOR 11SEL-451-521_09_202613...`
           é o nome que o fabricante exporta, e ele não diz a ninguém que evento
           é aquele. O nome novo vale dentro do OscLab; o arquivo no disco fica
@@ -26,7 +60,12 @@
               {% if item.nome == item.nome_do_arquivo %}hidden{% endif %}
               title="Como o arquivo se chama no disco. Renomear aqui não mexe nele.">arquivo: {{ item.nome_do_arquivo }}</span>
       </p>
+      </div>
     </div>
+    {#- As duas fileiras ficam À DIREITA do título; numa janela estreita elas
+        descem para baixo dele. Quem decide é a largura da janela, nunca o
+        tamanho do nome — o título quebra dentro da coluna dele. #}
+    <div class="fileiras-do-registro">
     <div class="acoes">
       {#- O MODO DE ANÁLISE vem primeiro, e vem antes do filtro de propósito:
           ele decide o que a tela OFERECE — se só o que sai do filtro, que é o
@@ -34,7 +73,8 @@
           setinha abre a lista com o que cada um mostra e o que cada um
           esconde. #}
       <span class="grupo-chave">
-        <button type="button" class="chave" id="modo">tradicional</button>
+        <button type="button" class="chave com-icone" id="modo"
+                style="--ic: var(--ic-tradicional)">tradicional</button>
         <button type="button" class="chave seta" id="seta-do-modo"
                 aria-label="Escolher o modo de análise"
                 aria-haspopup="true" aria-expanded="false"><span class="seta-do-menu">▾</span></button>
@@ -43,7 +83,8 @@
       <span class="grupo-chave">
         {#- «Filtro», e não «aplicar filtro»: ele já vem aceso, então o verbo
             no imperativo descreveria o contrário do estado inicial. #}
-        <button type="button" class="chave" id="filtro"
+        <button type="button" class="chave com-icone" id="filtro"
+                style="--ic: var(--ic-filtro)"
                 aria-pressed="true">Filtro</button>
         {#- A setinha diz QUAL filtro está sendo aplicado. Hoje há um só, e
             mesmo assim ela ganha o lugar: sem ela, "aplicar filtro" não diz
@@ -85,68 +126,440 @@
         <button type="button" data-lado="secundario">secundário</button>
         <button type="button" data-lado="primario">primário</button>
       </div>
-      {#- Tema e voltar são BOTÕES como os outros, e não dois links soltos no
-          fim da barra: eles fazem parte da mesma fileira de controles, e um
-          link sublinhado no meio de chaves se lê como outra categoria de
-          coisa. O «voltar» continua sendo `<a>` porque NAVEGA — abrir em outra
-          aba com o botão do meio tem que continuar funcionando. #}
-      <button type="button" class="chave tema" id="tema"
+    </div>
+
+    {#- DUAS fileiras, e não uma só que quebra sozinha.
+        
+        Com uma fileira, ampliar a página (Ctrl +) fazia os botões saírem da
+        tela pela direita e a página ganhar barra de rolagem horizontal: eles
+        mudavam de lugar conforme o zoom, e um botão que muda de lugar é um
+        botão que se procura. Agora cada fileira tem um ASSUNTO e rola dentro
+        de si mesma se faltar espaço -- a ordem nunca muda, e a página nunca
+        rola para o lado. Problema medido e corrigido em 19/10/2026.
+
+        Em cima, o que MEDE o registro; embaixo, o que se faz com ele e para
+        onde se vai. #}
+    <div class="acoes">
+      {#- A ORDEM da segunda fileira, escolha dele em 22/10/2026: lógica,
+          eventos (quando existir), dicionário, ajuda e tema. Exportar,
+          arquivos e menu subiram para a barra do aplicativo. O «eventos» só
+          entra quando a função existir: botão que não faz nada é pior que
+          botão nenhum (ver `docs/log-de-eventos.md`). #}
+      <button type="button" class="chave com-icone" id="logica"
+              style="--ic: var(--ic-logica)"
+              title="Os ajustes e a lógica que vieram dentro do arquivo.">lógica</button>
+      {#- EVENTOS: cinza e clicável, como o dicionário sem dicionário. A lista
+          de eventos do relé ainda não é lida (ver `docs/log-de-eventos.md`);
+          o clique diz isso, em vez de o botão não responder. #}
+      <button type="button" class="chave com-icone sem-eventos" id="eventos"
+              style="--ic: var(--ic-eventos)" aria-haspopup="true"
+              title="A lista de eventos que o relé gravou (partida, trip, abertura), ligada ao cursor. Ainda não implementada.">eventos</button>
+      <span class="ancora-de-menu" id="menu-dos-eventos"></span>
+      {#- O DICIONÁRIO fica antes da ajuda, desde 21/10/2026: os dois são
+          consulta. Sem dicionário ele fica CINZA e continua
+          clicável -- o clique explica o que falta, que é melhor do que um
+          botão que não responde a nada. #}
+      <button type="button" class="chave com-icone" id="dicionario"
+              style="--ic: var(--ic-dicionario)"
+              title="Procurar o significado de um sinal digital deste relé.">dicionário</button>
+      {#- O «ajuda» PERDEU a classe `ajuda`: ela já existia na folha para o
+          parágrafo de explicação da tela de arquivos (`margin: 0 0 16px`), e o
+          botão herdava aquela margem de baixo -- era o que o deixava 16 px
+          fora da fileira. Quem o encontra agora é o `#ajuda`. #}
+      <button type="button" class="chave com-icone" id="ajuda"
+              style="--ic: var(--ic-ajuda)"
+              title="Como usar esta tela: gestos, teclas e o que cada gráfico mostra.">ajuda</button>
+      <button type="button" class="chave tema com-icone" id="tema"
+              style="--ic: var(--ic-tema)"
               title="Alternar tema">tema</button>
-      <a class="chave" id="exportar" href="/api/acervo/{{ item.sha }}/exportar"
-         download
-         title="Baixa os arquivos deste registro com o nome que está no título. Mais de um arquivo sai em .zip, porque o leitor acha o .dat a partir do nome do .cfg — renomear um sem o outro entregaria um par que não abre.">exportar</a>
-      <a class="chave voltar" href="/">← arquivos</a>
+    </div>
     </div>
   </header>
 
+  {#- A tira de FATOS do arquivo: rotulo miudo ANTES do valor, na mesma linha.
+      Era uma frase corrida ("2000 amostras  2000 Hz  14 analogicos...") e o
+      olho tinha que ler a frase inteira para achar a taxa. Com rotulo ele acha
+      o rotulo primeiro -- foi o que permitiu acrescentar TC, TP e modelo sem
+      virar um paragrafo. O rotulo fica DEITADO e nao empilhado: empilhado ele
+      dobrava a altura da tira, e nas fichas com botao (os canais sem sinal)
+      partia o conteudo em duas alturas. #}
   <section class="tira">
-    <span><b>{{ item.n_amostras }}</b> amostras</span>
-    <span><b>{{ '%g'|format(item.taxa_hz) }}</b> Hz · {{ '%.2f'|format(item.amostras_por_ciclo) }}/ciclo</span>
-    <span><b>{{ item.n_analogicos }}</b> analógicos · <b>{{ item.n_digitais }}</b> digitais</span>
-    <span>{{ item.formato }}</span>
-    {% if item.disparo %}<span>disparo {{ item.disparo }}</span>{% endif %}
-    {# A hora sozinha nao se interpreta: no parque o SEL-421 carimba em UTC e
-       o SIPROTEC em hora local, e o mesmo curto aparece com quatro horas de
-       diferenca. O arquivo diz em que fuso esta; a tela repassa, sem
-       converter -- que e' a convencao do SIGRA. #}
-    {% if item.relogio %}<span class="relogio" title="O que o arquivo declara
-       sobre o proprio relogio. O OscLab nao converte a hora: mostra o carimbo
-       como o rele gravou.">{{ item.relogio }}</span>{% endif %}
-    <span id="taxa-variavel" class="atencao" hidden></span>
-    <span id="filtragem" hidden></span>
-    <span id="sem-sinal" hidden></span>
+    <span class="fi"><span class="rot">amostras</span
+      ><span class="val">{{ item.n_amostras|milhar }}</span></span>
+    <span class="fi"><span class="rot">taxa</span
+      ><span class="val">{{ '%g'|format(item.taxa_hz) }} Hz · {{ '%.2f'|format(item.amostras_por_ciclo) }}/ciclo</span></span>
+    <span class="fi"><span class="rot">canais</span
+      ><span class="val">{{ item.n_analogicos }} analóg. · {{ item.n_digitais }} digitais</span></span>
+    {#- TC e TP sao de CADA canal, nao do arquivo: so' aparecem quando todos os
+        canais daquela grandeza declaram a mesma relacao. Ver `_relacao`. #}
+    {#- Com mais de uma relação, uma ficha por EQUIPAMENTO: o nome que o relé
+        dá a ele no rótulo, a relação no valor. Nunca TC emparelhado com TP —
+        ver `acervo.relacoes_por_equipamento`. #}
+    {% if relacoes %}
+    {% for r in relacoes %}<span class="fi" title="{{ r.tipo }} {{ r.relacao }} — canais: {{ r.canais|join(', ') }}"><span class="rot">{{ r.equipamento }}</span
+      ><span class="val">{{ r.tipo }} {{ r.relacao }}</span></span>
+    {% endfor %}
+    {% else %}
+    {% if item.relacao_tc %}<span class="fi" title="A relação dos TCs declarada no arquivo. Ela é de cada canal: este número só aparece porque todos os canais de corrente declaram a mesma.{% if item.relacao_tc == 'vários' %} Aqui eles discordam — passe o mouse em cada sinal para ver a dele.{% endif %}"><span class="rot">TC</span
+      ><span class="val">{{ item.relacao_tc }}</span></span>{% endif %}
+    {% if item.relacao_tp %}<span class="fi" title="A relação dos TPs declarada no arquivo, pela mesma regra do TC."><span class="rot">TP</span
+      ><span class="val">{{ item.relacao_tp }}</span></span>{% endif %}
+    {% endif %}
+    {% if item.modelo %}<span class="fi" title="Deduzido do que o arquivo declara como equipamento gravador — na SEL, a FID. Não é um campo do COMTRADE."><span class="rot">modelo</span
+      ><span class="val">{{ item.modelo }}</span></span>{% endif %}
+    {#- O TIPO DA FALTA, lido pelo OscLab na importacao. Fica aqui, na tira
+        de fatos, porque e' onde o olho ja' passa -- e nao num painel que
+        precisaria ser aberto. Quando o rele' tambem classificou, a sigla
+        dele vem ao lado: os dois sempre juntos, e nenhum apagado.
+
+        `AB` e `AB T` sao o MESMO veredito -- o «T» solto da SEL e' TRIP, nao
+        terra (a terra vem dentro da sigla: `ABG T`). Quem normaliza e' o `mesmo_tipo_de_falta`
+        do servidor: sem isso todo caso normal apareceria como conflito, que
+        e' o jeito mais rapido de ensinar a ignorar o aviso. #}
+    {% if item.falta_tipo or item.classificacao_do_rele %}
+    <span class="fi">
+      <span class="rot">falta</span>
+      <span class="val selo-e-rele" title="{{ item.falta_dica }}">
+        {#- A COR do selo é a das fases da falta (mistura RGB nas bifásicas);
+            a confiança mudou para o pontinho ao lado. Escolha dele,
+            21/10/2026 — maquete «selo da falta», esquema 2. #}
+        {% if item.falta_tipo %}
+        <b class="selo-da-falta {{ item.falta_cor }}">{{ item.falta_sigla }}</b>
+        {#- O raio: o relé disparou. Sem trip, nada — a ausência não afirma
+            que ele restringiu. Pedido dele, 22/10/2026. #}
+        {% if item.falta_trip %}<i class="raio-do-trip" aria-label="trip">&#x26A1;&#xFE0E;</i>{% endif %}
+        <i class="ponto-da-confianca {{ item.falta_confianca }}" aria-label="confiança {{ item.falta_confianca }}"></i>
+        {% else %}
+        <b class="selo-da-falta vazio">sem falta</b>
+        {% endif %}
+        {#- Concordando, o relé vira um «✓» e a sigla dele vai para o hover:
+            «relé: AB T» ao lado de «AB» repetia o veredito e alongava a
+            tira. Discordando, fica escrito — aí é aviso. Pedido dele,
+            21/10/2026. #}
+        {% if item.classificacao_do_rele and conflita_a_falta %}
+        <span class="do-rele conflita"
+              title="O relé gravou {{ item.classificacao_do_rele }} no arquivo, e o OscLab leu outro tipo.">relé: {{ item.classificacao_do_rele }}</span>
+        {% elif item.classificacao_do_rele and item.falta_tipo %}
+        <span class="do-rele concorda"
+              title="O relé gravou {{ item.classificacao_do_rele }} no arquivo, o mesmo tipo. (Na SEL, o T solto é TRIP, não terra.)">✓ relé</span>
+        {% elif item.classificacao_do_rele %}
+        <span class="do-rele"
+              title="O que o próprio relé gravou no arquivo.">relé: {{ item.classificacao_do_rele }}</span>
+        {% endif %}
+      </span></span>
+    {% endif %}
+    <span class="fi"><span class="rot">formato</span
+      ><span class="val">{{ item.formato }}</span></span>
+    {% if item.disparo %}<span class="fi"><span class="rot">disparo</span
+      ><span class="val">{{ item.disparo }}</span></span>{% endif %}
+    {#- A hora sozinha nao se interpreta: no parque o SEL-421 carimba em UTC e
+        o SIPROTEC em hora local, e o mesmo curto aparece com quatro horas de
+        diferenca. O arquivo diz em que fuso esta; a tela repassa, sem
+        converter -- que e' a convencao do SIGRA. #}
+    {% if item.relogio %}<span class="fi" title="O que o arquivo declara sobre o próprio relógio. O OscLab não converte a hora: mostra o carimbo como o relé gravou."><span class="rot">relógio</span
+      ><span class="val">{{ item.relogio }}</span></span>{% endif %}
+    {#- As tres de baixo sao escritas pelo JavaScript com `textContent`, que
+        apaga os filhos do elemento. Por isso o rotulo delas vem do CSS, por
+        `content: attr(data-rot)` -- um `<span>` dentro sumiria no primeiro
+        desenho. #}
+    <span id="taxa-variavel" class="fi-js atencao" data-rot="taxa variável" hidden></span>
+    <span id="filtragem" class="fi-js" data-rot="gravação" hidden></span>
+    <span id="sem-sinal" class="fi-js" data-rot="sem sinal" hidden></span>
   </section>
+  {#- Os IEDs desta ABA: o botão de pôr outra oscilografia nela e, com mais de
+      uma, uma linha por IED (selo, nome editável, relé, taxa, alinhamento,
+      precisão, relógio). Montada pelo `onda.js` a cada janela. #}
+  <section class="tira-dos-ieds" id="tira-dos-ieds" hidden></section>
 
   <main id="graficos">
     <p class="vazio">Carregando o registro…</p>
   </main>
 
-  <footer>
-    <ul class="gestos">
-      <li><b>roda</b> amplia no ponto do cursor</li>
-      <li><b>arrastar</b> anda pela oscilografia</li>
-      <li><b>Shift + arrastar</b> seleciona uma faixa</li>
-      <li><b>botão direito</b> volta ao registro inteiro</li>
-      <li><b>1</b> e <b>2</b> põem e tiram os cursores no ponto do mouse</li>
-      <li><b>← →</b> andam uma amostra · com <b>Shift</b>, um ciclo</li>
-      <li><b>Esc</b> tira os dois cursores</li>
-      <li><b>clique</b> num traço, numa tira ou no nome da legenda destaca o
-        sinal · com <b>Ctrl</b>, destaca vários</li>
-      <li><b>Delete</b> tira da tela os sinais destacados · <b>Ctrl+Z</b>
-        desfaz</li>
-      <li><b>t (ms)</b> na tabela alterna entre milissegundos e ciclos</li>
-      <li><b>clique no título</b> escolhe o gráfico · <b>arrastando</b> pelo
-        título dele muda a ordem, e soltar um diagrama fasorial sobre outro
-        põe os dois lado a lado</li>
-      <li><b>primário/secundário</b> no cabeçalho converte pela relação de TC/TP</li>
-      <li><b>60 Hz</b> no cabeçalho filtra tudo; <b>instantâneo/RMS</b> no topo de cada gráfico vale só para ele</li>
-      <li><b>passe o mouse</b> num valor da tabela para ver ângulo, DC e distorção</li>
-      <li><b>nome do canal</b> vira a referência de 0° dos ângulos</li>
-    </ul>
-    <span id="rodape"></span> ·
-    <a href="/">voltar ao acervo</a>
-  </footer>
+  {#- LOCALIZAR FALTA, numa tela própria: o botão da barra troca as ondas por
+      ela (escolha dele em 23/10/2026, painel 1 da maquete). O cursor é o
+      cursor 1 da oscilografia. Montada pelo `onda.js`. #}
+  <section class="tela-localizar" id="tela-localizar" hidden aria-label="Localizar falta"></section>
+
+  {#- O AVISO do pé da tela. Normalmente ESCONDIDO: ele só aparece quando há
+      algo que não se pode calar -- o servidor noutra versão, a falha de uma
+      resposta, um sinal que ficou no lado errado por falta de relação de TC/TP
+      no arquivo. O placar de amostras que morava aqui saiu por pedido do
+      Alexandre: a tela acaba no «+ adicionar gráfico». #}
+  <p id="rodape" class="aviso-do-pe" hidden></p>
+
+  {#- A JANELA DE AJUDA (A2: abas).
+      As dicas moravam numa lista no rodape, onde ninguem as lia depois da
+      primeira semana -- e onde elas ocupavam tela em toda rolagem. Em abas,
+      cada assunto cabe inteiro numa tela e quem procura uma tecla acha pelo
+      titulo, nao varrendo dezesseis linhas.
+
+      O texto mora aqui, com o resto das palavras da pagina. #}
+  {#- O painel de LÓGICA E AJUSTES. Flutua sobre a tela em vez de ser um
+      diálogo modal: a razão de existir dele é poder ler a equação olhando os
+      sinais ao mesmo tempo, e um modal escurece justamente o que se quer ver.
+      Arrasta pela barra, redimensiona pelo canto. #}
+  <div class="painel-flutuante" id="painel-da-logica" hidden>
+    <div class="barra-do-painel" id="barra-da-logica">
+      <span class="icone-mascara" style="--ic: var(--ic-logica);
+            width: 13px; height: 13px"></span>
+      <h3>Lógica e ajustes</h3>
+      <span class="de-onde" id="de-onde-a-logica"></span>
+      <button type="button" class="fechar" id="fechar-logica"
+              title="fechar">×</button>
+    </div>
+    <div class="miolo-do-painel">
+      <input type="search" id="busca-da-logica" class="busca-do-dicionario"
+             placeholder="procurar ajuste ou termo…" autocomplete="off">
+      <div id="corpo-da-logica"></div>
+    </div>
+  </div>
+
+  {#- A consulta ao dicionário. Só busca: a descrição NÃO é escrita em mais
+      lugar nenhum da tela -- decisão dele, 19/10/2026. Quem quer saber o que
+      um sinal é, pergunta aqui. #}
+  <dialog class="busca janela-do-dicionario" id="janela-do-dicionario">
+    <div class="cabeca">
+      <h3>Dicionário</h3>
+      <span class="de-que-rele" id="de-que-rele"></span>
+      <button type="button" class="fechar" id="fechar-dicionario"
+              title="fechar">×</button>
+    </div>
+    <input type="search" id="busca-do-dicionario" class="busca-do-dicionario"
+           placeholder="procurar um sinal, ou uma palavra da descrição…"
+           autocomplete="off">
+    <div id="achados-do-dicionario" class="achados-do-dicionario"></div>
+  </dialog>
+
+  <dialog class="busca janela-de-ajuda" id="janela-de-ajuda">
+    <div class="cabeca">
+      <h3>Como usar o OscLab</h3>
+      <button type="button" class="fechar" id="fechar-ajuda"
+              title="fechar">×</button>
+    </div>
+
+    <div class="abas-da-ajuda" role="tablist" aria-label="Assuntos da ajuda">
+      <button type="button" class="aba escolhida" data-aba="comecar" role="tab">começar</button>
+      <button type="button" class="aba" data-aba="navegar" role="tab">navegar</button>
+      <button type="button" class="aba" data-aba="cursores" role="tab">cursores</button>
+      <button type="button" class="aba" data-aba="sinais" role="tab">sinais</button>
+      <button type="button" class="aba" data-aba="graficos" role="tab">gráficos</button>
+      <button type="button" class="aba" data-aba="fasorial" role="tab">fasorial</button>
+      <button type="button" class="aba" data-aba="harmonicos" role="tab">harmônicos</button>
+      <button type="button" class="aba" data-aba="leitura" role="tab">o que a tela mostra</button>
+    </div>
+
+    <div class="folha-da-ajuda" data-folha="comecar">
+      <h4>A tira de cima é o que o ARQUIVO é</h4>
+      <p>
+        Ela não é escolha de ninguém: amostras, taxa, canais, TC, TP, modelo,
+        formato e disparo saem do próprio registro. <b>TC</b> e <b>TP</b> são
+        de cada canal — o número só aparece quando todos os canais daquela
+        grandeza declaram a mesma relação; quando discordam, ela diz
+        «vários». O <b>modelo</b> é deduzido do que o arquivo declara como
+        equipamento gravador, e por isso está escrito que é dedução.
+      </p>
+      <p>
+        <b>canais sem sinal</b> aparece quando há entradas do relé que leem só
+        o ruído do conversor. Elas não entram nos gráficos sozinhas — o
+        «mostrar na tela» traz todas de uma vez, e é assim que se confere que
+        a entrada está mesmo aberta.
+      </p>
+      <h4>Exportar e voltar</h4>
+      <p>
+        <b>exportar</b> baixa os arquivos deste registro com o nome que está
+        no título; mais de um arquivo sai em <code>.zip</code>, porque o leitor
+        acha o <code>.dat</code> a partir do nome do <code>.cfg</code>.
+        <b>arquivos</b> volta ao acervo, e <b>menu</b>, lá, à tela inicial.
+      </p>
+    </div>
+
+    <div class="folha-da-ajuda" data-folha="navegar" hidden>
+      <h4>Andar e ampliar</h4>
+      <figure class="figura-da-ajuda">
+        <svg viewBox="0 0 220 70" width="220" height="70" aria-hidden="true">
+          <rect x="1" y="1" width="218" height="68" rx="5" fill="none"
+                stroke="var(--linha)"/>
+          <path d="M8 40 C24 14, 40 14, 56 40 S88 66, 104 40 S136 14, 152 40
+                   S184 66, 200 40" fill="none" stroke="var(--fase-a)"
+                stroke-width="1.8"/>
+          <circle cx="104" cy="40" r="11" fill="none" stroke="var(--destaque)"
+                  stroke-width="1.6"/>
+          <path d="M104 24 L104 15 M100 19 L104 14 L108 19" fill="none"
+                stroke="var(--destaque)" stroke-width="1.4"/>
+        </svg>
+        <figcaption>a roda amplia em volta do ponto onde o mouse está</figcaption>
+      </figure>
+      <ul class="lista-da-ajuda">
+        <li><b>roda</b> amplia e reduz no ponto do cursor</li>
+        <li><b>arrastar</b> anda pela oscilografia</li>
+        <li><b>Shift + arrastar</b> seleciona uma faixa e amplia nela</li>
+        <li><b>botão direito</b> volta ao registro inteiro</li>
+      </ul>
+      <p>
+        Ampliar não muda número nenhum: o que muda é quantas amostras cabem na
+        tela. Abaixo de uma amostra por coluna de pixel o traço passa a ser o
+        mínimo e o máximo de cada coluna — é por isso que os pontinhos de
+        amostra só aparecem com zoom suficiente.
+      </p>
+    </div>
+
+    <div class="folha-da-ajuda" data-folha="cursores" hidden>
+      <h4>Pôr, mover e tirar</h4>
+      <figure class="figura-da-ajuda">
+        <svg viewBox="0 0 220 70" width="220" height="70" aria-hidden="true">
+          <rect x="1" y="1" width="218" height="68" rx="5" fill="none"
+                stroke="var(--linha)"/>
+          <path d="M8 40 C24 14, 40 14, 56 40 S88 66, 104 40 S136 14, 152 40
+                   S184 66, 200 40" fill="none" stroke="var(--fase-a)"
+                stroke-width="1.6" opacity=".7"/>
+          <line x1="70" y1="6" x2="70" y2="64" stroke="var(--cursor-1)"
+                stroke-width="1.6"/>
+          <rect x="64" y="2" width="12" height="11" rx="2" fill="var(--cursor-1)"/>
+          <text x="70" y="11" font-size="8" text-anchor="middle"
+                fill="var(--fundo)" font-family="monospace">1</text>
+          <line x1="150" y1="6" x2="150" y2="64" stroke="var(--cursor-2)"
+                stroke-width="1.6"/>
+          <rect x="144" y="2" width="12" height="11" rx="2" fill="var(--cursor-2)"/>
+          <text x="150" y="11" font-size="8" text-anchor="middle"
+                fill="var(--fundo)" font-family="monospace">2</text>
+        </svg>
+        <figcaption>os dois cursores, com a etiqueta por fora do desenho</figcaption>
+      </figure>
+      <ul class="lista-da-ajuda">
+        <li><b>1</b> e <b>2</b> põem e tiram o cursor no ponto do mouse</li>
+        <li><b>← →</b> andam uma amostra · com <b>Shift</b>, um ciclo</li>
+        <li><b>Esc</b> tira os dois</li>
+        <li><b>arrastar a linha</b> (ou a etiqueta numerada) move o cursor</li>
+        <li><b>t</b> na tabela alterna entre milissegundos e ciclos</li>
+      </ul>
+      <h4>O ímã</h4>
+      <p>
+        Com o ímã aceso, o cursor gruda no que interessa: transições de
+        digital, picos e o instante do disparo. O menu ao lado dele escolhe em
+        que tipo de ponto ele gruda. Havendo sinal destacado, só valem os
+        pontos daquele sinal.
+      </p>
+      <h4>Fora do gráfico de onda</h4>
+      <p>
+        O fasorial e os harmônicos não têm eixo de tempo, e por isso têm uma
+        <b>moldura</b> acima e abaixo do desenho: é o mesmo cursor, na mesma
+        coluna da tela. Dá para arrastá-lo por ali.
+      </p>
+    </div>
+
+    <div class="folha-da-ajuda" data-folha="sinais" hidden>
+      <h4>Destacar</h4>
+      <ul class="lista-da-ajuda">
+        <li><b>clique</b> num traço, numa tira digital ou no nome da legenda
+          destaca o sinal · com <b>Ctrl</b>, destaca vários</li>
+        <li><b>clique duplo</b> dentro do gráfico digital destaca a tira que
+          está sob o ponteiro</li>
+        <li><b>Delete</b> tira da tela os sinais destacados ·
+          <b>Ctrl+Z</b> desfaz</li>
+      </ul>
+      <p>
+        Destacar não muda conta nenhuma: ele apaga o resto para o olho, e o
+        ímã passa a grudar só nos pontos do que está destacado.
+      </p>
+      <h4>Acrescentar</h4>
+      <p>
+        O <b>+ sinal</b> de cada gráfico abre a lista do que cabe nele. Os
+        nomes em branco são <b>canais do relé</b>, como vieram no arquivo; os
+        em rosa são <b>calculados pelo OscLab</b> — resíduo, componentes
+        simétricas e as suas contas. O pé da janela mostra o que já está no
+        gráfico: desmarcar ali tira.
+      </p>
+    </div>
+
+    <div class="folha-da-ajuda" data-folha="graficos" hidden>
+      <h4>Criar, mover e fechar</h4>
+      <ul class="lista-da-ajuda">
+        <li><b>+ adicionar gráfico</b>, no fim da tela, cria analógico,
+          digital, fasorial, harmônicos ou triângulo de tensões</li>
+        <li><b>clique no título</b> escolhe o gráfico; <b>arrastando</b> pelo
+          título dele muda a ordem</li>
+        <li>soltar um <b>diagrama fasorial sobre outro</b> põe os dois lado a
+          lado, no mesmo painel</li>
+        <li><b>▲ ▼</b> sobem e descem o gráfico · <b>×</b> tira da tela</li>
+      </ul>
+      <h4>Dentro de um gráfico</h4>
+      <ul class="lista-da-ajuda">
+        <li><b>ver RMS</b> troca a leitura do painel entre a onda e o valor
+          eficaz — vale só para aquele gráfico</li>
+        <li><b>agrupados</b> × <b>um por gráfico</b> arruma os sinais na mesma
+          pista ou em pistas separadas, na mesma escala</li>
+        <li>a <b>engrenagem</b> guarda os ajustes: «ver amostras» no
+          analógico, a cor das tiras no digital, a escala no fasorial</li>
+      </ul>
+    </div>
+
+    <div class="folha-da-ajuda" data-folha="fasorial" hidden>
+      <h4>O que ele mostra</h4>
+      <p>
+        Os fasores de <b>um instante</b> — o do cursor escolhido no botão
+        <b>cursor 1 / cursor 2</b>. Dois diagramas lado a lado, um em cada
+        cursor, comparam a pré-falta com a falta na mesma tela.
+      </p>
+      <ul class="lista-da-ajuda">
+        <li><b>∠ referência</b> escolhe o zero dos ângulos; clicar de novo no
+          que já é a referência volta à regra automática</li>
+        <li><b>escala</b>, na engrenagem: «sem escala» deixa todas as setas do
+          mesmo tamanho (a pergunta do fasorial é de ângulo); «em pu» faz o
+          comprimento valer o módulo, com uma régua por grandeza</li>
+        <li><b>+</b>, na direita, põe um segundo diagrama ao lado</li>
+      </ul>
+      <p>
+        O módulo e o ângulo de cada seta estão sempre na tabela ao lado — o
+        desenho é para comparar, a tabela é para ler.
+      </p>
+    </div>
+
+    <div class="folha-da-ajuda" data-folha="harmonicos" hidden>
+      <h4>O espectro</h4>
+      <p>
+        Cada barra é uma ordem, em <b>% da fundamental</b> daquele sinal. A
+        janela é de <b>um ciclo</b> terminando no cursor escolhido, e a tarja
+        do rodapé diz qual cursor e até que ordem o programa mede.
+      </p>
+      <ul class="lista-da-ajuda">
+        <li><b>clique numa barra</b> escreve o valor dela na unidade do sinal ·
+          com <b>Ctrl</b>, marca várias</li>
+        <li>o espectro precisa do sinal <b>bruto</b>: no modo tradicional, que
+          mostra só o filtrado, não há harmônico para medir</li>
+      </ul>
+    </div>
+
+    <div class="folha-da-ajuda" data-folha="leitura" hidden>
+      <h4>Primário e secundário</h4>
+      <p>
+        Converte pela relação de TC e TP declarada no arquivo. Quando o
+        registro não declara, o botão não tem como converter e diz isso.
+      </p>
+      <h4>O filtro de 60 Hz</h4>
+      <p>
+        O <b>filtro</b> do cabeçalho vale para a tela inteira: ele mostra só a
+        componente de 60 Hz. Se o próprio relé já gravou filtrado, o botão
+        fica travado — filtrar de novo não limparia nada e acrescentaria mais
+        um ciclo de atraso.
+      </p>
+      <h4>Tradicional e avançado</h4>
+      <p>
+        <b>Tradicional</b> é a leitura de proteção: a fundamental, como o relé
+        a vê. <b>Avançado</b> abre o que mais existe no sinal — contínua,
+        harmônicos e o espectro. O que muda é o que a tela oferece, nunca o
+        que o arquivo contém.
+      </p>
+      <h4>Passar o mouse</h4>
+      <p>
+        Num valor da tabela do cursor, o hover mostra ângulo, contínua,
+        distorção e o instantâneo. No nome de um canal, o que o programa
+        deduziu dele — fase, grupo e de onde isso veio.
+      </p>
+    </div>
+  </dialog>
 
   <script src="{{ url_for('static', filename='js/onda.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/dicionario.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/logica.js') }}"></script>
 </body>
 </html>

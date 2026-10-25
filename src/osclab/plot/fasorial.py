@@ -139,6 +139,12 @@ def tem_fasor(sinal: catalogo.Sinal) -> bool:
     """Se o sinal é a BASE de uma linha com fasor de 60 Hz."""
     if sinal.familia == "canal":
         return sinal.bloco == "alternado"
+    # Conta do usuário: tem fasor se o resultado for senoidal — soma e
+    # subtração de senoides é senoide; produto entre sinais não é. Quem
+    # decide é o bloco, e quem decide o bloco é `plot/contas.py`.
+    if sinal.familia == "conta":
+        return (sinal.bloco == "alternado"
+                and sinal.grandeza == "instantaneo")
     if not sinal.id.startswith("q"):
         return False
     _, chave, grandeza = sinal.id.split(":")
@@ -351,6 +357,10 @@ def _fundamental_de(sinal: catalogo.Sinal,
     if sinal.familia == "canal":
         return (por_id.get(f"v{sinal.canal}:fundamental")
                 or por_id.get(f"v{sinal.canal}:rms"))
+    if sinal.familia == "conta":
+        base = sinal.id.split(":")[0]
+        return (por_id.get(f"{base}:fundamental")
+                or por_id.get(f"{base}:rms"))
     partes = sinal.id.split(":")
     if partes[1:2] == [catalogo.RESIDUAL]:
         base = f"{partes[0]}:{catalogo.RESIDUAL}"
@@ -392,14 +402,20 @@ def montar(registro: Record, painel, por_id: dict, escalas: dict,
 
         canal = canais.get(alvo.canal) if alvo.canal >= 0 else None
         de_quem = canal
-        if canal is None:
+        if canal is None and alvo.familia != "conta":
             # Resíduo e componente: a base é a da fase A da trinca deles.
             posicao = int(alvo.id[1:].split(":")[0])
             if 0 <= posicao < len(achados):
                 de_quem = canais.get(achados[posicao].abc[0])
-        base, origem = (base_do_canal(registro, de_quem, lado, divisor)
-                        if de_quem is not None
-                        else (None, "a trinca deste sinal sumiu do registro"))
+        if alvo.familia == "conta":
+            # Conta do usuário não tem canal, e portanto não tem RTC/RTP de
+            # onde tirar base. O 1 pu dela é o maior fasor dela no registro —
+            # o mesmo caminho de quem não declara relação nenhuma.
+            base, origem = None, "conta do usuário: não há RTC/RTP a herdar"
+        else:
+            base, origem = (base_do_canal(registro, de_quem, lado, divisor)
+                            if de_quem is not None
+                            else (None, "a trinca deste sinal sumiu do registro"))
         if canal is None and de_quem is not None and base is not None:
             origem = f"a de {de_quem.name}: {origem}"
 
@@ -413,7 +429,7 @@ def montar(registro: Record, painel, por_id: dict, escalas: dict,
         # 2 % se leria igual a um de 30 %. A régua da sequência é a mesma das
         # fases que a produziram — é assim que `V2 = 0,21 pu` quer dizer
         # "21 % da tensão de barra", que é o número do ofício.
-        fonte = alvo if canal is not None else (
+        fonte = alvo if (canal is not None or alvo.familia == "conta") else (
             por_id.get(f"c{de_quem.index}:instantaneo") if de_quem else None)
         pico = _pico_do_registro(registro, _fundamental_de(fonte, por_id), lado,
                                  escalas)

@@ -18,30 +18,36 @@ import numpy as np
 from osclab.dsp import fasor
 from osclab.formats import conjuntos, fases
 from osclab.formats.base import Record, Trecho
+from osclab.plot import alfa as alfa_mod
 from osclab.plot import (
     catalogo,
     conversao,
     digitais,
     escala,
     fasorial,
-    harmonicos as harmonicos_mod,
     imas,
     navegacao,
     paineis,
     serie,
     sinais,
+    triangulo,
     unidades,
 )
+from osclab.plot import complexo as complexo_mod
+from osclab.plot import diferencial as diferencial_mod
+from osclab.plot import harmonicos as harmonicos_mod
+from osclab.plot import impedancia as impedancia_mod
 from osclab.plot.conversao import LADOS
 
 #: Versão do formato do pacote da janela. Sobe quando a tela passa a depender
 #: de um campo novo. Ver o comentário em `montar`.
-CONTRATO = 20
+CONTRATO = 24
 
 
 def montar(registro: Record, *, de: float | None = None, ate: float | None = None,
            colunas: int = 900, lado: str = "arquivo", filtro: bool = False,
-           layout: list | None = None) -> dict:
+           layout: list | None = None, contas: list | None = None,
+           ajustes: dict | None = None, outros: list | None = None) -> dict:
     """O pacote de uma janela, pronto para o navegador.
 
     `layout` é a lista de painéis que a tela montou (ver `plot/paineis.py`).
@@ -87,7 +93,7 @@ def montar(registro: Record, *, de: float | None = None, ate: float | None = Non
     # O prefixo `k` sai do registro inteiro, nunca da janela: se saísse da
     # janela, o eixo trocaria de kA para A ao ampliar a pré-falta.
     escalas = unidades.por_unidade(registro, lado)
-    disponiveis = catalogo.de_registro(registro, lado)
+    disponiveis = catalogo.de_registro(registro, lado, contas)
     por_id = {x.id: x for x in disponiveis}
 
     arranjo = layout if layout is not None else paineis.padrao(registro, lado)
@@ -103,6 +109,32 @@ def montar(registro: Record, *, de: float | None = None, ate: float | None = Non
             # vêm da leitura do cursor. Ver `plot/fasorial.py`.
             saida.append(fasorial.montar(registro, painel, por_id, escalas,
                                          lado))
+        elif painel.tipo == paineis.TRIANGULO:
+            # Também de UM instante, e também alimentado pela leitura do
+            # cursor — mas os seis sinais saem do VÍNCULO, não da lista do
+            # painel. Ver `plot/triangulo.py`.
+            saida.append(triangulo.montar(registro, painel, por_id, escalas,
+                                          lado))
+        elif painel.tipo == paineis.IMPEDANCIA:
+            # O único painel que é uma TRAJETÓRIA e não um instante: ele
+            # precisa da janela inteira, e dos ajustes do relé para saber
+            # onde ficam as zonas. Ver `plot/impedancia.py`.
+            saida.append(impedancia_mod.montar(registro, painel, ajustes or {},
+                                               lado, i0, i1 - 1))
+        elif painel.tipo == paineis.COMPLEXO:
+            # O caminho do fasor, do começo do registro inteiro — não da
+            # janela: a bolinha anda até o cursor, e o cursor pode estar
+            # longe do pedaço ampliado. Ver `plot/complexo.py`.
+            saida.append(complexo_mod.montar(registro, painel, por_id,
+                                             escalas, lado))
+        elif painel.tipo == paineis.ALFA:
+            # Também do registro inteiro, pela mesma razão do complexo: o
+            # ponto anda até o cursor sem ida ao servidor. Ver `plot/alfa.py`.
+            saida.append(alfa_mod.montar(registro, painel, outros))
+        elif painel.tipo == paineis.DIFERENCIAL:
+            # Do registro inteiro, como o alfa, e com os ajustes do relé: o
+            # gráfico só sai quando todos têm valor. Ver `plot/diferencial.py`.
+            saida.append(diferencial_mod.montar(registro, painel, ajustes))
         elif painel.tipo == paineis.HARMONICOS:
             # Idem: as barras são de UM instante e vêm da leitura do cursor.
             saida.append(harmonicos_mod.montar(registro, painel, por_id,
@@ -205,17 +237,60 @@ def montar(registro: Record, *, de: float | None = None, ate: float | None = Non
                       # matriz de canais × contas e os blocos dela, em vez de
                       # uma lista de cento e vinte nomes. Ver `plot/catalogo`.
                       "linha": x.linha, "grupo": x.grupo, "coluna": x.coluna,
+                      # `componente`, `modulo` ou `misto` — só para conta do
+                      # usuário. É o que diz à tela se a conta TEM onda e
+                      # contínua, ou se tem uma folha só. Ver `catalogo.Sinal`.
+                      "dominio": x.dominio,
+                      # A expressão da conta do usuário. A tela usa para
+                      # separar «o OscLab deduziu» de «você escreveu» — as
+                      # duas são `familia: "conta"` aqui dentro.
+                      "expressao": x.expressao,
                       "bloco": x.bloco, "motivo": x.motivo, "nota": x.nota,
+                      "aviso": x.aviso,
                       # Só a componente simétrica traz isto: é o único sinal
                       # cuja origem é palpite, e o único que a tela corrige.
                       "conjunto": x.conjunto}
                      for x in disponiveis],
+        # Os VÍNCULOS de potência que o usuário fez, para o editor de grupos
+        # mostrar o par e a tela saber o que oferecer. Ver
+        # `Record.vinculos_de_potencia` — o programa não deduz nenhum.
+        "vinculos_de_potencia": {
+            str(k): {"com": str(v.get("com") or ""),
+                     "base": str(v.get("base") or "fase")}
+            for k, v in (getattr(registro, "vinculos_de_potencia", None)
+                         or {}).items()},
+        # Os conjuntos trifásicos do registro, com a chave estável de cada um
+        # — é por ela que o vínculo é gravado, e não pelo `G1`, que é posição.
+        "conjuntos": [{"chave": c.nome, "rotulo": c.rotulo,
+                       "grandeza": c.grandeza, "unidade": c.unidade,
+                       "sem_sinal": bool(c.sem_sinal),
+                       # Contra o quê o relé mediu: `fase` ou `linha`. Vai
+                       # junto porque é o que o vínculo de potência precisa
+                       # saber, e porque a tela estava CHUTANDO isso a partir
+                       # do nome do conjunto — com a trinca sabendo, o chute
+                       # vira pergunta respondida.
+                       "base": c.base,
+                       "canais": [int(x) for x in c.abc]}
+                      for c in conjuntos.de_registro(registro)],
+        # Onde mora a energia de cada LINHA do catálogo, para a barrinha do
+        # menu: `{linha: [60 Hz, harmônicos, contínua]}`, frações somando 1.
+        # Linha sem onda com que medir não entra, e a tela não desenha barra.
+        # Ver `catalogo.energia_das_linhas` — e repare que é MEDIDO, não
+        # herdado do veredito de `filtering`.
+        "energia": {k: [round(f, 4) for f in v] for k, v in
+                    catalogo.energia_das_linhas(registro, disponiveis, lado,
+                                                escalas, trechos).items()},
         # Os digitais do REGISTRO — a lista inteira, para a busca. Quais estão
         # na tela é assunto de cada painel.
         "digitais_disponiveis": [{"indice": r.indice, "nome": r.nome,
-                                  "mudou": r.mudou, "instante": r.instante}
+                                  "mudou": r.mudou, "instante": r.instante,
+                                  "sem_placa": r.sem_placa}
                                  for r in todos_digitais],
-        "digitais_mudaram": sum(1 for r in todos_digitais if r.mudou),
+        "digitais_mudaram": sum(1 for r in todos_digitais if r.mudou and not r.sem_placa),
+        "digitais_sem_placa": sum(1 for r in todos_digitais if r.sem_placa),
+        # Os IEDs desta aba. Com um registro só, vazio: a tela não escreve
+        # letra nenhuma. Com mais de um, quem preenche é `plot/varios.py`.
+        "ieds": [],
         "tempo_digitais": tempo_digitais,
     }
 

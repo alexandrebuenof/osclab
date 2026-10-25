@@ -119,8 +119,15 @@ def _int(texto: str, padrao: int = 0) -> int:
         return padrao
 
 
-def _data_hora(linha: str) -> datetime | None:
-    """`dd/mm/aaaa,hh:mm:ss.ssssss` — a ordem que a norma manda.
+def _data_hora(linha: str, mes_primeiro: bool = False) -> datetime | None:
+    """`dd/mm/aaaa,hh:mm:ss.ssssss` — a ordem que a norma manda desde 1999.
+
+    **A edição 1991 manda o contrário, `mm/dd/aa`** (`mes_primeiro`). O PL300
+    da Ingeteam grava em 1991, e o relatório de faltas do próprio relé prova a
+    ordem: `12/02/08` no `.cfg` é o 2 de dezembro dele. Lida como dd/mm, a data
+    saía trocada em silêncio — e virava `None` sempre que o dia passava de 12.
+    Se a ordem da edição der data impossível, vale a outra: um relé fora da
+    norma não perde a hora por isso.
 
     Devolve `None` quando a linha não é uma data reconhecível, em vez de
     estourar: um carimbo de tempo ruim não deve impedir alguém de olhar as
@@ -134,6 +141,10 @@ def _data_hora(linha: str) -> datetime | None:
     if not m:
         return None
     dia, mes, ano = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    if mes_primeiro:
+        dia, mes = mes, dia
+    if mes > 12 and dia <= 12:
+        dia, mes = mes, dia
     if ano < 100:
         ano += 2000
     h = re.match(r"^\s*(\d{1,2}):(\d{1,2}):(\d{1,2})(?:\.(\d{1,6}))?\s*$", hora)
@@ -279,8 +290,9 @@ def _parse_cfg(texto: str) -> _Cfg:
         raise FormatError("O .cfg nao traz nenhuma linha de taxa de amostragem.")
 
     # --- carimbos de tempo -------------------------------------------------
-    cfg.start = _data_hora(proxima())
-    cfg.trigger = _data_hora(proxima())
+    mes_primeiro = cfg.revision == "1991"
+    cfg.start = _data_hora(proxima(), mes_primeiro)
+    cfg.trigger = _data_hora(proxima(), mes_primeiro)
 
     # --- tipo do arquivo de dados -----------------------------------------
     tipo = proxima().strip().upper()
@@ -336,6 +348,25 @@ _QUALIDADE_DO_RELOGIO = {
 }
 
 
+def fuso_em_horas(codigo: str) -> float | None:
+    """`-4`, `-04h00`, `+5h30` → horas a partir do UTC; `None` sem código.
+
+    Não converte hora nenhuma: diz em que fuso os carimbos ESTÃO, para quem
+    precisa comparar dois arquivos (`plot/alinhamento.py`).
+    """
+    limpo = (codigo or "").strip().replace("h", ":").replace("H", ":")
+    if not limpo:
+        return None
+    sinal = -1.0 if limpo.startswith("-") else 1.0
+    horas, _, minutos = limpo.lstrip("+-").partition(":")
+    try:
+        h = int(horas)
+    except ValueError:
+        return None
+    m = int(minutos) if minutos.isdigit() else 0
+    return sinal * (h + m / 60.0)
+
+
 def _fuso_legivel(codigo: str) -> str:
     """`-4` e `-04h00` viram `UTC−04:00`; `0` e `00h00` viram `UTC`."""
     limpo = (codigo or "").strip().replace("h", ":").replace("H", ":")
@@ -354,7 +385,7 @@ def _fuso_legivel(codigo: str) -> str:
     return f"UTC{sinal}{h:02d}:{m:02d}"
 
 
-def qualidade_do_relogio(cfg: "_Cfg") -> str:
+def qualidade_do_relogio(cfg: _Cfg) -> str:
     """Uma linha com o que o arquivo diz do relógio, para a tela.
 
     **Não converte nada.** O carimbo fica como o arquivo escreveu, e os
@@ -481,20 +512,92 @@ def _ler_binario(bruto: bytes, cfg: _Cfg) -> tuple[np.ndarray, np.ndarray, np.nd
 
 
 def _ler_ascii(texto: str, cfg: _Cfg) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """As amostras de um `.dat` ASCII, cada uma NO LUGAR do seu número.
+
+    **Linha estragada não pode empurrar as outras.** O coletor RTAC exporta
+    `.dat` com uma amostra cortada no meio e a seguinte colada na mesma linha.
+    O `genfromtxt` descartava a linha, e como o tempo sai das taxas do `.cfg`,
+    as amostras seguintes andavam para trás: num MiCOM do parque sobraram 398
+    de 992, com a onda comprimida e só um aviso do numpy no console
+    (24/10/2026). Agora a amostra que veio inteira no fim de uma linha colada
+    é recuperada, cada amostra vai para a posição do seu NÚMERO (a coluna 1
+    do `.dat`), e o que se perdeu de verdade fica em branco — com aviso.
+    """
     na, nd = cfg.n_analog, cfg.n_status
+    esperado = 2 + na + nd
     linhas = [ln for ln in _linhas(texto) if ln.strip()]
     if not linhas:
         raise FormatError("O .dat em ASCII esta vazio.")
-    tabela = np.genfromtxt(linhas, delimiter=",", dtype=np.float64,
+
+    # Quantas colunas tem a linha TÍPICA. Contar vírgulas é vetorizado; só as
+    # linhas fora do padrão (poucas) passam pelo laço abaixo.
+    virgulas = np.char.count(np.array(linhas), ",")
+    tipica = int(np.bincount(virgulas).argmax()) + 1
+    if tipica < esperado:
+        raise FormatError(
+            f"O .dat em ASCII tem {tipica} colunas, mas o .cfg pede "
+            f"{esperado} (numero da amostra, tempo, {na} analogicos, "
+            f"{nd} digitais)."
+        )
+    boas = virgulas == tipica - 1
+    usadas = [ln for ln, ok in zip(linhas, boas, strict=True) if ok]
+    tabela = np.genfromtxt(usadas, delimiter=",", dtype=np.float64,
                            invalid_raise=False, usemask=False)
     if tabela.ndim == 1:
         tabela = tabela.reshape(1, -1)
-    if tabela.shape[1] < 2 + na + nd:
-        raise FormatError(
-            f"O .dat em ASCII tem {tabela.shape[1]} colunas, mas o .cfg pede "
-            f"{2 + na + nd} (numero da amostra, tempo, {na} analogicos, "
-            f"{nd} digitais)."
-        )
+    perdidas = int((~boas).sum())
+    if perdidas and tabela.shape[0] == len(usadas):
+        # A amostra que veio INTEIRA no fim de uma linha colada. O número dela
+        # grudou no fim da cortada (`…,12` + `42,…` = `1242`) e não presta:
+        # ela é a amostra logo antes da próxima linha boa.
+        posicao_boa = np.flatnonzero(boas)
+        recuperadas = []
+        for i in np.flatnonzero(~boas):
+            campos = linhas[i].split(",")
+            j = int(np.searchsorted(posicao_boa, i))
+            if len(campos) <= tipica or j >= posicao_boa.size:
+                continue
+            numero = tabela[j, 0] - 1
+            if j > 0 and numero <= tabela[j - 1, 0]:
+                continue
+            try:
+                resto = [float(c) for c in campos[-(tipica - 1):]]
+            except ValueError:
+                continue
+            recuperadas.append([numero, *resto])
+        if recuperadas:
+            tabela = np.vstack([tabela, np.array(recuperadas)])
+
+    numeros = tabela[:, 0]
+    if perdidas and np.all(np.isfinite(numeros)):
+        ordem = np.argsort(numeros, kind="stable")
+        tabela, numeros = tabela[ordem], numeros[ordem].astype(np.int64)
+        primeiro, ultimo = int(numeros[0]), int(numeros[-1])
+        unicos = np.unique(numeros)
+        if unicos.size == numeros.size and ultimo - primeiro + 1 <= 2 * len(linhas):
+            cheia = np.full((ultimo - primeiro + 1, tabela.shape[1]), np.nan)
+            cheia[numeros - primeiro] = tabela
+            faltam = np.isnan(cheia[:, 1])
+            if faltam.any() and (~faltam).sum() >= 2:
+                # O carimbo das que faltam sai das vizinhas: só serve quando o
+                # .cfg não declara taxa, e aí precisa ser crescente.
+                idx = np.arange(cheia.shape[0])
+                cheia[faltam, 1] = np.interp(idx[faltam], idx[~faltam], cheia[~faltam, 1])
+            cheia[faltam, 2 + na:] = 0
+            tabela = cheia
+            if faltam.any():   # sem buraco, a linha ruim não era amostra
+                cfg.avisos.append(
+                    f"{int(faltam.sum())} amostra(s) do .dat vieram estragadas "
+                    f"(linha cortada ou colada na seguinte) e ficaram em "
+                    f"branco; as outras estao na posicao do seu numero."
+                )
+        else:
+            cfg.avisos.append(
+                f"{perdidas} linha(s) do .dat vieram estragadas e foram "
+                f"descartadas; a numeracao das amostras nao permitiu "
+                f"recoloca-las, entao o tempo depois delas pode estar deslocado."
+            )
+
     carimbos = np.nan_to_num(tabela[:, 1]).astype(np.int64)
     analog = tabela[:, 2:2 + na]
     analog[analog == AUSENTE_ASCII] = np.nan
@@ -626,6 +729,7 @@ class ComtradeReader:
             start_time=cfg.start,
             trigger_time=cfg.trigger,
             time_quality=qualidade_do_relogio(cfg),
+            fuso_horas=fuso_em_horas(cfg.time_code),
             analog_channels=tuple(cfg.analogs),
             status_channels=tuple(cfg.status),
             sample_rates=tuple(cfg.rates),

@@ -1095,3 +1095,85 @@ def test_num_registro_JA_FILTRADO_o_canal_mora_na_coluna_do_filtrado():
     assert por_nome["IN G1"] == "filtrado.onda"
     # E o bruto não existe: nenhuma coluna dele é oferecida.
     assert not [c for c in por_nome.values() if c.startswith("bruto.")]
+
+
+# ---------------------------------------------------------------------------
+# A trinca em DELTA, do arquivo até a curva
+# ---------------------------------------------------------------------------
+
+def _em_delta(amplitudes=(PICO, PICO, PICO),
+              defasagens=(0.0, -120.0, -240.0), n=600, taxa=1200.0,
+              freq=60.0) -> Record:
+    """Um registro com `VAB`, `VBC`, `VCA` — as DIFERENÇAS entre três fases.
+
+    As amostras saem das fases de verdade e depois se subtraem, que é o que o
+    TP em delta faz fisicamente. Assim o teste tem o gabarito: sabe qual é o
+    `V1` de fase que a tela TEM que mostrar.
+    """
+    t = np.arange(n) / taxa
+    fases_ = [a * np.sin(2 * np.pi * freq * t + math.radians(d))
+              for a, d in zip(amplitudes, defasagens)]
+    linhas = [fases_[0] - fases_[1], fases_[1] - fases_[2],
+              fases_[2] - fases_[0]]
+    r = Record(source=Path("sintetico"), format_name="teste")
+    r.line_frequency = freq
+    # A fase vem da ESCOLHA do usuário, que é o caminho que este marco abriu:
+    # o nome `VAB` ainda é deduzido como fase A, e corrigir isso sozinho é
+    # outra decisão — ver a pendência anotada no relatório do marco.
+    r.analog_channels = tuple(
+        AnalogChannel(index=i, name=nome, unit="V", phase="",
+                      phase_escolhida=laco)
+        for i, (nome, laco) in enumerate(
+            (("VAB", "AB"), ("VBC", "BC"), ("VCA", "CA"))))
+    r.analog = np.vstack(linhas)
+    r.time = t
+    r.status = np.zeros((0, n), dtype=np.int8)
+    return r
+
+
+def test_em_delta_nao_existe_residuo_nem_sequencia_zero():
+    """Os dois saem de `VAB+VBC+VCA`, que é zero por identidade algébrica.
+
+    Oferecê-los desenharia uma linha plana no gráfico dizendo «não há falta à
+    terra» — afirmação que ninguém mediu, numa trinca onde o neutro não está.
+    """
+    nomes = {s.nome for s in catalogo.de_registro(_em_delta())}
+    assert not [x for x in nomes if x.startswith("3V0")]
+    assert not [x for x in nomes if x.startswith("VN")]
+    assert [x for x in nomes if x.startswith("V1")]
+    assert [x for x in nomes if x.startswith("V2")]
+
+
+def test_em_delta_o_V1_sai_referido_a_FASE():
+    """O número que a tela mostra tem que ser o `V1` das fases, não o dos
+    laços — que é √3 maior. 73 % de erro, na unidade certa e sem aviso."""
+    registro = _em_delta()
+    escalas = {}
+    alvo = next(s for s in catalogo.de_registro(registro)
+                if s.nome.startswith("V1"))
+    n = registro.analog.shape[1]
+    serie = catalogo.serie(registro, alvo, 0, n, registro.trechos,
+                           "arquivo", escalas)
+    bons = serie[np.isfinite(serie)]
+    # Equilibrado: V1 de fase é o próprio valor eficaz da fase.
+    assert abs(float(np.median(bons)) - PICO / math.sqrt(2.0)) < 0.01
+
+
+def test_em_delta_a_curva_e_o_cursor_continuam_batendo():
+    """A mesma identidade por dois caminhos — soma móvel e janela única. É
+    assim que duas implementações da mesma conta divergem em silêncio."""
+    registro = _em_delta(amplitudes=(PICO, 0.4 * PICO, 0.8 * PICO),
+                         defasagens=(0.0, -150.0, 95.0))
+    escalas = {}
+    alvo = next(s for s in catalogo.de_registro(registro)
+                if s.nome.startswith("V2"))
+    n = registro.analog.shape[1]
+    serie = catalogo.serie(registro, alvo, 0, n, registro.trechos,
+                           "arquivo", escalas)
+    i = n - 40
+    por_ciclo = registro.line_frequency and (1.0 / registro.line_frequency) / (
+        registro.time[1] - registro.time[0])
+    lido = catalogo.fasor_de_componente(registro, alvo, i, por_ciclo,
+                                        "arquivo", 1.0)
+    assert lido is not None
+    assert abs(lido[0] - float(serie[i])) < 0.01

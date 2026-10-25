@@ -280,3 +280,47 @@ def test_reconhece_mesmo_com_extensao_errada(tmp_path):
 
 def test_o_leitor_esta_registrado():
     assert "comtrade" in [r.name for r in registry.readers()]
+
+
+def test_a_edicao_1991_escreve_a_data_mes_primeiro():
+    """A norma de 1991 manda `mm/dd/aa`; a de 1999 em diante, `dd/mm/aaaa`.
+    O PL300 da Ingeteam grava em 1991 — lida como dd/mm, a data saía trocada
+    e virava `None` sempre que o dia passava de 12."""
+    from datetime import datetime
+
+    from osclab.formats import comtrade
+    assert comtrade._data_hora("12/02/08,20:22:20.5", mes_primeiro=True) == \
+        datetime(2008, 12, 2, 20, 22, 20, 500000)
+    assert comtrade._data_hora("02/23/08,00:00:00", mes_primeiro=True) == \
+        datetime(2008, 2, 23)
+    # 1999 e 2013 continuam dia primeiro.
+    assert comtrade._data_hora("12/02/2008,20:22:20") == datetime(2008, 2, 12, 20, 22, 20)
+    # Data impossível na ordem da edição: vale a outra, em vez de perder a hora.
+    assert comtrade._data_hora("23/02/08,00:00:00", mes_primeiro=True) == \
+        datetime(2008, 2, 23)
+
+
+def test_ascii_com_linha_colada_nao_empurra_as_outras_amostras(tmp_path):
+    """O coletor RTAC exporta `.dat` ASCII com uma amostra cortada no meio e a
+    seguinte colada na mesma linha. Descartar a linha comprimia a onda: as
+    amostras de depois andavam para trás no tempo, sem aviso nenhum."""
+    cfg = escrever_comtrade(tmp_path, tipo="ASCII", na=3, nd=4, n=96, taxa=960.0)
+    dat = cfg.with_suffix(".dat")
+    linhas = dat.read_text(encoding="ascii").splitlines()
+    k = 40
+    cortada = linhas[k][: len(linhas[k]) // 2]          # a amostra 41 pela metade
+    linhas[k:k + 2] = [cortada + linhas[k + 1]]          # e a 42 colada nela
+    dat.write_text("\r\n".join(linhas) + "\r\n", encoding="ascii")
+
+    r = registry.read(cfg)
+    assert r.analog.shape == (3, 96)
+    esperado = esperado_analog(3, 96, 960.0, 60.0)
+    assert np.isnan(r.analog[:, k]).all()
+    bons = np.arange(96) != k
+    np.testing.assert_allclose(r.analog[:, bons], esperado[:, bons], atol=ESCALA * 2)
+    assert any("estragada" in n for n in r.notes)
+
+
+def test_ascii_sem_defeito_nao_ganha_aviso(tmp_path):
+    r = registry.read(escrever_comtrade(tmp_path, tipo="ASCII"))
+    assert not any("estragada" in n for n in r.notes)

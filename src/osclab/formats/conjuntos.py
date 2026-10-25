@@ -34,6 +34,10 @@ segundo `A`, e apagar os dois daria `B*RR*` contra `*ARRA` da fase B — dois
 conjuntos onde há um. A última ocorrência acerta os três padrões que já vimos
 (SEL, Schneider, Siemens) e não depende de os canais estarem em ordem.
 
+Quem fica sem trinca ganha uma segunda tentativa, sem todas as MARCAS de fase
+(`_sem_as_marcas`): é o que fecha `T1 Phase C Current` (o C de `CURRENT` é a
+última ocorrência) e `IA-Int.Fase A` (a fase escrita duas vezes).
+
 ## Conjunto incompleto não vira componente nenhuma
 
 Sem A, B e C não há transformação de Fortescue — há chute. Um registro com só
@@ -53,6 +57,18 @@ from osclab.formats.base import Record
 #: As três que a transformação exige. O neutro é bem-vindo e não é obrigatório:
 #: ele não entra na conta, só acompanha o conjunto na tela.
 NECESSARIAS = ("A", "B", "C")
+
+#: As três de uma trinca em DELTA: o relé gravou entre fases, não contra o
+#: neutro. `VAB`, `VBC`, `VCA` — e existe em corrente também, num TC de delta
+#: fechado (`IAB`).
+#:
+#: Uma trinca é de uma base ou da outra, nunca das duas: `VA`, `VB` e `VAB` no
+#: mesmo grupo não é trinca de nada. Ver `_agrupar`.
+NECESSARIAS_EM_DELTA = ("AB", "BC", "CA")
+
+#: Como se chama cada base, e é o que `Conjunto.base` guarda.
+FASE = "fase"
+LINHA = "linha"
 
 
 class OrigemDoConjunto(StrEnum):
@@ -116,11 +132,38 @@ class Conjunto:
     #: cabeou. Ver `analysis/presenca.py` para como se mede, e `rotular` para o
     #: que isso muda no nome dos canais VIVOS.
     sem_sinal: bool = False
+    #: Contra o quê o relé mediu: `"fase"` (contra o neutro) ou `"linha"`
+    #: (entre duas fases). Decide o que a trinca PODE produzir — em delta não
+    #: há `3V0` nem `VN`, e `V1`/`V2` precisam desfazer o √3∠±30°. Ver
+    #: `dsp/simetricas.de_lacos`.
+    #:
+    #: É campo e não dedução dos números: `VAB` e `VA` são indistinguíveis
+    #: olhando a onda, e um sistema de 13,8 kV medido em linha dá valores
+    #: perfeitamente plausíveis para um de 23,9 kV medido em fase.
+    base: str = FASE
+
+    @property
+    def e_de_linha(self) -> bool:
+        """A trinca é em delta — mediu entre fases."""
+        return self.base == LINHA
+
+    @property
+    def rotulos(self) -> tuple[str, str, str]:
+        """As três chaves de `canais` que entram na conta, nesta base."""
+        return NECESSARIAS_EM_DELTA if self.e_de_linha else NECESSARIAS
 
     @property
     def abc(self) -> tuple[int, int, int]:
-        """Os índices de A, B e C, na ordem — como a conta os quer."""
-        return (self.canais["A"], self.canais["B"], self.canais["C"])
+        """Os três índices que entram na conta, na ordem.
+
+        Em delta são `AB`, `BC`, `CA` — e NÃO são as fases A, B e C. Quem lê
+        daqui tem que olhar `base` antes de aplicar Fortescue: a mesma conta
+        sobre laços devolve números que parecem `3V0`, `V1` e `V2` e não são.
+        O nome continua `abc` porque a POSIÇÃO é a mesma (a primeira, a
+        segunda, a terceira) e renomeá-lo faria quinze chamadas mudarem sem
+        que nenhuma delas ficasse mais correta.
+        """
+        return tuple(self.canais[f] for f in self.rotulos)
 
 
 def sem_a_fase(nome: str, fase: str) -> str:
@@ -129,10 +172,52 @@ def sem_a_fase(nome: str, fase: str) -> str:
     É a chave do conjunto. Ver o cabeçalho para por que a ÚLTIMA e não todas.
     """
     limpo = (nome or "").strip().upper()
-    corte = limpo.rfind((fase or "").upper())
+    marca = (fase or "").upper()
+    corte = limpo.rfind(marca)
     if not fase or corte < 0:
         return limpo
-    return f"{limpo[:corte]}*{limpo[corte + 1:]}"
+    # `len(marca)` e não 1, por causa do laço: em `IAB` a fase é `AB`, e tirar
+    # um caractere só deixaria `I*B` contra o `I*C` de `IBC` — três conjuntos
+    # de um canal cada, onde há uma trinca em delta. Para fase simples o
+    # comprimento é 1 e nada muda.
+    return f"{limpo[:corte]}*{limpo[corte + len(marca):]}"
+
+
+def _sem_as_marcas(nome: str, fase: str) -> str | None:
+    """A SEGUNDA tentativa de chave: o nome sem TODAS as marcas de fase.
+
+    Marca de fase é a letra SOLTA (`Fase A`, `Voltage A-G`) ou colada na
+    grandeza com o terminal da SEL depois (`IA`, `IAW1`). `None` quando não
+    há marca nenhuma.
+
+    Só vale para quem a última ocorrência deixou sem trinca (ver `_agrupar`):
+    como chave principal ela erraria `IC 13.8kV:I C`, onde o `IC` do começo
+    é o nome do equipamento. Dois nomes do parque pediram isto (24/10/2026),
+    e nos dois trinca nenhuma fechava:
+
+    - o religador escreve `T1 Phase C Current`, e a ÚLTIMA ocorrência do C é a
+      de `CURRENT` — a letra dentro de uma palavra comum;
+    - o PL300 escreve `IA-Int.Fase A`, com a fase DUAS vezes: tirando só uma,
+      sobrava `IA-…` contra `IB-…`.
+    """
+    limpo = (nome or "").strip().upper()
+    marca = (fase or "").upper()
+    if not marca:
+        return None
+    m = re.escape(marca)
+    marcas = re.compile(
+        rf"(?<![A-Z0-9]){m}(?![A-Z0-9])"                       # solta
+        rf"|(?:(?<=^[IVU])|(?<=[^A-Z0-9][IVU])){m}"            # colada: IA, IAW1
+        rf"(?=[A-Z0-9]{{0,2}}(?![A-Z0-9]))")
+    achadas = list(marcas.finditer(limpo))
+    if not achadas:
+        return None
+    saida, antes = [], 0
+    for a in achadas:
+        saida.append(limpo[antes:a.start()] + "*")
+        antes = a.end()
+    saida.append(limpo[antes:])
+    return "".join(saida)
 
 
 def _chave(canal) -> tuple[str, str, OrigemDoConjunto]:
@@ -378,18 +463,46 @@ def rotulos_por_canal(registro: Record) -> dict[int, str]:
 
 
 def _agrupar(registro: Record) -> list[dict]:
-    """As trincas completas do registro, ainda sem apelido e sem veredito."""
-    juntando: dict[tuple[str, str], dict] = {}
+    """As trincas completas do registro, ainda sem apelido e sem veredito.
 
+    Duas passadas. A primeira usa a chave de sempre (`sem_a_fase`). A segunda
+    só olha os canais DEDUZIDOS que ficaram fora de toda trinca, e os junta
+    pela chave sem as marcas de fase (`_sem_as_marcas`) — assim ela pode
+    fechar a trinca do religador e a do PL300 sem mexer em nenhuma que já
+    fechava.
+    """
+    candidatos = []
     for canal in registro.analog_channels:
         padrao = fases.padrao(canal)         # "IA", "VB"... já filtra grandeza
         if not padrao:
             continue
         fase = padrao[1:]
-        if fase not in ("A", "B", "C", "N"):
+        if fase not in NECESSARIAS + NECESSARIAS_EM_DELTA + ("N",):
             continue
+        candidatos.append((canal, padrao, fase))
 
+    saida = _trincas_de(
+        [(canal, padrao, fase, *_chave(canal)[::2])
+         for canal, padrao, fase in candidatos])
+    usados = {i for d in saida for i in d["canais"].values()}
+    segunda = []
+    for canal, padrao, fase in candidatos:
+        if canal.index in usados:
+            continue
         nome, _, origem = _chave(canal)
+        if origem != OrigemDoConjunto.DEDUZIDA:
+            continue
+        outra = _sem_as_marcas(getattr(canal, "name", ""), fase)
+        if outra is not None:
+            segunda.append((canal, padrao, fase, outra, origem))
+    return saida + _trincas_de(segunda)
+
+
+def _trincas_de(canais) -> list[dict]:
+    """Junta `(canal, padrao, fase, chave, origem)` por chave e unidade, e
+    devolve só os grupos que fecham uma trinca."""
+    juntando: dict[tuple[str, str], dict] = {}
+    for canal, padrao, fase, nome, origem in canais:
         unidade = canal.unit.strip()
         alvo = juntando.setdefault((nome, unidade), {
             "nome": nome, "grandeza": padrao[0], "unidade": unidade,
@@ -400,8 +513,20 @@ def _agrupar(registro: Record) -> list[dict]:
         # primeiro — só menos previsível.
         alvo["canais"].setdefault(fase, canal.index)
 
-    return [d for d in juntando.values()
-            if all(f in d["canais"] for f in NECESSARIAS)]
+    # Fase OU delta, nunca os dois. Um grupo que tivesse `VA`, `VB`, `VC` e
+    # `VAB` não é trinca dupla: é um nome que casou com canais de naturezas
+    # diferentes, e misturá-los daria componentes somando volt de fase com
+    # volt de linha. A base completa vence; com as duas completas vence a de
+    # fase, que é a que produz mais coisa (tem resíduo e tem 3V0).
+    saida = []
+    for d in juntando.values():
+        em_fase = all(f in d["canais"] for f in NECESSARIAS)
+        em_delta = all(f in d["canais"] for f in NECESSARIAS_EM_DELTA)
+        if not em_fase and not em_delta:
+            continue
+        d["base"] = FASE if em_fase else LINHA
+        saida.append(d)
+    return saida
 
 
 def canais_sem_sinal(registro: Record) -> frozenset[int]:
@@ -434,17 +559,17 @@ def canais_sem_sinal(registro: Record) -> frozenset[int]:
     return frozenset(mortos)
 
 
-def _escolhidos(canais: dict[str, int], escolha) -> dict[str, int]:
+def _escolhidos(canais: dict[str, int], escolha, base: str) -> dict[str, int]:
     """Os canais da trinca com a correção do usuário por cima.
 
-    Só A, B e C se corrigem — são os que entram na transformação de Fortescue.
-    O residual acompanha a trinca e não entra na conta; quem o pendura é
-    `_pendurados`, pelo nome.
+    Só as três da conta se corrigem — `A`, `B`, `C` numa trinca de fase;
+    `AB`, `BC`, `CA` numa em delta. O residual acompanha a trinca e não entra
+    na conta; quem o pendura é `_pendurados`, pelo nome.
     """
     if not isinstance(escolha, dict):
         return canais
     saida = dict(canais)
-    for fase in NECESSARIAS:
+    for fase in (NECESSARIAS_EM_DELTA if base == LINHA else NECESSARIAS):
         valor = escolha.get(fase)
         if isinstance(valor, int) and valor >= 0:
             saida[fase] = valor
@@ -467,11 +592,13 @@ def _completos(registro: Record) -> list[Conjunto]:
     escolhas = getattr(registro, "trincas_escolhidas", None) or {}
     completos = []
     for d in _agrupar(registro):
-        canais = _escolhidos(d["canais"], escolhas.get(d["nome"]))
+        base = d.get("base", FASE)
+        canais = _escolhidos(d["canais"], escolhas.get(d["nome"]), base)
         completos.append((
             min(d["canais"].values()),
             Conjunto(nome=d["nome"], grandeza=d["grandeza"],
                      unidade=d["unidade"], canais=canais, origem=d["origem"],
+                     base=base,
                      sem_sinal=bool(set(canais.values()) <= mortos) if mortos
                      else False),
         ))

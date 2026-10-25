@@ -15,6 +15,15 @@ __pycache__/
 /cache/
 /library/
 
+# A BASE DE DADOS do usuario: dicionario de sinais, parametros de linha, KMZ
+# das estruturas e o historico de registros. NAO entra no repositorio, que e'
+# publico — e' dado da distribuidora. A barra na frente pelo mesmo motivo de
+# cima: `base` sem ela barraria `src/osclab/formats/base.py`.
+/base/
+/database/
+/base-*/
+/bases.json
+
 # Configuracao real: tem IP e senha de equipamento. O modelo versionado e' o
 # config/config.ini.example. Uma senha de subestacao commitada fica no
 # historico para sempre.
@@ -26,6 +35,11 @@ config/config.ini
 /dist/
 /build/
 
+# Notas com DADO DA EMPRESA: nomes de subestacao e de linha, parametros reais
+# do estudo de curto, casos reais de falta. O repositorio e' publico. O que
+# entra em docs/ e' o dado factual escrito com as nossas palavras.
+/docs-privados/
+
 # Ferramentas e editores
 .pytest_cache/
 .ruff_cache/
@@ -36,3 +50,6 @@ config/config.ini
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# configuração pessoal do Claude Code (permissões desta máquina)
+/.claude/settings.local.json

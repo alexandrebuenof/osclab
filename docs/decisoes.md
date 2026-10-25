@@ -22,6 +22,7 @@ rediscutir a mesma coisa daqui a três meses.
 | **Arquitetura** | Modelo PAC CT, com ajustes | Ver `referencia-pac-ct.md` |
 | **Alinhamento** | Descontinuidade como via principal | O GPS da distribuidora não é confiável |
 | **Diagnósticos** | Mostrar e permitir corrigir | Avisa, nunca bloqueia; palpite nunca vira certeza |
+| **Onde o cursor está** | A barra da onda, espelho do analógico | A tela é alta e o gráfico sai por cima; a barra aparece só com o cursor em movimento e sem analógico à vista, e espelha em vez de recalcular — se as duas discordassem, não haveria como saber qual acreditar |
 
 ## Para manter a porta do `.exe` aberta
 

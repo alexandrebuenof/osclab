@@ -155,10 +155,43 @@
     const cabecalho = criar("div", "registro-topo");
     const titulo = criar("h3");
     const link = criar("a", null, item.nome);
-    link.href = `/onda/${item.sha}`;
+    // Abre nas ABAS: o registro entra numa aba nova, ao lado das que já
+    // estão abertas. Ver `templates/abas.html`.
+    link.href = `/abas?abrir=${encodeURIComponent(item.sha)}`;
     titulo.append(link);
     cabecalho.append(titulo);
-    const remover = criar("button", "remover", "remover");
+    /* O SELO do tipo de falta, antes de abrir o registro. Procurar «aquela
+       bifásica de terça» numa lista de quarenta arquivos é o que o acervo
+       fazia mal: a classificação já foi feita na importação, e mostrá-la
+       aqui não custa uma leitura a mais. Escolha dele, 20/10/2026. */
+    if (item.falta_tipo) {
+      // A cor é a das fases da falta; a confiança é o pontinho ao lado. O
+      // hover vem pronto do servidor, igual ao da tira do registro.
+      const selo = criar("b", `selo-da-falta ${item.falta_cor || ""}`,
+                         item.falta_sigla || item.falta_tipo);
+      selo.title = item.falta_dica || "o tipo da falta que o OscLab leu deste registro";
+      const ponto = criar("i", `ponto-da-confianca ${item.falta_confianca || ""}`);
+      ponto.title = selo.title;
+      const caixa = criar("span", "selo-com-ponto");
+      caixa.append(selo);
+      // O raio: o relé disparou. Sem trip, nada (a ausência não afirma que
+      // ele restringiu).
+      if (item.falta_trip) {
+        const raio = criar("i", "raio-do-trip", "⚡︎");
+        raio.title = selo.title;
+        caixa.append(raio);
+      }
+      caixa.append(ponto);
+      cabecalho.append(caixa);
+    } else if (item.versao_do_resumo >= 2) {
+      /* Vazio só depois que o classificador rodou: aí «sem falta» quer
+         dizer «olhei e não achei», que é diferente de «não olhei». */
+      const selo = criar("b", "selo-da-falta vazio", "sem falta");
+      selo.title = "O OscLab não achou descontinuidade nas correntes deste registro.";
+      cabecalho.append(selo);
+    }
+
+    const remover = criar("button", "botao-x remover-do-acervo", "×");
     remover.type = "button";
     remover.title = "Tirar este registro do acervo";
     remover.addEventListener("click", () => removerItem(item));
@@ -183,6 +216,19 @@
 
     if (item.arquivos && item.arquivos.length) {
       el.append(criar("p", "arquivos", item.arquivos.join("  ")));
+    }
+
+    /* Sem o `.hdr` (ou um `.cev`, que já traz tudo), este registro não tem
+       lógica nem ajuste para mostrar — e o COMTRADE não os prevê. Dizer isto
+       aqui, na hora do envio, é mais barato do que deixar descobrir no painel
+       vazio lá dentro: ainda dá para arrastar o arquivo que falta. */
+    const nomes = (item.arquivos || []).map((x) => x.toLowerCase());
+    const temLogica = nomes.some((x) => x.endsWith(".hdr") || x.endsWith(".cev")
+                                     || x.endsWith(".cff"));
+    if (!temLogica) {
+      el.append(criar("p", "sem-logica",
+        "sem lógica/ajustes — o COMTRADE não os prevê; mande o .hdr junto "
+        + "para o relatório do relé vir também"));
     }
     // Duas coisas diferentes, e é de propósito que só uma leva triângulo.
     //

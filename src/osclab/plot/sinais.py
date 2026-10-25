@@ -45,13 +45,28 @@ com sorte — em cada um dos outros lugares.
 `IAW · 60Hz RMS` é o nome — em texto puro, o mesmo na legenda, na tabelinha, no
 relatório e na fórmula.
 
-Houve uma versão em que a frequência ia em **subscrito**, para o nome ocupar
-menos: o servidor mandava o nome partido em três (`("IAW ·", "60Hz", "RMS")`) e
-a tela encolhia o do meio. Saiu. O que se ganhava em largura se perdia em
-leitura — `IAW ·60Hz` com o ponto colado no subscrito lê-se pior que
-`IAW · 60Hz` —, e o nome passava a existir em duas formas, com um teste só para
-garantir que as duas diziam a mesma coisa. Uma forma só é mais barata que duas
-formas conferidas.
+Houve uma versão em que a frequência ia em **subscrito**, e ela saiu: o servidor
+mandava o nome partido em três (`("IAW ·", "60Hz", "RMS")`), e o nome passava a
+existir em duas formas, com um teste só para garantir que as duas diziam a mesma
+coisa. Uma forma só é mais barata que duas formas conferidas.
+
+O subscrito VOLTOU em 12/10/2026, por escolha do Alexandre, **sem esse defeito**:
+o servidor continua mandando UMA string — `IAW · 60Hz RMS`, a que vai para o
+relatório, para a fórmula e para a busca — e quem a parte é a TELA, na hora de
+desenhar (`escreverNome`, em `web/static/js/onda.js`). O `·` não é desenhado:
+quem separa é a posição, e por isso o problema de leitura da versão antiga
+(`IAW ·60Hz`, com o ponto colado no subscrito) não existe aqui.
+
+As marcas são coloridas com as MESMAS cores das fatias da barra de energia do
+cartão — turquesa é 60 Hz, rosa é contínua, e o RMS fica na cor do texto porque
+não é fatia nenhuma: é o total. A cor reforça, não carrega — tamanho e posição
+já distinguem as marcas sem ela, que é o que mantém o nome legível impresso em
+preto e branco.
+
+**Anotado para o futuro:** o Alexandre quer que essa notação vire **escolha do
+usuário** — subscrito, pastilha, nome corrido. Por isso a partição mora em UM
+lugar só na tela; trocar de família será trocar essa função, não caçar o nome
+por vinte arquivos.
 
 ## Por que não `IA₁` para a fundamental
 

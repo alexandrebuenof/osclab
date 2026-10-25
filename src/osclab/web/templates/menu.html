@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OscLab</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/osclab.css') }}">
+  <script src="{{ url_for('static', filename='js/tema.js') }}"></script>
+</head>
+<body class="tela-do-menu">
+  <header class="topo">
+    <div class="marca">
+      {#- O logotipo «Trinca» (L4): tres ondas defasadas de 120 graus, nas
+          cores de fase do programa. E' o que o programa olha o dia inteiro, e
+          as cores sao as mesmas dos tracos -- quem aprende a figura aqui le'
+          o grafico depois. #}
+      <svg class="logotipo" viewBox="0 0 56 32" width="56" height="32"
+           role="img" aria-label="OscLab">
+        <path d="M2 16 C7 2, 13 2, 18 16 S29 30, 34 16 S45 2, 50 16"
+              fill="none" stroke="var(--fase-a)" stroke-width="2.4"
+              stroke-linecap="round"/>
+        <path d="M2 16 C7 30, 13 30, 18 16 S29 2, 34 16 S45 30, 50 16"
+              fill="none" stroke="var(--fase-c)" stroke-width="2.4"
+              stroke-linecap="round" opacity=".92"/>
+        <path d="M6 16 C11 4, 17 28, 22 16 S33 4, 38 16 S49 28, 54 16"
+              fill="none" stroke="var(--fase-b)" stroke-width="2.4"
+              stroke-linecap="round" opacity=".85"/>
+      </svg>
+      <div>
+        <h1>OscLab</h1>
+        <p class="sub">Leitor e analisador de oscilografia</p>
+      </div>
+    </div>
+    <div class="acoes">
+      <button type="button" class="chave tema com-icone" id="tema"
+              style="--ic: var(--ic-tema)"
+              title="Alternar tema">tema</button>
+      {#- A versao e' BOTAO: quem olha para ela esta' perguntando «que programa
+          e' este, e de quem» -- e a resposta inteira (licenca, titularidade,
+          formatos) nao cabe num canto do cabecalho. #}
+      <button type="button" class="versao" id="sobre"
+              title="Sobre o OscLab: versão, licença e titularidade">v{{ versao }}</button>
+    </div>
+  </header>
+
+  <main class="menu">
+    <p class="chamada">Escolha o que você vai analisar.</p>
+
+    {#- A BASE DE DADOS, no mesmo lugar nos dois momentos.
+
+        Enquanto ela não existe, uma tarja âmbar chama -- e diz na mesma frase
+        que o programa funciona sem ela, porque funciona mesmo: a base acelera,
+        nunca destrava. Depois que existe, o mesmo lugar vira uma linha de
+        estado, que informa e nao chama.
+
+        Dois estados e um lugar so': um botao fixo no mosaico competiria com os
+        quatro modulos, e a base nao e' um modo de analise. #}
+    {% if base.tem %}
+    <p class="linha-da-base">
+      <span class="icone-mascara ic" style="--ic: var(--ic-base);
+            width: 15px; height: 15px"></span>
+      <span>Base de dados:</span>
+      {% for g in base.gavetas %}
+      <span class="cont{{ '' if g.ligada else ' apagada' }}"
+            title="{{ g.nome }} — {{ 'ligada' if g.ligada else 'desligada: ' ~ g.sem }}"
+        >{{ g.nome|lower }} {{ g.itens|milhar }}</span>
+      {% endfor %}
+      {#- «editar», e não «gerenciar»: é por aqui que se escolhe quais gavetas
+          da database ficam habilitadas, e editar é o que se vai fazer lá.
+          Escolha dele, 19/10/2026. #}
+      <a class="chave gerenciar" href="/base">editar database</a>
+    </p>
+    {% else %}
+    <div class="aviso-da-base">
+      <span class="icone-mascara ic" style="--ic: var(--ic-base);
+            width: 24px; height: 24px"></span>
+      <div>
+        <p>Você ainda não tem uma base de dados.</p>
+        <p class="sub">
+          Sem ela o programa funciona igual — só não sabe o nome dos digitais
+          do seu relé nem os parâmetros das suas linhas.
+        </p>
+      </div>
+      <a class="chave escolhido" href="/base">criar ou escolher</a>
+    </div>
+    {% endif %}
+
+    {#- MOSAICO (I1): os modulos como cartoes IGUAIS, e so' a cor diz qual
+        esta' pronto. Cartoes de tamanhos diferentes diriam que um modulo e'
+        mais importante que o outro, e o que muda entre eles e' o calendario,
+        nao a importancia.
+
+        Os futuros ficam apagados e CLICAVEIS: o clique abre a nota do que ele
+        vai fazer. Botao apagado que nao responde a nada e' a tela discutindo
+        com quem clicou. #}
+    <div class="mosaico">
+      <a class="modulo pronto" href="/arquivos">
+        <span class="icone-do-modulo">
+          {#- 1.1 «Onda com o disparo». Os quatro icones sao os que ele
+              escolheu no estudo de estetica -- 1.1, 2.1, 3.3 e 4.1 --,
+              copiados tal e qual de la'. A cor vem do CARTAO
+              (`currentColor`): escrita no desenho, ela ficaria presa a um
+              tema e o modulo pronto nao acenderia o icone dele. #}
+          <svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true" stroke="currentColor" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M0.0,12.0L0.3,11.0L0.6,10.1L0.9,9.1L1.3,8.2L1.6,7.3L1.9,6.5L2.2,5.7L2.5,5.0L2.9,4.4L3.2,3.9L3.5,3.4L3.8,3.1L4.1,2.8L4.4,2.7L4.8,2.6L5.1,2.7L5.4,2.8L5.7,3.1L6.0,3.4L6.3,3.9L6.7,4.4L7.0,5.0L7.3,5.7L7.6,6.5L7.9,7.3L8.2,8.2L8.6,9.1L8.9,10.1L9.2,11.0L9.5,12.0L9.8,13.0L10.1,13.9L10.4,14.9L10.8,15.8L11.1,16.7L11.4,17.5L11.7,18.3L12.0,19.0L12.3,19.6L12.7,20.1L13.0,20.6L13.3,20.9L13.6,21.2L13.9,21.3L14.2,21.4L14.6,21.3L14.9,21.2L15.2,20.9L15.5,20.6L15.8,20.1L16.1,19.6L16.5,19.0L16.8,18.3L17.1,17.5L17.4,16.7L17.7,15.8L18.1,14.9L18.4,13.9L18.7,13.0L19.0,12.0L19.3,11.0L19.6,10.1L19.9,9.1L20.3,8.2L20.6,7.3L20.9,6.5L21.2,5.7L21.5,5.0L21.9,4.4L22.2,3.9L22.5,3.4L22.8,3.1L23.1,2.8L23.4,2.7L23.8,2.6L24.1,2.7L24.4,2.8L24.7,3.1L25.0,3.4L25.3,3.9L25.6,4.4L26.0,5.0L26.3,5.7L26.6,6.5L26.9,7.3L27.2,8.2L27.6,9.1L27.9,10.1L28.2,11.0L28.5,12.0L28.8,13.0L29.1,13.9L29.4,14.9L29.8,15.8L30.1,16.7L30.4,17.5L30.7,18.3L31.0,19.0L31.4,19.6L31.7,20.1L32.0,20.6L32.3,20.9L32.6,21.2L32.9,21.3L33.2,21.4L33.6,21.3L33.9,21.2L34.2,20.9L34.5,20.6L34.8,20.1L35.1,19.6L35.5,19.0L35.8,18.3L36.1,17.5L36.4,16.7L36.7,15.8L37.0,14.9L37.4,13.9L37.7,13.0L38.0,12.0" transform="translate(5,12)"/><line x1="18" y1="6" x2="18" y2="42" stroke-dasharray="4 3" opacity="0.8"/></svg>
+        </span>
+        <span class="nome-do-modulo">Oscilografia</span>
+        <span class="dizer-do-modulo">
+          Abrir registros COMTRADE, medir com cursores, ver fasores e espectro.
+        </span>
+        <span class="selo pronto">disponível</span>
+      </a>
+
+      <button type="button" class="modulo futuro" data-modulo="linhas">
+        <span class="icone-do-modulo">
+          {#- 2.1 «Dois vaos e o condutor». NAO o 2.2, que traz a falta
+              marcada em vermelho: a escolha dele foi o vao limpo. #}
+          <svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true" stroke="currentColor" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="11" y1="40" x2="11" y2="14"/><line x1="5" y1="18" x2="17" y2="18"/><line x1="7" y1="24" x2="15" y2="24"/><line x1="37" y1="40" x2="37" y2="14"/><line x1="31" y1="18" x2="43" y2="18"/><line x1="33" y1="24" x2="41" y2="24"/><path d="M11 18 Q24 28 37 18"/></svg>
+        </span>
+        <span class="nome-do-modulo">Linhas</span>
+        <span class="dizer-do-modulo">
+          Localização de falta em linhas, comparando os métodos no mesmo
+          registro.
+        </span>
+        <span class="selo">em breve</span>
+      </button>
+
+      <button type="button" class="modulo futuro" data-modulo="subestacao">
+        <span class="icone-do-modulo">
+          {#- 3.3 «Trafo, barra e vaos». #}
+          <svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true" stroke="currentColor" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="13" r="6.5"/><circle cx="24" cy="22" r="6.5"/><line x1="24" y1="29" x2="24" y2="33"/><line x1="7" y1="33" x2="41" y2="33"/><line x1="12" y1="33" x2="12" y2="42"/><rect x="9" y="38" width="6" height="4" rx="1"/><line x1="24" y1="33" x2="24" y2="42"/><rect x="21" y="38" width="6" height="4" rx="1"/><line x1="36" y1="33" x2="36" y2="42"/><rect x="33" y="38" width="6" height="4" rx="1"/></svg>
+        </span>
+        <span class="nome-do-modulo">Trafo e alimentadores</span>
+        <span class="dizer-do-modulo">
+          Energização, inrush e faltas em alimentadores, com o que distingue
+          cada uma.
+        </span>
+        <span class="selo">em breve</span>
+      </button>
+
+      <button type="button" class="modulo futuro" data-modulo="viajantes">
+        <span class="icone-do-modulo">
+          {#- 4.1 «Diagrama de Bewley». #}
+          <svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true" stroke="currentColor" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="7" x2="10" y2="41"/><line x1="38" y1="7" x2="38" y2="41"/><line x1="10" y1="9" x2="38" y2="19" stroke="currentColor"/><line x1="38" y1="19" x2="10" y2="29" stroke="currentColor"/><line x1="10" y1="29" x2="38" y2="39" stroke="currentColor"/><line x1="38" y1="39" x2="10" y2="41" stroke="currentColor"/></svg>
+        </span>
+        <span class="nome-do-modulo">Ondas viajantes</span>
+        <span class="dizer-do-modulo">
+          Registros de alta taxa e localização pelo tempo de chegada da onda.
+        </span>
+        <span class="selo">em breve</span>
+      </button>
+    </div>
+</main>
+
+  {#- A nota de um modulo futuro. O texto de cada um vem do cartao, que ja' o
+      tem escrito -- duas copias da mesma frase seriam duas para corrigir. #}
+  <dialog class="busca janela-do-modulo" id="janela-do-modulo">
+    <div class="cabeca">
+      <h3 id="titulo-do-modulo"></h3>
+      <button type="button" class="fechar" id="fechar-modulo"
+              title="fechar">×</button>
+    </div>
+    <p class="dizer-da-nota" id="dizer-do-modulo"></p>
+    <p class="sobre-rodape">
+      Ainda não existe, e não tem data. O que está pronto é o módulo de
+      oscilografia — este botão fica aqui para dizer aonde a ferramenta vai,
+      não para prometer quando.
+    </p>
+  </dialog>
+
+  {#- A janelinha «sobre». O texto mora aqui, com o resto das palavras da
+      pagina, e nao dentro do JavaScript. #}
+  <dialog class="busca janela-sobre" id="janela-sobre">
+    <div class="cabeca">
+      <h3>Sobre o OscLab</h3>
+      <button type="button" class="fechar" id="fechar-sobre"
+              title="fechar">×</button>
+    </div>
+
+    <p class="sobre-linha">Leitor e analisador de oscilografia</p>
+
+    <dl class="sobre-fatos">
+      <dt>versão</dt>
+      <dd>{{ versao }}</dd>
+
+      <dt>licença</dt>
+      <dd>
+        <b>AGPL-3.0-or-later</b> — permite uso comercial. O que ela exige é
+        outra coisa: quem distribuir o programa, <b>ou servi-lo pela rede</b>,
+        entrega o código-fonte junto, sob esta mesma licença, incluindo as
+        modificações.
+      </dd>
+
+      <dt>titularidade</dt>
+      <dd>
+        Os direitos patrimoniais pertencem à distribuidora de energia para a
+        qual o programa foi desenvolvido.
+      </dd>
+    </dl>
+
+    <p class="sobre-rodape">
+      <a href="/saude">/saude</a> diz o que esta instalação está enxergando —
+      pastas, formatos e versão — quando houver dúvida sobre qual cópia está
+      rodando.
+    </p>
+  </dialog>
+
+  <script src="{{ url_for('static', filename='js/menu.js') }}"></script>
+</body>
+</html>

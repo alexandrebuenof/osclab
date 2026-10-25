@@ -261,6 +261,15 @@ def _linhas(registro: Record, i: int, lado: str, escalas: dict,
             yield identidade, linha
             continue
 
+        # Conta do usuário: é ONDA como o resíduo, e lê-se igual. A diferença
+        # é só de onde a onda vem — de uma expressão em vez de uma soma fixa.
+        if sinal.familia == "conta":
+            linha.update(_linha_de_conta(
+                registro, sinal, i, lado, escalas, divisor, por_ciclo,
+                angulo_zero, ate if identidade in quer_espectro else 0))
+            yield identidade, linha
+            continue
+
         # Resíduo (`IN`, `VN`): é ONDA, não fasor. Soma-se as três fases
         # amostra a amostra e lê-se o resultado como se lê qualquer canal —
         # com instantâneo, eficaz verdadeiro, DC e distorção. É justamente
@@ -290,6 +299,57 @@ def _linhas(registro: Record, i: int, lado: str, escalas: dict,
             "lado": lado, "convertido": True,
         })
         yield identidade, linha
+
+
+def _linha_de_conta(registro: Record, sinal, i: int, lado: str, escalas: dict,
+                    divisor: float, por_ciclo: float,
+                    angulo_zero: float | None,
+                    espectro_ate: int = 0) -> dict:
+    """A leitura de uma conta do usuário no instante `i`.
+
+    A onda sai do registro INTEIRO, como a do resíduo: o fasor deste instante
+    precisa do ciclo que vem antes dele.
+
+    Conta que não compila devolve tudo vazio, sem erro: o motivo já está no
+    catálogo, ao lado do nome dela, e repeti-lo em cada célula da tabela não
+    acrescentaria nada.
+    """
+    from osclab.plot import contas as contas_mod
+
+    vazio = {"valor": None, "casas": 1, "instantaneo": None,
+             "casas_instantaneo": 1, "fundamental": None, "angulo": None,
+             "rms": None, "dc": None, "dc_valor": None, "distorcao": None,
+             "filtrado": None, "lado": lado, "convertido": True}
+
+    # A análise que o catálogo já fez: reanalisar aqui custaria uma leitura
+    # da expressão por sinal a CADA movimento do cursor.
+    analise = getattr(sinal, "analise", None) or contas_mod.analisar(
+        sinal.expressao, registro, escalas, getattr(sinal, "contas_antes", ()))
+    onda = contas_mod.serie(registro, analise, lado, divisor)
+    if onda is None or not (0 <= i < onda.size):
+        return vazio
+
+    instantaneo = _num(float(onda[i]))
+    linha = dict(vazio)
+    linha.update(_fasor_da_onda(onda, i, por_ciclo, 1.0, angulo_zero))
+    if espectro_ate:
+        linha.update(_espectro_da_onda(onda, i, por_ciclo, 1.0, espectro_ate))
+    linha["instantaneo"] = instantaneo
+    linha["casas_instantaneo"] = casas(instantaneo)
+    linha["valor"], linha["casas"] = instantaneo, casas(instantaneo)
+    if sinal.conta == "rms":
+        linha["valor"], linha["casas"] = linha["rms"], linha["casas_rms"]
+    elif sinal.conta == "fundamental":
+        linha["valor"], linha["casas"] = (linha["fundamental"],
+                                          linha["casas_fasor"])
+    elif sinal.conta == "filtrado":
+        linha["valor"], linha["casas"] = (linha["filtrado"],
+                                          linha["casas_filtrado"])
+    elif sinal.conta == "dc":
+        linha["valor"], linha["casas"] = linha["dc_valor"], linha["casas_dc"]
+    linha["lado"] = lado
+    linha["convertido"] = True
+    return linha
 
 
 def _linha_de_residuo(registro: Record, sinal, i: int, lado: str,
@@ -359,6 +419,19 @@ def _fasor_do_canal(registro: Record, canal, i: int, lado: str, divisor: float,
                           angulo_zero)
 
 
+def _ciclo_antes(onda, inicio: int, i: int):
+    """A mesma janela um ciclo atrás, ou `None` quando ela não cabe.
+
+    `None` no primeiro ciclo do arquivo é de propósito: ali não há com o que
+    comparar, e inventar um aviso por falta de dado seria pior que calar.
+    """
+    largura = i + 1 - inicio
+    recuo = inicio - largura
+    if recuo < 0:
+        return None
+    return np.asarray(onda[recuo:inicio], dtype=np.float64)
+
+
 def _espectro_da_onda(onda, i: int, por_ciclo: float, fator: float,
                       ate: int) -> dict:
     """As raias de harmônico de uma onda, na MESMA janela do fasor.
@@ -384,10 +457,27 @@ def _espectro_da_onda(onda, i: int, por_ciclo: float, fator: float,
         return {"harmonicos": None, "thd": None,
                 "teto": fasor.ordens_mediveis(por_ciclo)}
     thd = fasor.distorcao_do_espectro(raias)
+    # A CONTÍNUA da mesma janela: a média de um ciclo de tempo, pelos mesmos
+    # pesos da DFT. É a raia de ordem ZERO do espectro — o desenho a mostra
+    # como primeira barra, à esquerda da fundamental (escolha dele, 15/10, e é
+    # o que a SEL faz).
+    #
+    # Sem raiz de dois: uma contínua não tem valor de pico que se converta em
+    # eficaz, ela É o valor. Assim ela fecha com a identidade de Parseval que a
+    # barra de energia já usa (RMS² = DC² + RMS60² + harmônicos²).
+    continua = float(np.dot(pesos, janela) / float(pesos.sum()))
     return {
         "harmonicos": [_num(float(v) * fator) for v in raias],
+        "continua": _num(abs(continua) * fator),
         "thd": None if thd is None else round(thd, 1),
         "teto": fasor.ordens_mediveis(por_ciclo),
+        # Se esta janela está em REGIME. Não muda barra nenhuma: é o aviso de
+        # que uma parte do que se vê pode ser vazamento da transição, e não
+        # harmônico do sinal. A comparação é com a MESMA janela um ciclo
+        # atrás — ver `fasor.regime_da_janela`, que traz a medição.
+        "fora_de_regime": bool(
+            fasor.regime_da_janela(janela, _ciclo_antes(onda, inicio, i))
+            >= fasor.LIMIAR_DE_REGIME),
     }
 
 
@@ -562,12 +652,30 @@ def espectro_entre(registro: Record, a: dict, b: dict, lado: str,
         if raias is None:
             continue
         thd = fasor.distorcao_do_espectro(raias)
+        # A LINHA do espectro: toda raia da janela, de `1/ciclos` em
+        # `1/ciclos` de ordem. É o desenho; as barras de harmônico continuam
+        # sendo as de cima, que são as que a tabela e o THD usam.
+        fino = fasor.espectro(janela_, n_janela, pesos,
+                              harmonicos_mod.ORDENS_DESENHADAS, inteiros, fino=True)
+        continua = float(np.dot(pesos, janela_) / float(pesos.sum()))
         saida[identidade] = {
             "harmonicos": [_num(float(v) * fator) for v in raias],
+            "fino": ([] if fino is None
+                     else [_num(float(v) * fator) for v in fino]),
+            "continua": _num(abs(continua) * fator),
             "fundamental": _num(float(raias[0]) * fator),
             "casas_fasor": casas(float(raias[0]) * fator),
             "thd": None if thd is None else round(thd, 1),
             "teto": fasor.ordens_mediveis(por_ciclo),
+            # O mesmo aviso, e vale ainda mais aqui: um trecho de dez ciclos
+            # que começa antes da falta e termina depois mede o espectro de
+            # duas coisas ao mesmo tempo. Num trecho de N ciclos o par a
+            # comparar é o PRIMEIRO ciclo contra o ÚLTIMO — é a mesma
+            # pergunta ("isto se repetiu?") na escala do trecho.
+            "fora_de_regime": bool(
+                fasor.regime_da_janela(janela_[-int(por_ciclo):],
+                                       janela_[:int(por_ciclo)])
+                >= fasor.LIMIAR_DE_REGIME),
         }
     return {"ciclos": inteiros, "ciclos_pedidos": round(pedidos, 2),
             "erro": "", "sinais": saida}
@@ -604,7 +712,8 @@ def entre(registro: Record, a: dict, b: dict) -> dict:
 
 def em(registro: Record, pedidos: list[tuple[float | None, int, float]],
        lado: str = "arquivo", refere: int | None = None,
-       filtro: bool = False, layout: list | None = None) -> dict:
+       filtro: bool = False, layout: list | None = None,
+       contas: list | None = None) -> dict:
     """A leitura dos cursores.
 
     Cada pedido é `(instante_em_segundos, passo_em_amostras, passo_em_ciclos)`.
@@ -629,7 +738,7 @@ def em(registro: Record, pedidos: list[tuple[float | None, int, float]],
     # painéis, e a tela casa cada linha pelo `id` que pediu. O mesmo canal em
     # dois painéis com medidas diferentes são dois pedidos diferentes, e os
     # dois têm que sair na resposta.
-    por_id = catalogo.por_id(registro, lado)
+    por_id = catalogo.por_id(registro, lado, contas or ())
     acrescentados = []
     for painel in (layout or []):
         if painel.tipo == paineis_mod.ANALOGICO:
@@ -660,6 +769,17 @@ def em(registro: Record, pedidos: list[tuple[float | None, int, float]],
                 ja_pedidos.add(identidade)
                 acrescentados.append((identidade, alvo))
     for painel in (layout or []):
+        if painel.tipo == paineis_mod.TRIANGULO:
+            # O triângulo quer os seis do vínculo. Eles não estão em
+            # `painel.sinais` — o painel guarda o vínculo, não os ids.
+            from osclab.plot import triangulo as triangulo_mod
+            for identidade in triangulo_mod.sinais_do_vinculo(
+                    registro, painel.vinculo or ""):
+                alvo = por_id.get(identidade)
+                if alvo is not None and identidade not in ja_pedidos:
+                    ja_pedidos.add(identidade)
+                    acrescentados.append((identidade, alvo))
+            continue
         if painel.tipo != paineis_mod.FASORIAL:
             continue
         # O fasor é da LINHA: nem o filtro nem a medida mexem nele, então o

@@ -15,6 +15,7 @@ filtrado.
 from __future__ import annotations
 
 import re
+import unicodedata
 from enum import StrEnum
 
 from osclab.formats.base import AnalogChannel, StatusChannel
@@ -29,6 +30,26 @@ class OrigemDaFase(StrEnum):
 
 #: Como cada fabricante chama o neutro/residual. Tudo vira "N".
 _NEUTRO = {"N", "G", "E", "0"}
+
+#: As três fases, quando o canal mede contra o neutro.
+FASES = ("A", "B", "C")
+
+#: Os três LAÇOS, quando o canal mede entre duas fases.
+#:
+#: `VAB` não é "a fase A": é a diferença entre duas fases, e tratá-lo como
+#: fase A é o erro que faz o resíduo dar zero por identidade (VAB+VBC+VCA ≡ 0)
+#: e o 3V0 sair como um número que parece medido e não é.
+#:
+#: Existem em corrente também: um TC de delta fechado mede `IAB`.
+LACOS = ("AB", "BC", "CA")
+
+#: Para cada laço, o par de fases que ele liga — na ordem em que o nome diz.
+PARES_DO_LACO = {"AB": ("A", "B"), "BC": ("B", "C"), "CA": ("C", "A")}
+
+
+def e_de_linha(fase: str) -> bool:
+    """Se este vínculo é um LAÇO (entre fases) e não uma fase contra o neutro."""
+    return (fase or "").strip().upper() in LACOS
 
 #: Quantos caracteres o TERMINAL pode ter depois da letra da fase.
 #:
@@ -63,17 +84,27 @@ _NEUTRO_SOZINHO = re.compile(r"(?:^|[^A-Z0-9])([NGE])(?:[^A-Z0-9]|$)",
 #: O `{_TERMINAL}` do fim é pelo mesmo motivo do `_SEL`: o SEL-787 escreve o
 #: neutro de cada enrolamento como `IGW1` e `IGW2`, e o de outro ponto como
 #: `IN1`. Sem ele, três canais de neutro ficavam sem fase nenhuma.
+#: O ponto não fecha o residual: a Ingeteam abrevia intensidade como `Int.`
+#: (`IA-Int.Fase A`), e `INT` + `.` casava como neutro de terminal `T` — as
+#: três fases de todo PL300 do parque viravam `IN`, e trinca nenhuma fechava.
 _RESIDUAL = re.compile(
     rf"(?:^|[^A-Z0-9])(3[IVU]0|[IVU][NGE]{{1,2}}|[IVU]X){_TERMINAL}"
-    rf"(?:[^A-Z0-9]|$)", re.IGNORECASE)
+    rf"(?:[^A-Z0-9.]|$)", re.IGNORECASE)
 
 
 def _normalizar(bruta: str) -> str:
-    """`G`, `E` e `0` viram `N`; o resto vira maiúscula ou some."""
+    """`G`, `E` e `0` viram `N`; o resto vira maiúscula ou some.
+
+    Aceita também os LAÇOS `AB`, `BC` e `CA` — a medição entre duas fases.
+    Ver `LACOS`: ela não é uma fase, e o programa inteiro precisa saber a
+    diferença.
+    """
     limpa = (bruta or "").strip().upper()
     if limpa in _NEUTRO:
         return "N"
-    return limpa if limpa in ("A", "B", "C") else ""
+    if limpa in LACOS:
+        return limpa
+    return limpa if limpa in FASES else ""
 
 
 def deduzir(nome: str) -> str:
@@ -83,7 +114,11 @@ def deduzir(nome: str) -> str:
     ANTES de qualquer regra que procure uma letra solta, senão um canal chamado
     `3I0 BARRA A` viraria fase A.
     """
-    limpo = (nome or "").strip()
+    # Sem acento: as fronteiras de palavra das expressões são `[^A-Z0-9]`, e
+    # o `ó` de `Tensión` contava como fronteira — o `N` do fim ficava solto e
+    # `VSIN-Tensión Sincronismo` (a tensão de sincronismo) virava neutro.
+    limpo = unicodedata.normalize("NFKD", (nome or "").strip())
+    limpo = limpo.encode("ascii", "ignore").decode("ascii")
     if not limpo:
         return ""
 

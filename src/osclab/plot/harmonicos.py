@@ -44,14 +44,25 @@ O filtro de 60 Hz apaga exatamente o que este painel mede. Então:
   são assim, e um espectro zerado sem explicação se leria como defeito do
   programa.
 
-## A componente contínua não é barra daqui
+## A componente contínua é a barra de ordem ZERO
 
-Decisão do usuário (set/2026): a DC aparece como CURVA no gráfico analógico
-(`IA DC`), não como barra de ordem zero aqui. O motivo é que a DC de uma janela
-de um ciclo não é uma contínua de verdade — é a média daquele ciclo, e ela
-decai. Uma barra sugere permanência que não existe; a curva mostra o
-decremento, que é a pergunta de proteção (a constante de tempo é a relação X/R,
-e é ela que diz se o TC vai saturar).
+Decisão do usuário, revista em 15/10/2026: a DC passou a ser a primeira barra
+do desenho, à esquerda da fundamental — é o que a SEL faz, e foi o que ele
+pediu. O valor é o mesmo da coluna `DC` da tabelinha: a média da janela de um
+ciclo, pelos mesmos pesos da DFT (ver `_espectro_da_onda`, em `plot/leitura.py`).
+
+A barra ENTRA sem empurrar o desenho: a última ordem sai para ela caber, e a
+contagem de barras não muda. Com 33,3 amostras por ciclo o teto é a 16ª, e a
+16ª é justamente a que tem só 1,04 amostra por período — a que menos se
+sustenta. Trocar a mais frágil pela contínua é trocar uma barra que quase não
+mede por uma que mede.
+
+A ressalva de setembro continua valendo, e está no rodapé e no `title` da
+barra: a DC de uma janela de um ciclo **não é uma contínua de verdade** — é a
+média daquele ciclo, e ela decai. Uma barra sugere permanência que não existe.
+Quem mostra o decremento — que é a pergunta de proteção, porque a constante de
+tempo é a relação X/R e é ela que diz se o TC vai saturar — continua sendo a
+CURVA `IA DC` do gráfico analógico.
 """
 
 from __future__ import annotations
@@ -80,6 +91,11 @@ def tem_espectro(sinal: catalogo.Sinal) -> bool:
     """
     if sinal.familia == "canal":
         return sinal.bloco == "alternado"
+    # Conta do usuário: é onda, e tem espectro se for senoidal. Ver
+    # `plot/contas.py` para quem decide isso.
+    if sinal.familia == "conta":
+        return (sinal.bloco == "alternado"
+                and sinal.grandeza == "instantaneo")
     if not sinal.id.startswith("q"):
         return False
     _, chave, grandeza = sinal.id.split(":")

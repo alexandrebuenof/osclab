@@ -57,6 +57,17 @@ CACHE_DIR: Path = DATA_DIR / "cache"
 #: Acervo de arquivos do usuário, endereçado por conteúdo (sha256).
 LIBRARY_DIR: Path = DATA_DIR / "library"
 
+#: A BASE DE DADOS do usuário — dicionário de sinais digitais, parâmetros de
+#: linha, registros guardados. Fica em `DATA_DIR` e não em `PROJECT_ROOT` por
+#: decisão explícita: é o conteúdo que uma atualização do programa jamais pode
+#: encostar. O usuário pode apontar a base para outro lugar (um pen-drive, uma
+#: pasta de rede da equipe); este é só o lugar onde ela nasce.
+BASE_PADRAO: Path = DATA_DIR / "base"
+
+#: Quem é a base ativa, quais já foram abertas e quais gavetas estão ligadas.
+#: Fica FORA da base: é preferência desta máquina, e a base viaja sem ela.
+BASES_FILE: Path = DATA_DIR / "bases.json"
+
 #: Recursos servidos pela web (CSS, JS, fontes). Viajam com o pacote.
 WEB_DIR: Path = PACKAGE_DIR / "web"
 STATIC_DIR: Path = WEB_DIR / "static"

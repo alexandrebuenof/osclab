@@ -209,6 +209,12 @@ def test_o_titulo_do_grupo_e_SO_a_unidade():
     # qualquer palavra que comece com I, V ou U seguida de A, B ou C viraria
     # fase — e um canal de potência reativa entraria em Fortescue.
     ("VALORES", ""), ("ICAPACITOR", ""), ("IBARRAMENTO", ""),
+    # Ingeteam PL300: `Int.` é intensidade, não neutro de terminal `T`; e o
+    # acento de `Tensión` não pode soltar o N do fim.
+    ("IA-Int.Fase A", "A"), ("IB-Int.Fase B", "B"), ("IC-Int.Fase C", "C"),
+    ("IN-Int.Neutro", "N"), ("INS-Int.N.Sensible", "N"),
+    ("VA-Tensión Fase A", "A"), ("VSIN-Tensión Sincronismo", ""),
+    ("T1 Phase C Current", "C"),                    # religador
 ])
 def test_deduz_a_fase_do_nome(nome, esperado):
     assert fases.deduzir(nome) == esperado

@@ -100,19 +100,37 @@ from osclab.formats.base import (
     StatusChannel,
 )
 
-#: A primeira linha de todo CEV, nos DOIS dialetos do parque. Específica o
+#: A primeira linha de todo CEV, nos TRÊS dialetos do parque. Específica o
 #: bastante para não dar falso positivo em nenhum outro formato.
 #:
 #:     SEL-451, sem versão:   "FID","RID","SID",<soma>
 #:     SEL-787, CEV_VER 2.0.1: "FID","CEV_VER",<soma>
+#:     SEL-311C:              "FID",<soma>            e na linha 2 "FID=SEL-...",<soma>
 #:
-#: Os dois são listados na mão, e não trocados por um `"FID",.*`: um arquivo
+#: Os três são listados na mão, e não trocados por um `"FID",.*`: um arquivo
 #: que só começa com `FID` não é necessariamente um CEV, e o `sniff` de um
 #: leitor que assume demais sequestra arquivo dos outros. Dialeto novo entra
-#: aqui de propósito, olhado por alguém.
+#: aqui de propósito, olhado por alguém. O do 311C (sem RID nem SID) apareceu
+#: no banco de oscilografias do parque em 24/10/2026: 45 arquivos recusados.
 _ASSINATURA = re.compile(
-    rb'^\s*"?FID"?\s*,\s*(?:"?RID"?\s*,\s*"?SID"?|"?CEV_VER"?)',
+    rb'^\s*"?FID"?\s*,\s*(?:"?RID"?\s*,\s*"?SID"?|"?CEV_VER"?'
+    rb'|"[0-9A-Fa-f]{4}"\s*\r?\n\s*"FID=SEL)',
     re.IGNORECASE)
+
+#: As colunas de corrente que o SEL-311C escreve SEM unidade no título (`"IA"`,
+#: e não `"IA(A)"` como o 451). São ampère: as tensões do mesmo arquivo vêm em
+#: `kV`, e a corrente de carga cabe em centenas de ampère primários.
+_CORRENTES_SEM_UNIDADE = frozenset({"IA", "IB", "IC", "IN", "IG", "IP", "IR"})
+#: E as do SEL-311L, que acrescenta a letra do terminal do diferencial:
+#: `IAL`…`ICL` (local), `IAX`, `IAY`, `IAT`. Sem isto entravam sem unidade e,
+#: portanto, sem o ×√2 — o cabeçalho do relé diz `IAL` 6746 e saía 4785, a
+#: razão 1,41 (comissionamento em massa, 24/10/2026). Só vale para coluna SEM
+#: unidade no título: `IAW(A)` do 451 já diz o que é.
+_CORRENTE_DE_TERMINAL = re.compile(r"^I[ABC][LXYTRSW]$")
+
+#: O valor que o relé escreve numa coluna que não mede nada (os terminais Y do
+#: 311L sem fibra). É ausência de dado, não −99 999 A.
+_SEM_MEDIDA = -99999.0
 
 #: A que a soma de verificação é reduzida.
 _MODULO = 0x10000
@@ -438,6 +456,7 @@ class CevReader:
                               else FilteringSource.DEDUZIDO),
             notes=tuple(avisos),
             relatos=tuple(relatos),
+            classificacao_do_rele=cabecalho.get("EVENT", "").strip().strip('"'),
         )
 
     # -- pedaços da leitura -------------------------------------------------
@@ -507,7 +526,6 @@ class CevReader:
         cabeçalho deste arquivo.
         """
         equipamento = identificacao.get("RID", "")
-        primario = cabecalho.get("PRIM_VAL", "").strip().strip('"').upper() == "YES"
         avisos: list[str] = []
 
         # --- 1. o que cada coluna é -----------------------------------------
@@ -517,6 +535,9 @@ class CevReader:
         for i in range(colunas.fim_das_ondas):
             rotulo = colunas.cabecalho[i].strip()
             nome, unidade = _nome_e_unidade(rotulo)
+            if not unidade and (nome.upper() in _CORRENTES_SEM_UNIDADE
+                                or _CORRENTE_DE_TERMINAL.match(nome.upper())):
+                unidade = "A"
             ana = _COLUNA_ANA.match(nome)
             if ana is not None:
                 # `ANA07` não é um canal: é a grandeza que o relé chamou de
@@ -529,10 +550,20 @@ class CevReader:
         if not nomes:
             return (), np.empty((0, len(amostras))), avisos
 
+        # PRIMÁRIO ou secundário: o 451 diz no campo `PRIM_VAL`. O 311C não
+        # tem o campo — e escreve a tensão em `kV`, que só existe em primário
+        # (o secundário de um TP é 67 V ou 115 V). Sem o campo e sem `kV`, fica
+        # secundário, como sempre foi.
+        if "PRIM_VAL" in cabecalho:
+            primario = cabecalho.get("PRIM_VAL", "").strip().strip('"').upper() == "YES"
+        else:
+            primario = any(u.upper() == "KV" for u in unidades)
+
         # --- 2. os valores ---------------------------------------------------
         crus = np.empty((len(nomes), len(amostras)), dtype=np.float64)
         for i in range(len(nomes)):
             crus[i] = [_float(a[i]) for a in amostras]
+        crus[crus == _SEM_MEDIDA] = np.nan
 
         # --- 3. fora as colunas que o relé não configurou --------------------
         # Uma coluna `ANAnn` sem nome no `ERAQnn` E sem um número sequer é uma
