@@ -356,3 +356,17 @@ def test_o_487e_ajusta_por_terminal_e_o_e87_diz_qual_e_o_lado():
 def test_sem_e87_valem_os_nomes_do_787():
     assert diferencial.nomes_por_terminal({"CTR1": "40"}) == {}
     assert diferencial.nomes_por_terminal({"E87": '"S,T,U"'})["tap2"] == "TAPT"
+
+
+def test_o_487e_com_restricao_harmonica_e_sem_bloqueio_tem_modo():
+    """`E87HB := N` e `E87HR := Y`: o modo é a restrição. Lendo só o `E87HB`
+    o painel ficava sem curva por «falta o modo» (4 dos 27 487E do parque)."""
+    texto = ('E87 := "S,T"  MVA := 19  VTERMS := 138.00  VTERMT := 13.80\n'
+             "CTRS := 40  CTRT := 200  CTCONS := Y  CTCONT := Y\n"
+             "TSCTC := 12  TTCTC := 12  TAPS := 1.99  TAPT := 3.97\n"
+             "O87P := 0.30  SLP1 := 30.00  SLP2 := 70.00  U87P := 10.00\n"
+             "PCT2 := 15  PCT5 := 35  E87HB := N  E87HR := Y\n")
+    lidos = diferencial.lidos_de_texto(texto)
+    campos = {c["id"]: c for c in diferencial.resolver(_registro("carga"), lidos, {}, "SEL")}
+    assert campos["modo"]["valor"] == "restricao"
+    assert campos["modo"]["estado"] == diferencial.COLETADO

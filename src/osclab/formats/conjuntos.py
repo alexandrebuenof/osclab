@@ -481,15 +481,38 @@ def _agrupar(registro: Record) -> list[dict]:
             continue
         candidatos.append((canal, padrao, fase))
 
+    # **Um `ccbm` que junta DUAS fases A da mesma unidade não é nome de
+    # equipamento: é o nome do RELÉ.** O SEL-487E escreve no COMTRADE o mesmo
+    # `ALTA TR01_UPC1` em todo canal, e o nosso leitor de `.CEV` põe o RID ali.
+    # Acreditar nisso juntava os cinco terminais de TC num grupo só; a primeira
+    # fase A ganhava, e o terminal T — o outro lado do trafo — sumia, sem aviso:
+    # 23 dos 28 registros de 487E/787 do parque ficavam sem diferencial, sem o
+    # 3I0 do outro lado e sem a localização dele (25/10/2026). Nesse caso vale
+    # a dedução pelo nome do canal (`IAS` → `I*S`), como no `ccbm` só de dígitos.
+    contagem: dict[tuple[str, str, str], int] = {}
+    for canal, _, fase in candidatos:
+        declarado = (getattr(canal, "component", "") or "").strip()
+        chave = (declarado, canal.unit.strip(), fase)
+        contagem[chave] = contagem.get(chave, 0) + 1
+    do_rele = {(d, u) for (d, u, _), n in contagem.items() if d and n > 1}
+
+    def chave(canal) -> tuple[str, OrigemDoConjunto]:
+        declarado = (getattr(canal, "component", "") or "").strip()
+        if (declarado, canal.unit.strip()) in do_rele:
+            fase, _ = fases.da_canal(canal)
+            return sem_a_fase(getattr(canal, "name", ""), fase), OrigemDoConjunto.DEDUZIDA
+        nome, _, origem = _chave(canal)
+        return nome, origem
+
     saida = _trincas_de(
-        [(canal, padrao, fase, *_chave(canal)[::2])
+        [(canal, padrao, fase, *chave(canal))
          for canal, padrao, fase in candidatos])
     usados = {i for d in saida for i in d["canais"].values()}
     segunda = []
     for canal, padrao, fase in candidatos:
         if canal.index in usados:
             continue
-        nome, _, origem = _chave(canal)
+        nome, origem = chave(canal)
         if origem != OrigemDoConjunto.DEDUZIDA:
             continue
         outra = _sem_as_marcas(getattr(canal, "name", ""), fase)

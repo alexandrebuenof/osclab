@@ -518,3 +518,27 @@ def test_a_segunda_tentativa_nao_rouba_canal_de_trinca_que_ja_fechou():
     r = _so_nomes(["IC 13.8kV:I A", "IC 13.8kV:I B", "IC 13.8kV:I C",
                    "IC 138kV:I A", "IC 138kV:I B", "IC 138kV:I C"])
     assert [c.abc for c in conjuntos.de_registro(r)] == [(0, 1, 2), (3, 4, 5)]
+
+
+def test_ccbm_com_o_nome_do_rele_em_todo_canal_nao_junta_os_terminais():
+    """O 487E (e o nosso leitor de `.CEV`) escreve o mesmo `ccbm` em todo
+    canal — o nome do RELÉ. Juntar por ele punha os terminais S e T num grupo
+    só, e o T sumia: 23 dos 28 registros de trafo ficavam sem diferencial."""
+    nomes = ["IAS", "IBS", "ICS", "IAT", "IBT", "ICT"]
+    rele = "ALTA TR01_UPC1"
+    canais = tuple(AnalogChannel(index=i, name=n, unit="A", phase="", component=rele)
+                   for i, n in enumerate(nomes))
+    r = Record(source=None, format_name="teste", station="", line_frequency=60.0,
+               start_time=None, analog_channels=canais,
+               analog=np.zeros((6, 10)), time=np.arange(10) / 1200.0)
+    assert sorted(c.abc for c in conjuntos.de_registro(r)) == [(0, 1, 2), (3, 4, 5)]
+
+
+def test_ccbm_que_e_mesmo_de_equipamento_continua_valendo():
+    canais = tuple(AnalogChannel(index=i, name=f"I{f}", unit="A", phase=f, component="TC BUC")
+                   for i, f in enumerate("ABC"))
+    r = Record(source=None, format_name="teste", station="", line_frequency=60.0,
+               start_time=None, analog_channels=canais,
+               analog=np.zeros((3, 10)), time=np.arange(10) / 1200.0)
+    (unico,) = conjuntos.de_registro(r)
+    assert unico.nome == "TC BUC" and unico.origem == conjuntos.OrigemDoConjunto.DECLARADA

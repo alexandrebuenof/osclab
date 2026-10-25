@@ -477,6 +477,16 @@ def resolver(registro: Record, lidos: dict, manuais: dict, fab: str,
                              bruto=f"{variavel} := {lidos[variavel]}")
         campos[id_] = campo
 
+    # O 487E diz o modo em DOIS ajustes: `E87HB` (bloqueio, comum às fases) e
+    # `E87HR` (restrição harmônica). Com o bloqueio desligado e a restrição
+    # ligada — 4 dos 27 registros de 487E do parque —, o modo é a restrição;
+    # lendo só o `E87HB`, o painel ficava sem curva por «falta o modo».
+    if (por_terminal and campos["modo"]["estado"] == FALTA
+            and str(lidos.get("E87HB", "")).strip().upper().startswith("N")
+            and str(lidos.get("E87HR", "")).strip().upper().startswith("Y")):
+        campos["modo"].update(valor="restricao", estado=COLETADO, variavel="E87HR",
+                              bruto=f"E87HB := {lidos['E87HB']}, E87HR := {lidos['E87HR']}")
+
     # Deduzidos, na ordem em que um depende do outro.
     for id_, como in (("con1", "estrela — o caso usual; o arquivo não disse"),
                       ("con2", "estrela — o caso usual; o arquivo não disse")):
