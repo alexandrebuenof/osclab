@@ -16,10 +16,21 @@ Dois métodos nesta etapa, os padrões da proteção (decidido em 23/10/2026):
   terra e `Iφ1 − Iφ2` no de fase. O laço é o que o classificador de falta
   escolheu (`falta.Veredito.laco`).
 
+E, desde 25/10/2026, um terceiro, de CONFERÊNCIA (não vira resultado):
+
+- **Takagi** (`takagi_vetor`): o mesmo laço, com a corrente SUPERPOSTA
+  `ΔI = I − I_pré` como referência — `m = Im{V·ΔI*} / Im{Z1L·I·ΔI*}`. Tira o
+  efeito da carga sobre a Rf; não tira o do infeed.
+
+A seq. negativa usa a linha DISTRIBUÍDA (`seqneg_distribuida`) quando a
+capacitância da linha (`b1`, µS) é conhecida; sem ela, a concentrada.
+
 Tudo em PRIMÁRIO e em fasor EFICAZ: a conversão de TC/TP vem antes da conta,
 como em `seqneg.fasores_de`.
 
 ## A direção pela sequência negativa (o 32Q)
+
+(Na trifásica, sem I2, vale a sequência positiva INCREMENTAL — ver `_direcao`.)
 
 Com V2 na referência, `V2 = −Z2fonte·I2` numa falta para FRENTE: I2 fica
 adiantada de V2 por 180° − ∠Z2 da fonte (≈ +97° numa fonte de 83°). Para trás,
@@ -39,18 +50,24 @@ import numpy as np
 
 from osclab.analysis import falta as falta_mod
 from osclab.dsp import envoltoria, simetricas
+from osclab.dsp.fasor import ciclo_em_amostras
 from osclab.faultloc import seqneg
 from osclab.formats import conjuntos
 from osclab.formats.base import Filtering, Record
 from osclab.plot import conversao, escala, serie, unidades
 
-#: Os métodos desta etapa, na ordem de preferência do RESULTADO. Sem as
-#: simulações (etapa 2), a preferência é fixa: a seq. negativa quando há os dois
+#: Os métodos desta etapa. Sem as simulações (etapa 2), a preferência do
+#: RESULTADO é fixa (`PREFERENCIA`): a seq. negativa quando há os dois
 #: terminais, o laço da falta quando não há.
-METODOS = ("seqneg", "laco")
+METODOS = ("seqneg", "laco", "takagi")
 NOMES = {"seqneg": "Sequência negativa · 2 terminais (LocDef)",
-         "laco": "Laço da falta · reatância"}
-CURTOS = {"seqneg": "Seq. neg. 2T", "laco": "Laço (reatância)"}
+         "laco": "Laço da falta · reatância",
+         "takagi": "Laço da falta · Takagi (corrente superposta)"}
+CURTOS = {"seqneg": "Seq. neg. 2T", "laco": "Laço (reatância)", "takagi": "Takagi"}
+#: Quem pode ser o RESULTADO, na ordem. Takagi fica de fora: é conferência
+#: (entra em `conferencia` e no aviso de discordância) até a preferência mudar
+#: com os números da varredura — ver docs-privados/aprendizado/validacao-ldl.md.
+PREFERENCIA = ("seqneg", "laco")
 
 #: O platô começa DOIS ciclos depois do início da falta: um para a janela do
 #: fasor encher, outro para a contínua da falta amortecer o bastante. Numa
@@ -202,20 +219,99 @@ def k0(z1l: complex, z0l: complex) -> complex:
     return (z0l - z1l) / (3.0 * z1l)
 
 
-def laco_vetor(v: dict[str, np.ndarray], i: dict[str, np.ndarray], laco: str,
-               z1l: complex, z0l: complex | None) -> np.ndarray | None:
-    """`Im{V_laço / I_laço} / X1L`, amostra a amostra. `None` sem Z0 num laço de terra."""
+#: Newton da seq. negativa DISTRIBUÍDA: parte da raiz concentrada, que já
+#: está a menos de 2 % da resposta, e converge em três ou quatro passos.
+PASSOS_DISTRIBUIDA = 8
+
+
+def seqneg_distribuida(v2s: np.ndarray, i2s: np.ndarray, v2r: np.ndarray, i2r: np.ndarray,
+                       z2l: complex, b2l_s: float, m0: np.ndarray) -> np.ndarray:
+    """A mesma igualdade de módulos, com a linha de PARÂMETROS DISTRIBUÍDOS.
+
+    A tensão de sequência negativa a `m` pu de S, descendo a linha pela
+    equação do telegrafista em vez da queda `m·Z·I`:
+
+        V2(m) = V2S·cosh(γℓ·m) − Zc·I2S·senh(γℓ·m)
+
+    com `γℓ = √(Z·Y)` e `Zc = √(Z/Y)` da linha INTEIRA (`Y = j·B`, B em
+    siemens). Sem capacitância `Zc·senh(γℓ·m) → Z·m` e volta a conta
+    concentrada; com ela, a corrente capacitiva da linha — que a concentrada
+    põe inteira na falta — sai da conta. Numa linha de 250 km a concentrada
+    erra ~5 km por isso (validação de 24–25/10/2026).
+
+    `|V2(m) pelo lado S|² = |V2(1−m) pelo lado R|²` não é mais quadrática: é
+    resolvida por Newton, amostra a amostra e vetorizada, a partir da raiz
+    concentrada `m0`. NaN onde `m0` é NaN, onde não converge ou fora da linha.
+    """
+    Y = 1j * b2l_s
+    gl = np.sqrt(z2l * Y)
+    zc = np.sqrt(z2l / Y)
+    m = np.asarray(m0, dtype=np.float64).copy()
+    passo = np.full(m.shape, np.inf)
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        for _ in range(PASSOS_DISTRIBUIDA):
+            cs, ss = np.cosh(gl * m), np.sinh(gl * m)
+            cr, sr = np.cosh(gl * (1 - m)), np.sinh(gl * (1 - m))
+            vs = v2s * cs - zc * i2s * ss
+            vr = v2r * cr - zc * i2r * sr
+            dvs = gl * (v2s * ss - zc * i2s * cs)
+            dvr = -gl * (v2r * sr - zc * i2r * cr)
+            f = np.abs(vs) ** 2 - np.abs(vr) ** 2
+            df = 2 * np.real(np.conj(vs) * dvs) - 2 * np.real(np.conj(vr) * dvr)
+            passo = np.where(df != 0, f / df, np.nan)
+            m = np.clip(m - passo, -0.5, 1.5)
+    folga = seqneg.FOLGA
+    ok = np.isfinite(m) & (np.abs(passo) < 1e-6) & (m >= -folga) & (m <= 1 + folga)
+    return np.where(ok, m, np.nan)
+
+
+def _laco(v: dict[str, np.ndarray], i: dict[str, np.ndarray], laco: str,
+          z1l: complex, z0l: complex | None) -> tuple[np.ndarray, np.ndarray] | None:
+    """`(V_laço, I_laço)`: `Iφ + k0·3I0` no laço de terra, `Iφ1 − Iφ2` no de fase."""
     if laco.endswith("N"):
         if z0l is None:
             return None
         fase = laco[0]
-        i_laco = i[fase] + k0(z1l, z0l) * (i["A"] + i["B"] + i["C"])
-        v_laco = v[fase]
-    else:
-        f1, f2 = laco[0], laco[1]
-        v_laco, i_laco = v[f1] - v[f2], i[f1] - i[f2]
+        return v[fase], i[fase] + k0(z1l, z0l) * (i["A"] + i["B"] + i["C"])
+    f1, f2 = laco[0], laco[1]
+    return v[f1] - v[f2], i[f1] - i[f2]
+
+
+def laco_vetor(v: dict[str, np.ndarray], i: dict[str, np.ndarray], laco: str,
+               z1l: complex, z0l: complex | None) -> np.ndarray | None:
+    """`Im{V_laço / I_laço} / X1L`, amostra a amostra. `None` sem Z0 num laço de terra."""
+    par = _laco(v, i, laco, z1l, z0l)
+    if par is None:
+        return None
+    v_laco, i_laco = par
     with np.errstate(divide="ignore", invalid="ignore"):
         return (v_laco / i_laco).imag / z1l.imag
+
+
+def takagi_vetor(v: dict[str, np.ndarray], i: dict[str, np.ndarray], laco: str,
+                 z1l: complex, z0l: complex | None, n_pre: int | None) -> np.ndarray | None:
+    """Takagi: `m = Im{V·ΔI*} / Im{Z1L·I·ΔI*}`, amostra a amostra.
+
+    `V` e `I` são os do laço (como em `laco_vetor`) e `ΔI = I − I_pré` a
+    corrente SUPERPOSTA do laço — a que a falta acrescentou à carga. A conta
+    supõe que a corrente pela resistência de falta está em fase com ΔI:
+    multiplicar por `ΔI*` gira tudo para a referência dela, e o termo `Rf·If`
+    sai real e some da parte imaginária. O laço pela reatância pura
+    (`laco_vetor`) usa `I` como referência, e é por isso que a carga
+    misturada a I o desloca com Rf.
+
+    `v` e `i` têm de ser fasores PARADOS (`parado`): ΔI compara dois
+    instantes. `None` sem Z0 num laço de terra ou sem pré-falta.
+    """
+    if n_pre is None:
+        return None
+    par = _laco(v, i, laco, z1l, z0l)
+    if par is None:
+        return None
+    v_laco, i_laco = par
+    di =i_laco - i_laco[n_pre]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return (v_laco * np.conj(di)).imag / (z1l * i_laco * np.conj(di)).imag
 
 
 def direcao_no_plato(v2: np.ndarray, i2: np.ndarray, z1l: complex,
@@ -250,7 +346,38 @@ def _passo(t: np.ndarray) -> float:
     return float(np.median(np.diff(t))) if t.size > 1 else 1.0
 
 
-def _direcao(seq, v2, i2, z1l, onde, n_pre) -> bool | None:
+def parado(registro: Record, x: np.ndarray) -> np.ndarray:
+    """O fasor que GIRA (`envoltoria.fasores`) trazido a um referencial parado.
+
+    O fasor contínuo de uma senoide de 60 Hz é `A·e^{j(2πk/n + φ)}`, com `k` o
+    índice DENTRO do trecho: ele dá uma volta por ciclo. Para comparar dois
+    instantes — a falta contra a pré-falta, o superposto `ΔI = I − Ipré` — é
+    preciso desfazer o giro; sem isto `V1[n] − V1[pré]` subtrai dois fasores
+    em ângulos que nada têm a ver um com o outro, e o direcional da trifásica
+    decidia pela posição do cursor no ciclo (validação de 25/10/2026: a ABC
+    na barra de R saía com 36 % das amostras «para frente» em A e 49 % em B).
+    """
+    saida = np.asarray(x, dtype=np.complex128).copy()
+    for trecho in registro.trechos:
+        n = ciclo_em_amostras(trecho.taxa_hz, registro.line_frequency)
+        if n <= 0:
+            continue
+        k = np.arange(trecho.fim - trecho.inicio, dtype=np.float64)
+        saida[trecho.inicio:trecho.fim] *= np.exp(-2j * np.pi * k / n)
+    return saida
+
+
+def _pre(registro: Record, veredito: falta_mod.Veredito | None) -> int | None:
+    """A amostra da pré-falta: a janela de um ciclo que acaba um ciclo antes
+    do início — inteiramente antes da falta."""
+    if veredito is None or veredito.instante is None:
+        return None
+    t = registro.time
+    n = int(veredito.instante) - int(round(_ciclo_s(registro) / _passo(t)))
+    return n if n >= 0 else None
+
+
+def _direcao(seq, pre, v2, i2, z1l, onde) -> bool | None:
     """A direção de UM terminal no platô.
 
     Com I2 de verdade (|I2|/|I1| ≥ `MINIMO_I2_SOBRE_I1`), o 32Q. Sem ela — a
@@ -258,6 +385,9 @@ def _direcao(seq, v2, i2, z1l, onde, n_pre) -> bool | None:
     interna; aí vale a sequência positiva INCREMENTAL, ΔV1 / ΔI1 contra a
     pré-falta, que é o direcional clássico da trifásica: para a frente
     ΔV1 = −Zfonte·ΔI1, a mesma conta do 32Q.
+
+    `seq` = `(V1, I1)` PARADOS (`parado`), já no tempo de A; `pre` =
+    `(V1pré, I1pré)`, parados, tirados do PRÓPRIO registro do terminal.
     """
     v1, i1 = seq
     with np.errstate(divide="ignore", invalid="ignore"):
@@ -265,9 +395,20 @@ def _direcao(seq, v2, i2, z1l, onde, n_pre) -> bool | None:
     razao = razao[np.isfinite(razao)]
     if razao.size and float(np.median(razao)) >= MINIMO_I2_SOBRE_I1:
         return direcao_no_plato(v2, i2, z1l, onde)
-    if not (0 <= n_pre < v1.size) or not np.isfinite(abs(v1[n_pre])):
+    if pre is None or not all(np.isfinite(abs(x)) for x in pre):
         return None
-    return direcao_no_plato(v1 - v1[n_pre], i1 - i1[n_pre], z1l, onde)
+    return direcao_no_plato(v1 - pre[0], i1 - pre[1], z1l, onde)
+
+
+def _seqs_paradas(term: Terminal) -> tuple[np.ndarray, np.ndarray]:
+    return tuple(parado(term.registro, x) for x in _seqs(term.v, term.i))
+
+
+def _pre_de(term: Terminal, seq) -> tuple[complex, complex] | None:
+    n = _pre(term.registro, term.veredito)
+    if n is None:
+        return None
+    return complex(seq[0][n]), complex(seq[1][n])
 
 
 def direcao(v2: complex, i2: complex, z1l: complex) -> bool | None:
@@ -547,7 +688,16 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
                 f"I2 é só {100 * razao_i2:.1f} % de I1 no platô — pouco para "
                 "localizar pela sequência negativa".replace(".", ",", 1))
         else:
-            series["seqneg"] = seqneg_vetor(v2a, i2a, v2b, i2b, z1) * km
+            m_sn = seqneg_vetor(v2a, i2a, v2b, i2b, z1)
+            # Com a capacitância da linha, a variante DISTRIBUÍDA; sem ela, a
+            # concentrada de sempre — a capacitância não se inventa.
+            b1 = linha.get("b1")
+            if b1 is not None and math.isfinite(b1) and b1 > 0:
+                m_sn = seqneg_distribuida(v2a, i2a, v2b, i2b, z1, b1 * 1e-6, m_sn)
+                modelo_sn = "distribuída"
+            else:
+                modelo_sn = "concentrada"
+            series["seqneg"] = m_sn * km
         if not laco:
             motivos["laco"] = "o classificador não achou o laço da falta"
         else:
@@ -556,6 +706,19 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
                 motivos["laco"] = "falta o Z0 da linha (para o k0 do laço de terra)"
             else:
                 series["laco"] = m_laco * km
+        if not laco:
+            motivos["takagi"] = motivos["laco"]
+        else:
+            n_pre = _pre(reg_a, v)
+            vp = {f: parado(reg_a, term_a.v[f]) for f in "ABC"}
+            ip = {f: parado(reg_a, term_a.i[f]) for f in "ABC"}
+            m_tk = takagi_vetor(vp, ip, laco, z1, z0, n_pre)
+            if m_tk is None:
+                motivos["takagi"] = ("falta o Z0 da linha (para o k0 do laço de terra)"
+                                     if n_pre is not None else
+                                     "o registro não tem um ciclo de pré-falta")
+            else:
+                series["takagi"] = m_tk * km
         pacote["km_linha"] = km
 
     # A LDL só existe DURANTE a falta: antes dela o laço mede a carga e dá um
@@ -582,13 +745,14 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
     atras = ""
     if linha is not None:
         z1_dir = complex(linha["r"], linha["x"])
-        n_pre = max(int(v.instante) - int(round(ciclo / _passo(t_a))), 0)
-        seq_a = _seqs(term_a.v, term_a.i)
-        if _direcao(seq_a, v2a, i2a, z1_dir, no_plato_a, n_pre) is False:
+        seq_a = _seqs_paradas(term_a)
+        if _direcao(seq_a, _pre_de(term_a, seq_a), v2a, i2a, z1_dir, no_plato_a) is False:
             atras = "o IED A vê a falta PARA TRÁS"
         elif tem_b:
-            seq_b = tuple(_no(x, idx_b) for x in _seqs(term_b.v, term_b.i))
-            if _direcao(seq_b, v2b, i2b, z1_dir, no_plato, n_pre) is False:
+            proprias = _seqs_paradas(term_b)
+            seq_b = tuple(_no(x, idx_b) for x in proprias)
+            if _direcao(seq_b, _pre_de(term_b, proprias), v2b, i2b, z1_dir,
+                        no_plato) is False:
                 atras = "o IED B vê a falta PARA TRÁS"
     pacote["direcao"] = atras
     curvas_ldl = {}
@@ -598,7 +762,7 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
                                          "km": None, "motivo": motivos.get(metodo, "")}
             continue
         s = series[metodo]
-        valores = s[no_plato_a if metodo == "laco" else no_plato]
+        valores = s[no_plato if metodo == "seqneg" else no_plato_a]
         valores = valores[np.isfinite(valores)]
         km_med = float(np.median(valores)) if valores.size else None
         disp = (float(np.percentile(valores, 90) - np.percentile(valores, 10)) / 2.0
@@ -617,6 +781,8 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
         pacote["metodos"][metodo] = {"nome": NOMES[metodo], "curto": CURTOS[metodo],
                                      "km": km_med, "dispersao": disp, "fora": fora,
                                      "motivo": motivo}
+        if metodo == "seqneg":
+            pacote["metodos"][metodo]["modelo"] = modelo_sn
         # A curva vai à tela limitada a ±1 LT além das pontas: um método que
         # diverge na entrada da falta marca milhares de km, e o que importa é
         # ver que ele saiu da linha, não quanto.
@@ -630,7 +796,7 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
     # --- o resultado: a preferência fixa desta etapa
     valido = lambda m: (pacote["metodos"].get(m, {}).get("km") is not None  # noqa: E731
                         and not pacote["metodos"][m].get("fora"))
-    escolhido = next((m for m in METODOS if valido(m)), None)
+    escolhido = next((m for m in PREFERENCIA if valido(m)), None)
     if escolhido:
         info = pacote["metodos"][escolhido]
         pacote["resultado"] = {
@@ -643,13 +809,15 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
         # sozinho — TC saturando, Rf alta no laço, fiação. O número fica, mas
         # não sai sem aviso: com TC saturado a seq. negativa errava 20 km com
         # faixa de 0,3 km (validação, 25/10/2026).
+        # UM aviso, com a maior discordância: com três métodos, dois avisos
+        # iguais lado a lado só diriam a mesma coisa duas vezes.
         km_lt = pacote.get("km_linha") or 0.0
-        for c in pacote["resultado"]["conferencia"]:
-            if abs(c["delta"]) > max(DISCORDANCIA_MINIMA_KM, DISCORDANCIA_DA_LT * km_lt):
-                aviso = (f"os métodos discordam em {abs(c['delta']):.1f} km — TC "
-                         "saturando, resistência de falta ou fiação: confira antes de "
-                         "usar o número").replace(".", ",", 1)
-                pacote["aviso"] = f"{pacote['aviso']}; {aviso}" if pacote["aviso"] else aviso
+        maior = max((abs(c["delta"]) for c in pacote["resultado"]["conferencia"]), default=0.0)
+        if maior > max(DISCORDANCIA_MINIMA_KM, DISCORDANCIA_DA_LT * km_lt):
+            aviso = (f"os métodos discordam em {maior:.1f} km — TC "
+                     "saturando, resistência de falta ou fiação: confira antes de "
+                     "usar o número").replace(".", ",", 1)
+            pacote["aviso"] = f"{pacote['aviso']}; {aviso}" if pacote["aviso"] else aviso
         # A LDL «perto do resultado»: ±6 km em volta dele, com as marcações
         # daqui — quem escolhe escala é o servidor, não a tela.
         x = info["km"]
@@ -706,5 +874,5 @@ def linha_com_z0(fonte: dict | None) -> dict | None:
     """A linha que entra na conta, ou `None` quando a fonte não tem Z1."""
     if not fonte or not fonte.get("ok"):
         return None
-    return {k: fonte.get(k) for k in ("r", "x", "km", "r0", "x0")}
+    return {k: fonte.get(k) for k in ("r", "x", "km", "r0", "x0", "b1", "b0")}
 

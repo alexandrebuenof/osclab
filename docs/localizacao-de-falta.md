@@ -89,7 +89,7 @@ dos ajustes exige saber qual convenção o relé usa.
 
 | método | estado | fonte |
 |---|---|---|
-| **Sequência negativa, sem sincronismo** — `\|V2S − m·Z2L·I2S\| = \|V2R − (1−m)·Z2L·I2R\|`, 2º grau em m | **feito** (`faultloc/seqneg.py`) | planilha LocDef (Energisa); Tziouvaras, Roberts, Benmouyal, *New multi-ended fault location design for two- or three-terminal lines*, 7th IEE DPSP, 2001; base nos slides: Cap. IV 60–62 |
+| **Sequência negativa, sem sincronismo** — `\|V2S − m·Z2L·I2S\| = \|V2R − (1−m)·Z2L·I2R\|`, 2º grau em m. **Linha distribuída** (25/10/2026) quando a capacitância é conhecida (`b1` em µS da linha inteira; `linha_digitada` já a aceita e a base a guarda em `b1_us`, mas a rota de `web/` ainda não a repassa): `V2(m) = V2S·cosh(γℓm) − Zc·I2S·senh(γℓm)`, por Newton a partir da raiz concentrada; sem capacitância, a concentrada. No gerador: LT de 250 km de 5,1 km para 0,01 km típico (0,32 no pior); 100 km de 0,32 para 0,01 km. Sem dado real | **feito** (`faultloc/seqneg.py`; distribuída em `faultloc/ldl.py`) | planilha LocDef (Energisa); Tziouvaras, Roberts, Benmouyal, *New multi-ended fault location design for two- or three-terminal lines*, 7th IEE DPSP, 2001; base nos slides: Cap. IV 60–62 |
 | Dois terminais sincronizados — `m = Re{(V2S − V2R + Z2L·I2R)/(Z2L·(I2S + I2R))}` | maquete | Johns & Jamali, IEE Proc. C 137(6), 1990; Girgis, Hart, Peterson, IEEE Trans. PWRD 7(1), 1992 |
 | Novosel — sequência positiva, sem sincronismo (serve para trifásica) | futuro | Novosel, Hart, Udren, Garitty, *Unsynchronized two-terminal fault location estimation*, IEEE Trans. PWRD 11(1), 1996 |
 | Linha de três terminais / correção de infeed | futuro | Cap. IV 148–150, 158, 173; Cap. V 12–13; Exercício 10 |
@@ -120,7 +120,7 @@ comissionamento com registros reais é que vai dizer o de verdade.
 |---|---|---|
 | Reatância polarizada por 3I0 (Takagi modificado) | maquete | Cap. IV 63, 70–72; Exercício 8 (validado); Schweitzer, *A review of impedance-based fault locating experience*, 1990 |
 | Reatância polarizada por I2 | maquete | Cap. IV 63, 70–72, 137, 157, 216 (a polarização preferida: a rede de sequência negativa não muda com manobra de trafo aterrado) |
-| Takagi (corrente superposta, precisa de pré-falta) | maquete | Takagi et al., IEEE Trans. PAS-101(8), 1982; o modelo do erro que ele corrige: Cap. IV 56–58 |
+| Takagi (corrente superposta, precisa de pré-falta) — `m = Im{V·ΔI*}/Im{Z1L·I·ΔI*}`, `ΔI = I_laço − I_laço,pré`. Método de CONFERÊNCIA (não vira resultado). No gerador, um terminal com carga (δ 20°) e Rf 10–50 Ω: 0,9 km típico e 5,1 km no pior, contra 8 km e 51 km do laço pela reatância; não corrige infeed (SIR 4/0,2: até 18 km) nem a falta de terra perto de S (pior que o laço a 10 km). Sem dado real | **feito** (`faultloc/ldl.py`, 25/10/2026) | Takagi et al., IEEE Trans. PAS-101(8), 1982; o modelo do erro que ele corrige: Cap. IV 56–58 |
 | Reatância simples — `Im{V/(I + k0·3I0)}/X1L` (o laço da falta) | **feito** (`faultloc/ldl.py`) | método da Energisa; Cap. IV 24, 27, 30, 63–66, 138–139; Exercícios 8 e 10 |
 | Impedância aparente `\|Z\|/\|Z1L\|` | maquete (para mostrar por que não se usa) | Cap. IV 25–30, 56–62 |
 | Nível de curto — só o módulo da corrente e as impedâncias de fonte | maquete | Cap. II 21–23, 87–88, 97–98; Exercícios 3, 4 e 7 (validado); Girgis, Fallon, Lubkeman, IEEE Trans. IA 29(6), 1993 |

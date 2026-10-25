@@ -241,14 +241,19 @@ def test_trifasica_interna_nao_e_recusada_pelo_32q_de_ruido():
     assert abs(p["resultado"]["km"] - cen.km_verdadeiro) <= TOL_LACO
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "DEFEITO: trifásica EXTERNA vira resultado. O 32Q precisa de I2, e na ABC "
-    "`direcao_no_plato` devolve None (ldl.py:215-234, 541-548) — nada recusa. "
-    "Na barra de R o laço dá ~100 km; na de S, ~0 km, como RESULTADO."))
-def test_trifasica_externa_nao_vira_resultado():
-    cen = _cenario(local="barraR", tipo="ABC")
-    p = _localizar(cen, abre_s=None, abre_r=None, extingue=0.075)
+@pytest.mark.parametrize("local,quem", [("barraR", "IED B"), ("barraS", "IED A"),
+                                        ("externaR", "IED B"), ("externaS", "IED A")])
+@pytest.mark.parametrize("formato", ["COMTRADE 2000 Hz", ".CEV 8 a/c"])
+def test_trifasica_externa_nao_vira_resultado(local, quem, formato):
+    """Era o D2: a direção incremental (ΔV1/ΔI1) subtraía o fasor da
+    pré-falta do fasor da falta SEM desfazer o giro de 60 Hz (o fasor contínuo
+    dá uma volta por ciclo), e decidia pela fase do ciclo — a ABC na barra de
+    R saía «laço 100,3 km» como resultado."""
+    cen = _cenario(local=local, tipo="ABC")
+    fa, fb = FORMATOS[formato]
+    p = _localizar(cen, fa, fb, abre_s=None, abre_r=None, extingue=0.075)
     assert p["resultado"] is None
+    assert quem in p["direcao"] and "PARA TRÁS" in p["direcao"]
 
 
 # ---------------------------------------------------------------------------
@@ -281,3 +286,80 @@ def test_falta_curta_em_cev_nao_da_numero_errado():
     p = _localizar(cen, fa, fb, abre_s=None, abre_r=None, extingue=2.0 / 60)
     res = p["resultado"]
     assert res is None or abs(res["km"] - cen.km_verdadeiro) <= TOL_LACO
+
+
+# ---------------------------------------------------------------------------
+# Takagi e a seq. negativa distribuída (25/10/2026)
+# ---------------------------------------------------------------------------
+
+#: O quanto o Takagi do programa se afasta do Takagi sobre os fasores exatos.
+#: Medido na varredura de 25/10/2026 (COMTRADE 2000 Hz e .CEV de 8 a/c, Rf
+#: 0–50 Ω, δ 0/20°, SIR 0,2–4): 0,02 km típico, 0,44 km no pior.
+TOL_IMPL_TAKAGI = 0.5
+#: A seq. negativa DISTRIBUÍDA tem erro inerente zero (é a linha do gerador);
+#: o que sobra é DSP: 0,30 km p95 e 0,32 km no pior numa LT de 250 km.
+TOL_DISTRIBUIDA = 0.4
+
+
+def _takagi_ideal(cen: rede.Cenario, laco: str) -> float:
+    """Takagi sobre os fasores exatos: `Im{V·ΔI*} / Im{Z1·I·ΔI*}` no IED A."""
+    pos, pre = rede.regime(cen, True), rede.regime(cen, False)
+    k = {"A": 0, "B": 1, "C": 2}
+    z1, z0 = cen.linha.Z1, cen.linha.Z0
+
+    def do_laco(V, i):
+        if laco.endswith("N"):
+            return V[k[laco[0]]], i[k[laco[0]]] + (z0 - z1) / (3 * z1) * i.sum()
+        return V[k[laco[0]]] - V[k[laco[1]]], i[k[laco[0]]] - i[k[laco[1]]]
+    v, i = do_laco(pos["VS"], pos["IS"])
+    di = i - do_laco(pre["VS"], pre["IS"])[1]
+    return (v * di.conjugate()).imag / (z1 * i * di.conjugate()).imag * cen.linha.km
+
+
+@pytest.mark.parametrize("tipo", ["AG", "BC", "ABC"])
+@pytest.mark.parametrize("m", [0.5, 0.9])
+@pytest.mark.parametrize("rf", [10.0, 50.0])
+def test_takagi_com_rf_e_carga(tipo, m, rf):
+    """Um terminal, Rf de 10 a 50 Ω e carga (δ = 20°). O programa reproduz o
+    Takagi dentro de `TOL_IMPL_TAKAGI`, e o Takagi fica mais perto da falta
+    que o laço pela reatância — é para isso que ele existe. O resultado
+    continua sendo o laço (a preferência não mudou), mas a discordância
+    entre os dois aparece no aviso quando passa do limite."""
+    cen = _cenario(m=m, tipo=tipo, rf=rf, delta=20.0)
+    p = _localizar(cen, so_a=True)
+    tk, laco = _km(p, "takagi"), _km(p, "laco")
+    assert abs(tk - _takagi_ideal(cen, p["laco"])) <= TOL_IMPL_TAKAGI
+    assert abs(tk - cen.km_verdadeiro) < abs(laco - cen.km_verdadeiro)
+    assert p["resultado"]["metodo"] == "laco"
+    limite = max(ldl.DISCORDANCIA_MINIMA_KM, ldl.DISCORDANCIA_DA_LT * cen.linha.km)
+    assert ("discordam" in p["aviso"]) == (abs(tk - laco) > limite)
+
+
+LT_250 = rede.Linha(250.0, complex(0.08, 0.49), complex(0.35, 1.50), 9.2e-9, 6.2e-9)
+
+
+def _com_capacitancia(cen: rede.Cenario) -> dict:
+    """A linha com `b1`/`b0` em µS da linha inteira, como se digitaria."""
+    p = cen.parametros()
+    p["b1"] = rede.W * cen.linha.c1 * cen.linha.km * 1e6
+    p["b0"] = rede.W * cen.linha.c0 * cen.linha.km * 1e6
+    return p
+
+
+@pytest.mark.parametrize("tipo,m,rf", [("AG", 0.1, 0.0), ("BC", 0.9, 25.0), ("AG", 0.7, 25.0)])
+def test_linha_longa_com_capacitancia_usa_a_distribuida(tipo, m, rf):
+    """LT de 250 km a 138 kV. A concentrada erra 2,7 a 5,4 km (a corrente capacitiva
+    entra inteira na falta); com a capacitância declarada, a distribuída
+    acerta dentro do erro de DSP. Sem capacitância, cai na concentrada."""
+    cen = _cenario(linha=LT_250, m=m, tipo=tipo, rf=rf, delta=20.0)
+    sim = _simulado(cen)
+    reg_a = rede.gravar(sim, "S", COMTRADE_A, nome="SE ALFA")
+    reg_b = rede.gravar(sim, "R", COMTRADE_B, nome="SE BETA")
+    d = alinhamento.deslocamento(reg_a, reg_b, "falta")["d"]
+    com = ldl.montar(reg_a, reg_b, d, _com_capacitancia(cen), None)
+    sem = ldl.montar(reg_a, reg_b, d, cen.parametros(), None)
+    assert com["metodos"]["seqneg"]["modelo"] == "distribuída"
+    assert sem["metodos"]["seqneg"]["modelo"] == "concentrada"
+    assert com["resultado"]["metodo"] == "seqneg"
+    assert abs(com["resultado"]["km"] - cen.km_verdadeiro) <= TOL_DISTRIBUIDA
+    assert abs(_km(sem, "seqneg") - cen.km_verdadeiro) > 2.0      # 2,7 a 5,4 km

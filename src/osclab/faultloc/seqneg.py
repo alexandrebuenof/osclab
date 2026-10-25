@@ -251,6 +251,9 @@ def linha_dos_ajustes(ajustes: dict[str, str], rtp_rtc: float | None) -> dict:
                                       math.sin(math.radians(ang0)))
         saida.update(r0=z0.real, x0=z0.imag)
         saida["como"] += f"; Z0MAG {mod0:g} ∠ Z0ANG {ang0:g}°".replace(".", ",")
+    # A capacitância (`b1`/`b0`) NÃO sai daqui: nenhum ajuste do parque a traz
+    # com nome que se possa ler sem palpite. Vem da base ou do que se digita;
+    # sem ela, a seq. negativa fica na linha concentrada.
     return saida
 
 
@@ -294,15 +297,29 @@ def linha_digitada(manual: dict | None, rtp_rtc: float | None) -> dict:
         z0 = complex(r0, x0) * km if r0 is not None and x0 is not None else None
     if z0 is not None and abs(z0) == 0:
         z0 = None
+    # A susceptância shunt (µS), OPCIONAL: da linha inteira em `rx`/`pol`, por
+    # km em `km`. Com ela a seq. negativa usa a linha DISTRIBUÍDA; sem ela, a
+    # concentrada — a capacitância não se inventa.
+    sufixo, escala_km = ("km", km) if forma == "km" else ("", 1.0)
+    b1, b0 = (_numero(m.get(f"b1{sufixo}")), _numero(m.get(f"b0{sufixo}")))
+    b1 = b1 * escala_km if b1 is not None and b1 > 0 else None
+    b0 = b0 * escala_km if b0 is not None and b0 > 0 else None
     if str(m.get("base") or "prim") == "sec":
         if not rtp_rtc:
             return {"ok": False,
                     "motivo": "em secundário precisa de RTP/RTC, e o registro não declara"}
         z *= rtp_rtc
         z0 = None if z0 is None else z0 * rtp_rtc
+        # Admitância vai ao contrário da impedância: Y_prim = Y_sec / (RTP/RTC).
+        b1 = None if b1 is None else b1 / rtp_rtc
+        b0 = None if b0 is None else b0 / rtp_rtc
     saida = {"ok": True, "r": z.real, "x": z.imag, "km": km, "como": "digitado"}
     if z0 is not None:
         saida.update(r0=z0.real, x0=z0.imag)
+    if b1 is not None:
+        saida["b1"] = b1
+    if b0 is not None:
+        saida["b0"] = b0
     return saida
 
 

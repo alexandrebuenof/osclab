@@ -13,6 +13,11 @@ pede. Vírgula ou ponto decimal, tanto faz — quem escreve é gente.
 vêm no fim: a sequência negativa não usa Z0, mas o laço da falta de terra
 precisa dele para o k0. Arquivo antigo, sem as duas colunas, continua valendo.
 
+`b1_us` e `b0_us` (susceptância shunt de sequência positiva e zero, linha
+inteira, µS primário) também são OPCIONAIS, depois de `x0_ohm`: com `b1_us`
+a sequência negativa usa a linha DISTRIBUÍDA (`ldl.seqneg_distribuida`); sem
+ela, a concentrada. A capacitância não se inventa.
+
 A base é a PRIMEIRA fonte da localização (depois vêm os ajustes do IED A, os
 do IED B e, por último, o que se digita na tela). Pedido dele, 22/10/2026.
 """
@@ -28,7 +33,7 @@ from pathlib import Path
 ARQUIVO = "linhas.csv"
 PASTA = "linhas"
 COLUNAS = ("nome", "terminal_s", "terminal_r", "r1_ohm", "x1_ohm", "comprimento_km",
-           "r0_ohm", "x0_ohm")
+           "r0_ohm", "x0_ohm", "b1_us", "b0_us")
 
 
 @dataclass(frozen=True)
@@ -41,6 +46,8 @@ class Linha:
     comprimento_km: float
     r0_ohm: float | None = None
     x0_ohm: float | None = None
+    b1_us: float | None = None
+    b0_us: float | None = None
 
     def como_dicionario(self) -> dict:
         return {c: getattr(self, c) for c in COLUNAS}
@@ -75,8 +82,12 @@ def listar(base) -> list[Linha]:
         r0, x0 = _numero(cru.get("r0_ohm")), _numero(cru.get("x0_ohm"))
         if r0 is None or x0 is None:
             r0 = x0 = None
+        b1, b0 = _numero(cru.get("b1_us")), _numero(cru.get("b0_us"))
+        b1 = b1 if b1 is not None and b1 > 0 else None
+        b0 = b0 if b0 is not None and b0 > 0 else None
         saida.append(Linha(nome, str(cru.get("terminal_s") or "").strip(),
-                           str(cru.get("terminal_r") or "").strip(), r, x, km, r0, x0))
+                           str(cru.get("terminal_r") or "").strip(), r, x, km, r0, x0,
+                           b1, b0))
     return saida
 
 
@@ -93,7 +104,8 @@ def gravar(base, linha: Linha) -> Path:
     for x in todas:
         escritor.writerow([x.nome, x.terminal_s, x.terminal_r, numero(x.r1_ohm),
                            numero(x.x1_ohm), numero(x.comprimento_km),
-                           numero(x.r0_ohm), numero(x.x0_ohm)])
+                           numero(x.r0_ohm), numero(x.x0_ohm),
+                           numero(x.b1_us), numero(x.b0_us)])
     destino = _caminho(base)
     destino.write_text(saida.getvalue(), encoding="utf-8")
     return destino

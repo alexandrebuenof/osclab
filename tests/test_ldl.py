@@ -395,3 +395,94 @@ def test_bhaskara_estavel_nao_perde_algarismos():
     v2s = -zf * i2
     r = seqneg.localizar(v2s, i2, v2s, i2, z)
     assert r is not None and r.m == pytest.approx(0.5, abs=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# Takagi e a seq. negativa distribuída (25/10/2026)
+# ---------------------------------------------------------------------------
+
+def test_distribuida_sem_capacitancia_e_a_concentrada():
+    """Com B → 0 a equação do telegrafista vira a queda `m·Z·I`, e o Newton
+    para na raiz concentrada."""
+    z = complex(10.0, 50.0)
+    zs, zr, m = complex(3.0, 30.0), complex(5.0, 40.0), 0.3
+    # Rede concentrada em sequência negativa: a falta injeta I2 nas duas pontas.
+    zs_lado, zr_lado = zs + m * z, zr + (1 - m) * z
+    i2s = zr_lado / (zs_lado + zr_lado)                # o divisor de corrente
+    i2r = zs_lado / (zs_lado + zr_lado)
+    v2s, v2r = -zs * i2s, -zr * i2r
+    arr = lambda x: np.array([x])  # noqa: E731
+    m0 = ldl.seqneg_vetor(arr(v2s), arr(i2s), arr(v2r), arr(i2r), z)
+    assert m0[0] == pytest.approx(m, abs=1e-9)
+    md = ldl.seqneg_distribuida(arr(v2s), arr(i2s), arr(v2r), arr(i2r), z, 1e-12, m0)
+    assert md[0] == pytest.approx(m, abs=1e-6)
+
+
+def test_distribuida_acha_a_falta_numa_linha_com_capacitancia():
+    """A linha resolvida pela equação do telegrafista, com a falta a 20 % de S:
+    a distribuída acha 0,2; a concentrada não (a corrente capacitiva)."""
+    z, b = complex(20.0, 122.5), 860e-6           # 250 km a 138 kV
+    gl, zc = cmath.sqrt(z * 1j * b), cmath.sqrt(z / (1j * b))
+    m, zs, zr = 0.2, complex(5.0, 60.0), complex(8.0, 45.0)
+
+    def no_ponto(trecho, zfonte, i_t):
+        # V = −Zfonte·I na barra; desce a linha `trecho` pu pelo telegrafista.
+        return (-zfonte * i_t * cmath.cosh(gl * trecho)
+                - zc * i_t * cmath.sinh(gl * trecho))
+    # I2S = 1; I2R é o que põe a MESMA tensão no ponto da falta pelos dois lados.
+    i2s = 1.0 + 0j
+    i2r = no_ponto(m, zs, i2s) / no_ponto(1 - m, zr, 1.0)
+    v2s, v2r = -zs * i2s, -zr * i2r
+    arr = lambda x: np.array([x])  # noqa: E731
+    m0 = ldl.seqneg_vetor(arr(v2s), arr(i2s), arr(v2r), arr(i2r), z)
+    md = ldl.seqneg_distribuida(arr(v2s), arr(i2s), arr(v2r), arr(i2r), z, b, m0)
+    assert md[0] == pytest.approx(m, abs=1e-6)
+    assert abs(m0[0] - m) > 1e-3
+
+
+def test_takagi_ignora_rf_quando_delta_i_esta_em_fase_com_a_falta():
+    """Laço de fase com a corrente de falta em fase com ΔI (rede homogênea):
+    o laço pela reatância erra com a carga; o Takagi, não."""
+    z, m, rf = complex(10.0, 50.0), 0.4, 20.0
+    carga = 300.0 + 0j
+    i_f = 1500.0 * cmath.exp(-1j * math.radians(70))
+    di = 0.6 * i_f                                     # o pedaço que vem de S
+    i = carga + di
+    v = m * z * i + rf * i_f
+    arr = lambda x: np.array([x, x])  # noqa: E731
+    v_d = {"A": arr(v), "B": arr(0j), "C": arr(0j)}
+    i_d = {"A": np.array([carga, i]), "B": arr(0j), "C": arr(0j)}
+    tk = ldl.takagi_vetor(v_d, i_d, "AB", z, None, 0)
+    assert tk[1] == pytest.approx(m, abs=1e-9)
+    assert abs(ldl.laco_vetor(v_d, i_d, "AB", z, None)[1] - m) > 0.01
+
+
+def test_takagi_sem_pre_falta_diz_por_que():
+    assert ldl.takagi_vetor({}, {}, "AB", complex(1, 5), None, None) is None
+
+
+def test_capacitancia_digitada_e_da_base(tmp_path):
+    total = seqneg.linha_digitada({"forma": "rx", "r": 4.8, "x": 24, "km": 60,
+                                   "b1": "200", "b0": "120"}, None)
+    assert (total["b1"], total["b0"]) == (200.0, 120.0)
+    por_km = seqneg.linha_digitada({"forma": "km", "rkm": 0.08, "xkm": 0.4, "km": 60,
+                                    "b1km": 3.4}, None)
+    assert por_km["b1"] == pytest.approx(204.0) and "b0" not in por_km
+    sec = seqneg.linha_digitada({"forma": "rx", "r": 1, "x": 5, "km": 3, "base": "sec",
+                                 "b1": 120}, 120.0)
+    assert sec["b1"] == pytest.approx(1.0)              # admitância divide
+    assert "b1" not in seqneg.linha_digitada({"forma": "rx", "r": 1, "x": 5, "km": 3}, None)
+    assert ldl.linha_com_z0(total)["b1"] == 200.0
+
+    class Base:
+        def gaveta(self, nome):
+            pasta = tmp_path / nome
+            pasta.mkdir(exist_ok=True)
+            return pasta
+    base = Base()
+    linhas.gravar(base, linhas.Linha("LT X", "ALFA", "BETA", 4.8, 24.0, 60.0, 18.0, 72.0,
+                                     204.0, 130.0))
+    linhas.gravar(base, linhas.Linha("LT Y", "GAMA", "DELTA", 4.8, 24.0, 60.0))
+    lidas = {x.nome: x for x in linhas.listar(base)}
+    assert (lidas["LT X"].b1_us, lidas["LT X"].b0_us) == (204.0, 130.0)
+    assert lidas["LT Y"].b1_us is None
