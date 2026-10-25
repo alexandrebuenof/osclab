@@ -41,7 +41,7 @@ from osclab.analysis import falta as falta_mod
 from osclab.dsp import envoltoria, simetricas
 from osclab.faultloc import seqneg
 from osclab.formats import conjuntos
-from osclab.formats.base import Record
+from osclab.formats.base import Filtering, Record
 from osclab.plot import conversao, escala, serie, unidades
 
 #: Os métodos desta etapa, na ordem de preferência do RESULTADO. Sem as
@@ -63,6 +63,12 @@ CURTOS = {"seqneg": "Seq. neg. 2T", "laco": "Laço (reatância)"}
 #: 40 km saía «53,3 km ± 0,3» pela seq. negativa, ao lado do laço com 40,0.
 #: Uma falta assimétrica fica muito acima: na AG, I2 ≈ I1 da falta.
 MINIMO_I2_SOBRE_I1 = 0.05
+
+#: Quanto os dois métodos podem discordar antes de a tela avisar: o maior de
+#: 3 km e 5 % da linha (o erro inerente medido é < 1 km na seq. negativa e no
+#: laço franco).
+DISCORDANCIA_MINIMA_KM = 3.0
+DISCORDANCIA_DA_LT = 0.05
 
 CICLOS_ANTES_DO_PLATO = 2.0
 CICLOS_ANTES_NA_FALTA_CURTA = 1.1
@@ -234,6 +240,36 @@ def direcao_no_plato(v2: np.ndarray, i2: np.ndarray, z1l: complex,
     return None
 
 
+def _seqs(v: dict, i: dict) -> tuple[np.ndarray, np.ndarray]:
+    """`(V1, I1)` no tempo, das trincas de fasores."""
+    return (simetricas.de_fasores(v["A"], v["B"], v["C"])[1],
+            simetricas.de_fasores(i["A"], i["B"], i["C"])[1])
+
+
+def _passo(t: np.ndarray) -> float:
+    return float(np.median(np.diff(t))) if t.size > 1 else 1.0
+
+
+def _direcao(seq, v2, i2, z1l, onde, n_pre) -> bool | None:
+    """A direção de UM terminal no platô.
+
+    Com I2 de verdade (|I2|/|I1| ≥ `MINIMO_I2_SOBRE_I1`), o 32Q. Sem ela — a
+    trifásica —, o 32Q decidia pelo RUÍDO e recusava como «para trás» uma ABC
+    interna; aí vale a sequência positiva INCREMENTAL, ΔV1 / ΔI1 contra a
+    pré-falta, que é o direcional clássico da trifásica: para a frente
+    ΔV1 = −Zfonte·ΔI1, a mesma conta do 32Q.
+    """
+    v1, i1 = seq
+    with np.errstate(divide="ignore", invalid="ignore"):
+        razao = np.abs(i2[onde]) / np.abs(i1[onde])
+    razao = razao[np.isfinite(razao)]
+    if razao.size and float(np.median(razao)) >= MINIMO_I2_SOBRE_I1:
+        return direcao_no_plato(v2, i2, z1l, onde)
+    if not (0 <= n_pre < v1.size) or not np.isfinite(abs(v1[n_pre])):
+        return None
+    return direcao_no_plato(v1 - v1[n_pre], i1 - i1[n_pre], z1l, onde)
+
+
 def direcao(v2: complex, i2: complex, z1l: complex) -> bool | None:
     """`True` para frente (para a linha), `False` para trás, `None` sem I2."""
     if not (abs(i2) > 0 and math.isfinite(abs(v2))):
@@ -336,8 +372,13 @@ def _plato(term: Terminal) -> tuple[float, float] | None:
                   if x is not None and x > inicio + ciclo]
     fim = min(candidatos) if candidatos else float(t[-1])
     t1 = fim - CICLOS_DEPOIS_DO_PLATO * ciclo
+    # Num registro que o relé JÁ filtrou (o `.CEV` de 4/8 amostras por ciclo)
+    # a amostra saiu de uma janela de um ciclo; com a nossa DFT por cima são
+    # dois ciclos até o fasor assentar. Sem este ciclo a mais, uma falta curta
+    # franca a 90 km saía «99,7 km» pelo laço (validação, 25/10/2026).
+    a_mais = 1.0 if term.registro.filtering == Filtering.FILTRADO else 0.0
     for antes in (CICLOS_ANTES_DO_PLATO, CICLOS_ANTES_NA_FALTA_CURTA):
-        t0 = inicio + antes * ciclo
+        t0 = inicio + (antes + a_mais) * ciclo
         if t1 > t0:
             return (t0, t1)
     return None
@@ -541,10 +582,14 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
     atras = ""
     if linha is not None:
         z1_dir = complex(linha["r"], linha["x"])
-        if direcao_no_plato(v2a, i2a, z1_dir, no_plato_a) is False:
+        n_pre = max(int(v.instante) - int(round(ciclo / _passo(t_a))), 0)
+        seq_a = _seqs(term_a.v, term_a.i)
+        if _direcao(seq_a, v2a, i2a, z1_dir, no_plato_a, n_pre) is False:
             atras = "o IED A vê a falta PARA TRÁS"
-        elif tem_b and direcao_no_plato(v2b, i2b, z1_dir, no_plato) is False:
-            atras = "o IED B vê a falta PARA TRÁS"
+        elif tem_b:
+            seq_b = tuple(_no(x, idx_b) for x in _seqs(term_b.v, term_b.i))
+            if _direcao(seq_b, v2b, i2b, z1_dir, no_plato, n_pre) is False:
+                atras = "o IED B vê a falta PARA TRÁS"
     pacote["direcao"] = atras
     curvas_ldl = {}
     for metodo in METODOS:
@@ -594,6 +639,17 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
             "conferencia": [{"metodo": m, "delta": pacote["metodos"][m]["km"] - info["km"]}
                             for m in METODOS if m != escolhido and valido(m)],
         }
+        # Os dois métodos DISCORDANDO é sinal de algo que nenhum deles vê
+        # sozinho — TC saturando, Rf alta no laço, fiação. O número fica, mas
+        # não sai sem aviso: com TC saturado a seq. negativa errava 20 km com
+        # faixa de 0,3 km (validação, 25/10/2026).
+        km_lt = pacote.get("km_linha") or 0.0
+        for c in pacote["resultado"]["conferencia"]:
+            if abs(c["delta"]) > max(DISCORDANCIA_MINIMA_KM, DISCORDANCIA_DA_LT * km_lt):
+                aviso = (f"os métodos discordam em {abs(c['delta']):.1f} km — TC "
+                         "saturando, resistência de falta ou fiação: confira antes de "
+                         "usar o número").replace(".", ",", 1)
+                pacote["aviso"] = f"{pacote['aviso']}; {aviso}" if pacote["aviso"] else aviso
         # A LDL «perto do resultado»: ±6 km em volta dele, com as marcações
         # daqui — quem escolhe escala é o servidor, não a tela.
         x = info["km"]
