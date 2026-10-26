@@ -675,8 +675,9 @@ def trajetoria(registro: Record, canais_v: dict[str, int],
     """`(indices, R, X)` da impedância do laço.
 
     `canais_v` e `canais_i` são `{"A": idx, "B": idx, "C": idx}`. `residual` é
-    o canal de `IN` quando o arquivo traz um; sem ele, `3I0` sai da soma das
-    três fases, que é a mesma coisa quando as três existem.
+    o canal de `IN`, para quando falta uma fase; sem ele, `3I0` sai da soma das
+    três fases — que é o que o k0 compensa, e por isso quem chama só o passa
+    quando a soma não existe.
 
     `amostras(canal)` é de onde saem os números. O padrão é a amostra crua do
     arquivo; quem chama de verdade manda a versão JÁ convertida para o lado
@@ -1141,7 +1142,13 @@ def montar(registro: Record, painel, ajustes_do_registro: dict,
     compensacao = k0_de(ajustes)
     k0 = compensacao[0] if compensacao else None
 
-    residual = corrente.canais.get("N")
+    # O k0 multiplica o 3I0 DA LINHA, que é a soma das três fases. O canal
+    # `IN` do arquivo só entra quando falta uma fase: ele pode ser entrada
+    # própria de neutro, noutro ponto ou nem cabeada — no 311C ele marca ~0 A
+    # e o laço de terra perdia a compensação sem aviso (6 de 22 faltas reais
+    # erravam de 8 a 71 pontos de % da linha contra o relé, 25/10/2026).
+    fases = corrente.canais
+    residual = (None if all(f in fases for f in "ABC") else fases.get("N"))
     amostras, lados_vistos = _amostras_em_ohm(registro, lado)
     indices, r, x = trajetoria(registro, tensao.canais, corrente.canais,
                                laco, k0, i0, i1, residual, amostras)

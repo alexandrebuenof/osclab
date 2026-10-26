@@ -324,6 +324,25 @@ def test_montar_devolve_pontos_zonas_e_parametros():
     assert pacote["entradas"]["Z1"] is not None
 
 
+def test_o_IN_do_arquivo_nao_substitui_o_3I0_da_linha():
+    """O `IN` de um 311C é entrada própria de neutro, e marcava ~0 A: o laço
+    de terra perdia o k0 e a falta de 62 % saía a 102 %. Com as três fases, o
+    3I0 é a soma delas, venha o canal `IN` como vier."""
+    def z_na_falta(zerar_in: bool) -> complex:
+        r = _registro(lado_primario=False)
+        if zerar_in:
+            r.analog[CANAIS_I["N"]] = 0.0
+        pacote = impedancia.montar(
+            r, _PainelFalso(), {"ajustes": [[k, v] for k, v in AJUSTES.items()]},
+            "secundario", 0, r.analog.shape[1] - 1)
+        alvo = int(0.25 * TAXA)
+        p = min(pacote["pontos"], key=lambda p: abs(p["n"] - alvo))
+        return complex(p["r"], p["x"])
+
+    com, sem = z_na_falta(False), z_na_falta(True)
+    assert abs(sem - com) < 1e-6 * abs(com), (com, sem)
+
+
 def test_montar_sem_ajuste_avisa_que_a_zona_e_sugerida():
     r = _registro(lado_primario=False)
     pacote = impedancia.montar(r, _PainelFalso(), {"ajustes": []},
@@ -871,3 +890,51 @@ def test_distancia_desligada_no_rele_e_dita_assim():
     assert pacote["pontos"]
     assert any("desligada no relé" in a for a in _avisos(pacote))
     assert not any("nenhuma do relé" in a for a in _avisos(pacote))
+
+
+# ---------------------------------------------------------------------------
+# A conferência «21 × falta localizada pelo relé» (tests/conferencias.py)
+# ---------------------------------------------------------------------------
+
+def test_o_laco_sai_do_tipo_que_o_rele_escreveu():
+    from tests import conferencias
+
+    assert conferencias.lacos_do_evento("AG T") == ("AN",)
+    assert conferencias.lacos_do_evento("BCG") == ("BC",)
+    assert conferencias.lacos_do_evento("CA") == ("CA",)
+    assert conferencias.lacos_do_evento("ABC T") == ("AB", "BC", "CA")
+    for nada in ("TRIP", "ER", "TRIG", "", None):
+        assert conferencias.lacos_do_evento(nada) == ()
+
+
+def test_a_conferencia_21_le_o_resumo_do_311C_e_confere_a_falta_sintetica():
+    """A falta sintética é AN a 62 % da linha; o «relé» do `.HDR` diz 62 %.
+
+    O resumo do 311C dá `Fault Location Angle`, que é o Z1ANG AJUSTADO: a
+    única coisa do plano que ele afirma é a reatância, e é ela que se confere.
+    """
+    import tempfile
+    from pathlib import Path
+
+    from tests import conferencias
+
+    x_rele = 0.62 * 2.08 * math.sin(math.radians(75.96))
+    hdr = ("Event: AG T       Location:   62.00            Trip Time: 13:00:00.150\n"
+           "Fault Location Impedance:      1.29 Ohm,sec\n"
+           "Fault Location Angle:         75.96 deg\n"
+           "Per-Unit of Line Length:       0.62\n"
+           "Fault Resistance:              0.10 Ohm,sec\n"
+           + "".join(f'"{k}",{v}\n' for k, v in AJUSTES.items()) + '"LL",100.00\n')
+    with tempfile.TemporaryDirectory() as pasta:
+        (Path(pasta) / "falta.cfg").write_text("", encoding="latin-1")
+        (Path(pasta) / "falta.hdr").write_text(hdr, encoding="latin-1")
+        resumo = conferencias.resumo_da_falta(Path(pasta) / "falta.cfg")
+        assert resumo["evento"] == "AG T" and resumo["pu"] == 0.62
+        assert resumo["angulo"] == 75.96 and resumo["rf"] == 0.10
+        linhas = conferencias.distancia(Path(pasta) / "falta.cfg",
+                                        _registro())
+    por_item = {x.item: x for x in linhas}
+    assert set(por_item) == {"% da linha", "reatância do laço"}, linhas
+    assert all(x.veredito == conferencias.CONFERE for x in linhas), linhas
+    assert abs(por_item["% da linha"].erro) < 2.0
+    assert abs(por_item["reatância do laço"].rele - x_rele) < 0.01

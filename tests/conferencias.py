@@ -32,9 +32,11 @@ import numpy as np
 
 from osclab.dsp import envoltoria
 from osclab.dsp import fasor as dspf
+from osclab.formats import ajustes as ajustes_mod
 from osclab.formats import cev, conjuntos
 from osclab.formats.base import Record, Trecho
 from osclab.plot import catalogo, conversao, unidades
+from osclab.plot import diferencial as dif
 
 CONFERE = "confere"
 DIVERGE = "diverge"
@@ -1004,13 +1006,398 @@ def instantaneo(caminho: Path, registro: Record) -> list[Linha]:
 
 
 # ---------------------------------------------------------------------------
+# 9. O diferencial de transformador (87T) contra as colunas do próprio relé
+# ---------------------------------------------------------------------------
+
+#: O `.CEV` do SEL-487E grava `IOPA`/`IRTA`/`IOPB`/`IRTB`/`IOPC`/`IRTC` — a
+#: Iop e a Irt que o relé calculou, em pu do TAP, com duas casas —, ao lado
+#: das amostras. É o gabarito do `plot/diferencial.py` com os ajustes lidos
+#: do próprio arquivo, como a tela faz.
+#:
+#: **Só em regime.** O `.CEV` já é a saída do filtro do relé, e a nossa janela
+#: de um ciclo em cima dele é um segundo filtro: no transitório a nossa curva
+#: chega 2 a 4 amostras (4 a 8 ms) depois da do relé, e a diferença mede o
+#: atraso, não a conta. Sobre o COMTRADE bruto do mesmo evento, com o
+#: estimador cosseno, o atraso cai para ~1,5 ms e a falta também fecha (erro
+#: mediano de 0,002 a 0,008 pu) — mas isso pede o par de arquivos; aqui é um
+#: registro só. A decisão (bits `87R*`, `87*HB`, `87*HR`) também fica de fora:
+#: o `87R*` do relé tem selo e temporização internos que o arquivo não diz, e
+#: a 2ª harmônica não se mede num `.CEV`, que o filtro do relé já limpou.
+#:
+#: Medido em 16 `.CEV` de 487E do parque (25/10/2026): mediana de |erro| da
+#: Iop em regime ≤ 0,003 pu (pior amostra ±0,022), e da Irt entre −0,15 % e
+#: +0,40 %. A coluna tem degrau de 0,01 pu; a folga é dois degraus na Iop e
+#: 3 % na Irt. Em regime a Iop é quase sempre a de carga (≈ 0), e é isso que
+#: ela prende: TAP, RTC ou compensação (`TnCTC`) errados dão Iop falsa da
+#: ordem da corrente de carga — décimos de pu, dez vezes a folga.
+TOLERANCIA_DA_IOP = 0.02         # pu, mediana de |erro|
+TOLERANCIA_DA_IRT = 3.0          # %, mediana
+#: Abaixo disto a Irt são poucos degraus da coluna (0,01 pu) e o erro
+#: relativo vira a resolução do arquivo.
+IRT_MINIMA = 0.2                 # pu
+#: Regime: a coluna do relé não andou mais que isto em um ciclo e meio.
+VARIACAO_DO_87T = 0.03
+
+DIFERENCIAL = "9 87T × colunas IOP/IRT do relé"
+
+
+def _parado(x: np.ndarray, janela: int) -> np.ndarray:
+    """Onde a série não andou mais que `VARIACAO_DO_87T` (mais um degrau da
+    coluna) nas últimas `janela` amostras."""
+    saida = np.zeros(x.size, dtype=bool)
+    if janela < 2 or x.size <= janela:
+        return saida
+    vista = np.lib.stride_tricks.sliding_window_view(x, janela)
+    with np.errstate(invalid="ignore"):
+        amplitude = np.nanmax(vista, axis=1) - np.nanmin(vista, axis=1)
+        topo = np.nanmax(vista, axis=1)
+        saida[janela - 1:] = (np.all(np.isfinite(vista), axis=1)
+                              & (amplitude <= VARIACAO_DO_87T * np.maximum(topo, IRT_MINIMA)
+                                 + 0.01))
+    return saida
+
+
+def diferencial_87t(caminho: Path, registro: Record) -> list[Linha]:
+    if not e_cev(caminho):
+        return [nao_se_aplica(DIFERENCIAL, "só o .CEV grava as colunas IOP/IRT")]
+    indices = {c.name: c.index for c in registro.analog_channels}
+    nomes = [f"{q}{f}" for f in "ABC" for q in ("IOP", "IRT")]
+    if not all(n in indices for n in nomes):
+        return [nao_se_aplica(DIFERENCIAL, "o relé não gravou IOPA…IRTC")]
+    pasta = Path(caminho).parent
+    irmaos = [p.name for p in pasta.iterdir()
+              if p.is_file() and p.stem.lower() == Path(caminho).stem.lower()]
+    lidos = dif.lidos_do_arquivo(ajustes_mod.do_registro(pasta, irmaos, []))
+    terminais = dif.nomes_por_terminal(lidos)
+    if not terminais:
+        return [nao_se_aplica(DIFERENCIAL, "sem E87: não se sabe que terminais entram")]
+    trincas = {t.nome: t for t in dif.trincas_de_corrente(registro)}
+    um = terminais["rtc1"].removeprefix("CTR")
+    dois = terminais["rtc2"].removeprefix("CTR")
+    lado1, lado2 = trincas.get(f"I*{um}"), trincas.get(f"I*{dois}")
+    if lado1 is None or lado2 is None:
+        return [nao_se_aplica(DIFERENCIAL, f"E87 pede os terminais {um} e {dois}, "
+                                           f"e o arquivo não tem as duas trincas")]
+    fab = dif.fabricante(registro, lidos)
+    campos = dif.resolver(registro, lidos, {"valores": {}, "aceitos": []}, fab,
+                          lado1, lado2)
+    faltando = dif.faltam(campos)
+    if faltando:
+        return [nao_se_aplica(DIFERENCIAL, "faltam ajustes: "
+                              + ", ".join(x["id"] for x in faltando))]
+    conta = dif.calcular(registro, lado1, lado2, {c["id"]: c["valor"] for c in campos})
+
+    por_ciclo = dspf.amostras_por_ciclo(registro.base_rate_hz, registro.line_frequency)
+    janela = int(math.ceil(1.5 * por_ciclo))
+    erros_iop, erros_irt, ref_irt = [], [], []
+    for k, fase in enumerate("ABC"):
+        iop_r = registro.analog[indices[f"IOP{fase}"]]
+        irt_r = registro.analog[indices[f"IRT{fase}"]]
+        iop, irt = conta["iop"][k], conta["irt"][k]
+        regime = (_parado(iop_r, janela) & _parado(irt_r, janela)
+                  & np.isfinite(iop) & np.isfinite(irt))
+        erros_iop.append(iop[regime] - iop_r[regime])
+        com_carga = regime & (irt_r >= IRT_MINIMA)
+        erros_irt.append((irt[com_carga] - irt_r[com_carga]) / irt_r[com_carga])
+        ref_irt.append(irt_r[com_carga])
+    e_iop = np.concatenate(erros_iop)
+    e_irt = np.concatenate(erros_irt)
+    if e_iop.size < 3:
+        return [nao_se_aplica(DIFERENCIAL, "nenhum trecho em regime")]
+    contexto = f"{fab}, lados I*{um}/I*{dois}"
+    saida = [julgar(DIFERENCIAL, "Iop em regime", None, None,
+                    float(np.median(np.abs(e_iop))), "pu (mediana de |erro|)",
+                    TOLERANCIA_DA_IOP,
+                    f"{contexto}; {e_iop.size} amostras; pior "
+                    f"{float(e_iop[np.argmax(np.abs(e_iop))]):+.3f} pu")]
+    if e_irt.size < 3:
+        saida.append(nao_se_aplica(DIFERENCIAL, f"Irt do relé abaixo de {IRT_MINIMA:g} "
+                                   f"pu em todo o regime: o erro seria a resolução "
+                                   f"da coluna", "Irt em regime"))
+    else:
+        saida.append(julgar(DIFERENCIAL, "Irt em regime",
+                            float(np.median(np.concatenate(ref_irt))), None,
+                            100 * float(np.median(e_irt)), "% (mediana)",
+                            TOLERANCIA_DA_IRT, f"{contexto}; {e_irt.size} amostras"))
+    return saida
+
+
+# ---------------------------------------------------------------------------
+# 10. O plano de impedância (21) contra a falta que o relé localizou
+# ---------------------------------------------------------------------------
+
+#: O relé de linha da SEL escreve onde achou a falta: `LOCATION` (na unidade
+#: do `LL`) no `.CEV` e no `.HDR` da família 400 e do 321, e o 311C ainda
+#: escreve `PER_UNIT_LL` e o ponto do plano — `FLT_LOC_Z` ∠ `FLT_LOC_ANG` e
+#: `FLT_R`, em ohm secundário. **O ângulo NÃO é medido**: é o `Z1ANG` ajustado
+#: (± 180° na reversa), então `FLT_LOC_Z` é `m · Z1MAG` e a única grandeza do
+#: plano que ele afirma é a REATÂNCIA, `FLT_LOC_Z · sen(FLT_LOC_ANG)`.
+#:
+#: Do nosso lado sai o `% da linha` pela reatância (`X / (Z1MAG · sen Z1ANG)`,
+#: que é o que o localizador do relé estima) na trajetória que o painel
+#: desenha, no PLATÔ: o ciclo de menor espalhamento dentro da falta. Não o
+#: `|Z| / |Z1|` da ficha da tela: ele soma a resistência de falta ao
+#: comprimento, e numa falta de 2 Ω num laço de 1,4 Ω a falta «andaria» 70 %.
+#:
+#: Medido em 22 faltas internas do parque (25/10/2026; 311C, 321, 421, 451;
+#: 4 a 128 am/ciclo), com o 3I0 tirado da soma das fases: |Δ| ≤ 4,2 pontos
+#: de % da linha em 21, mediana 1,2. Fica fora o 321 de Coxipó (−11,2
+#: pontos, sem explicação achada: o k0 do relé e o nosso são o mesmo e o
+#: platô é parado). A folga de 5 pontos é o pior caso explicado mais uma
+#: margem; fase trocada, k0 ausente ou base errada dão dezenas de pontos — e
+#: o canal `IN` do 311C tomado como 3I0 dá +8 a +71 pontos (ver
+#: `docs-privados/aprendizado/impedancia-gabarito.md`).
+#:
+#: A reatância do 311C (10 faltas): |erro| ≤ 4,1 % em 9, e −9,2 % no
+#: COMTRADE bruto de Rondonópolis, em que o relé congelou o ponto no primeiro
+#: ciclo da falta, com a contínua ainda viva, e o nosso platô é o depois
+#: dela. Folga de 12 %.
+TOLERANCIA_DA_DISTANCIA = 5.0        # pontos de % da linha
+TOLERANCIA_DA_REATANCIA = 12.0       # %
+
+#: Fora destes limites o localizador do relé está extrapolando o modelo da
+#: linha (falta externa, reversa, ou o relé localizando a CARGA). Medido em
+#: 25 desses: há os que fecham em 2 pontos no instante do resumo e os que
+#: erram 600 — o número depende de onde o relé congelou, e não prende conta.
+FAIXA_DA_LINHA = (0.0, 1.1)
+#: Corrente de falta mínima, em múltiplos da de CARGA. Abaixo disso
+#: o relé localizou carga — os seis `ABC` sem `T` do A. Floresta são isso.
+CORRENTE_DE_FALTA = 3.0
+#: O platô tem de existir: espalhamento máximo da janela de um ciclo. Acima,
+#: a falta evolui (Sinop C2: 25 a 33 %) e o relé e nós congelamos instantes
+#: diferentes de uma impedância que anda.
+ESPALHAMENTO_DO_PLATO = 0.10
+
+DISTANCIA = "10 21 × falta localizada pelo relé"
+
+_NUMERO = r"([-+]?\d+(?:\.\d+)?)"
+
+
+def resumo_da_falta(caminho: Path) -> dict:
+    """O que o relé escreveu sobre a falta, lido AQUI e não pelo leitor.
+
+    `{evento, local, pu, z, angulo, rf, correntes}` com o que houver. O
+    `.CEV` CSV tem o resumo nas linhas 4 e 5; o do 321 é texto; o COMTRADE o
+    traz no `.HDR` irmão.
+    """
+    caminho = Path(caminho)
+    saida: dict = {}
+
+    def num(x):
+        try:
+            v = float(str(x).strip())
+        except (TypeError, ValueError):
+            return None
+        return v if math.isfinite(v) else None
+
+    def do_texto(texto: str) -> None:
+        m = re.search(r"Event:\s*([A-Z0-9]+(?: T)?)\s+Location:\s*" + _NUMERO, texto)
+        if m:
+            saida["evento"], saida["local"] = m.group(1), float(m.group(2))
+        for chave, rotulo in (("z", "Fault Location Impedance"),
+                              ("angulo", "Fault Location Angle"),
+                              ("pu", "Per-Unit of Line Length"),
+                              ("rf", "Fault Resistance")):
+            m = re.search(rotulo + r":\s*" + _NUMERO, texto)
+            if m:
+                saida[chave] = float(m.group(1))
+
+    if e_cev(caminho):
+        texto = caminho.read_bytes().decode("latin-1")
+        linhas = [x for x in texto.replace("\r\n", "\n").split("\n") if x.strip()]
+        if texto.startswith('"FID"') and len(linhas) >= 6:
+            cab = dict(zip((c.strip() for c in next(csv.reader(io.StringIO(linhas[4])))),
+                           (v.strip() for v in next(csv.reader(io.StringIO(linhas[5])))),
+                           strict=False))
+            saida["evento"] = cab.get("EVENT")
+            saida["local"] = num(cab.get("LOCATION"))
+            for chave, campo in (("pu", "PER_UNIT_LL"), ("z", "FLT_LOC_Z"),
+                                 ("angulo", "FLT_LOC_ANG"), ("rf", "FLT_R")):
+                if num(cab.get(campo)) is not None:
+                    saida[chave] = num(cab.get(campo))
+            correntes = {f: num(cab.get("I" + f)) for f in "ABC"}
+            if all(v is not None for v in correntes.values()):
+                saida["correntes"] = correntes
+        else:
+            do_texto(texto)
+    else:
+        hdr = next((p for p in caminho.parent.iterdir()
+                    if p.stem.lower() == caminho.stem.lower()
+                    and p.suffix.lower() == ".hdr"), None)
+        if hdr is not None:
+            do_texto(hdr.read_bytes().decode("latin-1"))
+    return saida
+
+
+def lacos_do_evento(evento: str) -> tuple[str, ...]:
+    """`AG` → `AN`; `BC`, `BCG` → `BC`; `ABC` → os três laços de fase (o
+    relé escolhe o de menor impedância, e nós também). Vazio quando o evento
+    não é um tipo de falta (`TRIP`, `ER`, `TRIG`)."""
+    e = (evento or "").upper().replace(" T", "").strip()
+    if not re.fullmatch(r"[ABC]{1,3}G?", e):
+        return ()
+    fases = "".join(c for c in "ABC" if c in e)
+    if len(fases) == 1:
+        return (fases + "N",) if e.endswith("G") else ()
+    if len(fases) == 2:
+        return ({"AB": "AB", "BC": "BC", "AC": "CA"}[fases],)
+    return ("AB", "BC", "CA")
+
+
+def _arquivos_irmaos(caminho: Path) -> list[str]:
+    return [p.name for p in Path(caminho).parent.iterdir()
+            if p.is_file() and p.stem.lower() == Path(caminho).stem.lower()]
+
+
+def _plato(z: np.ndarray, falta: np.ndarray, largura: int):
+    """`(mediana, espalhamento)` da janela de `largura` pontos, toda dentro da
+    falta, em que a impedância menos anda. `None` sem janela inteira."""
+    melhor = None
+    for a in range(0, z.size - largura + 1):
+        bloco = z[a:a + largura]
+        if not (falta[a:a + largura].all() and np.isfinite(bloco).all()):
+            continue
+        med = complex(np.median(bloco.real), np.median(bloco.imag))
+        if abs(med) == 0:
+            continue
+        espalhamento = float(np.max(np.abs(bloco - med)) / abs(med))
+        if melhor is None or espalhamento < melhor[1]:
+            melhor = (med, espalhamento)
+    return melhor
+
+
+def distancia(caminho: Path, registro: Record) -> list[Linha]:
+    """A falta que o relé localizou contra a trajetória do plano de impedância.
+
+    A trajetória é a do painel (`impedancia.montar`), com os ajustes do
+    próprio arquivo, levada a ohm SECUNDÁRIO — a base do `Z1MAG` do relé.
+    """
+    from osclab.formats import ajustes as ajustes_mod
+    from osclab.plot import impedancia, paineis
+
+    resumo = resumo_da_falta(caminho)
+    if resumo.get("local") is None and resumo.get("pu") is None:
+        return [nao_se_aplica(DISTANCIA, "o relé não localizou a falta")]
+    lacos = lacos_do_evento(resumo.get("evento"))
+    if not lacos:
+        return [nao_se_aplica(DISTANCIA, f"o evento «{resumo.get('evento')}» não diz o laço")]
+    lidos = ajustes_mod.do_registro(Path(caminho).parent, _arquivos_irmaos(caminho),
+                                    [c.name for c in registro.status_channels])
+    ajustes = impedancia.como_dicionario(lidos.get("ajustes"))
+    parametros = impedancia.parametros_da_linha(ajustes)
+    if parametros is None:
+        return [nao_se_aplica(DISTANCIA, "o arquivo não traz Z1MAG/Z1ANG")]
+    z1, angulo1 = parametros.modulo.valor, parametros.angulo.valor
+    x1 = z1 * math.sin(math.radians(angulo1))
+    if resumo.get("pu") is not None:
+        m_rele = resumo["pu"]
+    else:
+        # O 411L escreve o comprimento em `LLR`; o `LL` dele é o de fábrica.
+        comprimento = None
+        for nome in ("LLR", "LL"):
+            try:
+                comprimento = float(ajustes[nome])
+                break
+            except (KeyError, ValueError):
+                continue
+        if not comprimento:
+            return [nao_se_aplica(DISTANCIA, "o arquivo não traz o comprimento (LL)")]
+        m_rele = resumo["local"] / comprimento
+    if not FAIXA_DA_LINHA[0] <= m_rele <= FAIXA_DA_LINHA[1]:
+        return [nao_se_aplica(DISTANCIA, f"o relé localizou fora da linha ({m_rele:+.2f} pu)")]
+
+    trinca = next((c for c in conjuntos.de_registro(registro)
+                   if c.grandeza == "I" and not c.sem_sinal
+                   and all(f in c.canais for f in "ABC")), None)
+    if trinca is None:
+        return [nao_se_aplica(DISTANCIA, "sem trinca de corrente")]
+    por_ciclo = dspf.ciclo_em_amostras(registro.base_rate_hz, registro.line_frequency)
+    fases = {f: envoltoria.fundamental(registro.analog[trinca.canais[f]], por_ciclo)
+             for f in "ABC"}
+    if not all(np.isfinite(v).any() for v in fases.values()):
+        return [nao_se_aplica(DISTANCIA, "registro curto demais para um ciclo de fasor")]
+    maior = max(float(np.nanmax(v)) for v in fases.values())
+    if resumo.get("correntes") and max(resumo["correntes"].values()) < 0.5 * maior:
+        # O 421 de Poconé carimbou o resumo antes de a corrente subir (o ponto
+        # dele é da carga, e o 311C no mesmo vão, do mesmo evento, fecha); o
+        # 311C de Sinop C2, numa falta que ainda crescia.
+        return [nao_se_aplica(DISTANCIA, "o resumo do relé é de um instante com menos "
+                                         "da metade da corrente máxima do registro")]
+
+    melhor = None
+    motivo = (f"corrente de falta abaixo de {CORRENTE_DE_FALTA:g}× a de carga, "
+              "ou sem trajetória")
+    for laco in lacos:
+        letras = impedancia.LACOS[laco]
+        corrente_do_laco = np.fmax.reduce(np.vstack([fases[f] for f in letras]), axis=0)
+        validos = corrente_do_laco[np.isfinite(corrente_do_laco)]
+        pico = float(np.nanmax(corrente_do_laco))
+        # A CARGA é o maior entre o primeiro ciclo e o percentil 20 do que
+        # corre (acima de 2 % do pico). Só o primeiro ciclo erra no registro
+        # que começa com o disjuntor aberto (Braço Norte 13_12: 0 A, e depois
+        # 46 a 80 A); só o percentil erra no evento em que a fase CAI (Braço
+        # Norte 12_13_03: IA de 149 para 46 A, as outras paradas em 155 A).
+        correndo = validos[validos > 0.02 * pico]
+        carga = max(float(np.percentile(correndo, 20)) if correndo.size else 0.0,
+                    float(np.median(validos[:max(int(por_ciclo), 1)])) if validos.size else 0.0)
+        if carga > 0 and pico < CORRENTE_DE_FALTA * carga:
+            continue
+        cheio = np.flatnonzero(corrente_do_laco >= 0.5 * pico)
+        i0 = max(int(cheio[0]) - int(2 * por_ciclo), 0)
+        i1 = min(i0 + impedancia.MAXIMO_DE_PONTOS - 1, registro.n_samples - 1)
+        painel = paineis.de_json([{"id": "z", "tipo": "impedancia", "nome": "Z",
+                                   "laco": laco, "sinais": []}])[0]
+        pacote = impedancia.montar(registro, painel, lidos, "secundario", i0, i1)
+        if "ajuste" not in pacote:
+            # Sem plano (dois pares corrente × tensão sem vínculo, como o
+            # COMTRADE do 421 com VY e VZ): a conferência diz o que a tela diz.
+            motivo = "; ".join(a.get("curto", "") for a in pacote.get("avisos", []))
+            continue
+        base = pacote["ajuste"]
+        fator = 1.0
+        if base.get("base") == "primario":
+            if not base.get("relacao"):
+                continue
+            fator = 1.0 / base["relacao"]
+        pontos = pacote.get("pontos") or []
+        if not pontos:
+            continue
+        indices = np.array([p["n"] for p in pontos])
+        z = np.array([complex(p["r"], p["x"]) * fator if p["r"] is not None
+                      else complex(np.nan, np.nan) for p in pontos])
+        achado = _plato(z, corrente_do_laco[indices] >= 0.5 * np.nanmax(corrente_do_laco),
+                        max(int(round(por_ciclo)), 3))
+        if achado and (melhor is None or abs(achado[0]) < abs(melhor[1])):
+            melhor = (laco, achado[0], achado[1])
+    if melhor is None:
+        return [nao_se_aplica(DISTANCIA, motivo)]
+    laco, z_plato, espalhamento = melhor
+    if espalhamento > ESPALHAMENTO_DO_PLATO:
+        return [nao_se_aplica(DISTANCIA, f"a falta evolui: o ciclo mais parado anda "
+                                         f"{100 * espalhamento:.0f} %")]
+    m_nosso = z_plato.imag / x1
+    contexto = f"laço {laco}, platô com {100 * espalhamento:.1f} % de espalhamento"
+    saida = [julgar(DISTANCIA, "% da linha", 100 * m_rele, 100 * m_nosso,
+                    100 * (m_nosso - m_rele), "pontos", TOLERANCIA_DA_DISTANCIA, contexto)]
+    if resumo.get("z") is not None and resumo.get("angulo") is not None:
+        x_rele = resumo["z"] * math.sin(math.radians(resumo["angulo"]))
+        if abs(x_rele) > 0:
+            saida.append(julgar(DISTANCIA, "reatância do laço", x_rele, z_plato.imag,
+                                100 * (z_plato.imag - x_rele) / abs(x_rele), "%",
+                                TOLERANCIA_DA_REATANCIA,
+                                f"{contexto}; Ω secundário; Rf do relé {resumo.get('rf')} Ω"))
+    return saida
+
+
+# ---------------------------------------------------------------------------
 # Todas
 # ---------------------------------------------------------------------------
 
 #: As conferências de UM registro, na ordem do placar. O par (5) é à parte:
 #: precisa de dois registros.
 POR_REGISTRO = (residuo, neutro_pelo_nome, fasor_de_pre_falta, fasor_de_falta,
-                colunas, trip, instantaneo, colunas_lentas)
+                colunas, trip, instantaneo, colunas_lentas, diferencial_87t,
+                distancia)
 
 
 def todas(caminho: Path, registro: Record) -> list[Linha]:
@@ -1029,4 +1416,5 @@ def todas(caminho: Path, registro: Record) -> list[Linha]:
 
 NOMES = {residuo: RESIDUO, neutro_pelo_nome: NEUTRO_PELO_NOME,
          fasor_de_pre_falta: PRE_FALTA, fasor_de_falta: FALTA, colunas: COLUNAS,
-         trip: TRIP, instantaneo: INSTANTANEO, colunas_lentas: LENTAS}
+         trip: TRIP, instantaneo: INSTANTANEO, colunas_lentas: LENTAS,
+         diferencial_87t: DIFERENCIAL, distancia: DISTANCIA}

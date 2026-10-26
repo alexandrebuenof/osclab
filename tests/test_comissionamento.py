@@ -53,6 +53,7 @@ from pathlib import Path
 import pytest
 
 from osclab.formats import registry
+from osclab.formats.base import FormatError
 from tests import conferencias as C
 
 _RAIZ = os.environ.get("OSCLAB_AMOSTRAS", "").strip()
@@ -129,6 +130,23 @@ CAMINHOS = _arquivos()
 CEVS = [p for p in CAMINHOS if p.suffix.lower() == ".cev"]
 
 
+#: Abaixo disto, um arquivo que o leitor recusa é captura VAZIA, não formato
+#: desconhecido: o 311C de Floresta tem um `.CEV` de 6 bytes que é só o
+#: prompt `=>` do relé. Recusa num arquivo de tamanho normal continua
+#: reprovando — ela é defeito do leitor até prova em contrário.
+CAPTURA_VAZIA = 1024
+
+
+def _ler(caminho: Path):
+    try:
+        return registry.read(caminho)
+    except FormatError:
+        tamanho = caminho.stat().st_size
+        if tamanho < CAPTURA_VAZIA:
+            pytest.skip(f"captura vazia ({tamanho} bytes): não há registro para conferir")
+        raise
+
+
 def _exigir(linhas: list[C.Linha]) -> None:
     """Reprova se alguma linha diverge (ou quebrou); pula se nenhuma se aplica.
 
@@ -164,7 +182,7 @@ def test_o_residuo_calculado_bate_com_o_MEDIDO(caminho: Path):
     Ver `conferencias.TOLERANCIA_DO_RESIDUO` para por que a folga é larga e
     por que isso não enfraquece o que o teste pega.
     """
-    _exigir(C.residuo(caminho, registry.read(caminho)))
+    _exigir(C.residuo(caminho, _ler(caminho)))
 
 
 # ---------------------------------------------------------------------------
@@ -182,7 +200,7 @@ def test_o_fasor_de_PRE_FALTA_do_cabecalho_aparece_na_nossa_conta(caminho: Path)
     **Só a pré-falta vale em todo arquivo** — e só quando o arquivo tem um
     ciclo inteiro antes do disparo (ver `conferencias.fasor_de_pre_falta`).
     """
-    _exigir(C.fasor_de_pre_falta(caminho, registry.read(caminho)))
+    _exigir(C.fasor_de_pre_falta(caminho, _ler(caminho)))
 
 
 @pytest.mark.parametrize("caminho", **_casos(CEVS))
@@ -198,7 +216,7 @@ def test_o_fasor_de_FALTA_bate_quando_a_falta_cabe_numa_janela(caminho: Path):
     vale saber antes de confiar num arquivo de 4 amostras por ciclo para
     conferir corrente de falta.
     """
-    _exigir(C.fasor_de_falta(caminho, registry.read(caminho)))
+    _exigir(C.fasor_de_falta(caminho, _ler(caminho)))
 
 
 # ---------------------------------------------------------------------------
@@ -216,7 +234,7 @@ def test_as_colunas_do_rele_batem_EM_REGIME(caminho: Path):
     que dez degraus de gravação das fases — o `3V0M` de 0,007 kV sobre fases
     gravadas com 0,01 kV — não se confere em por cento.
     """
-    _exigir(C.colunas(caminho, registry.read(caminho)))
+    _exigir(C.colunas(caminho, _ler(caminho)))
 
 
 # ---------------------------------------------------------------------------
@@ -278,7 +296,7 @@ def test_a_hora_do_TRIP_cai_na_amostra_em_que_o_digital_MUDA(caminho: Path):
     é exatamente onde `TRIP` muda. Das 481 amostras do registro, só 40 têm
     mudança alguma, e a 208 é a maior rajada delas (17 digitais).
     """
-    _exigir(C.trip(caminho, registry.read(caminho)))
+    _exigir(C.trip(caminho, _ler(caminho)))
 
 
 # ---------------------------------------------------------------------------
@@ -298,7 +316,7 @@ def test_o_instantaneo_do_cabecalho_aparece_na_nossa_conta(caminho: Path):
     eficaz, mesmo sendo relatório BRUTO: com o ×√2 os canais fecham dentro de
     1,3 %; sem ele, erram 30 %.
     """
-    _exigir(C.instantaneo(caminho, registry.read(caminho)))
+    _exigir(C.instantaneo(caminho, _ler(caminho)))
 
 
 # ---------------------------------------------------------------------------
@@ -315,7 +333,7 @@ def test_o_neutro_que_o_NOME_liga_a_trinca_tambem_confere(caminho: Path):
     São neutros de verdade, com a trinca escrita no próprio nome. Conferi-los
     aqui é ganho puro: mais gabarito, nenhum risco na tela.
     """
-    _exigir(C.neutro_pelo_nome(caminho, registry.read(caminho)))
+    _exigir(C.neutro_pelo_nome(caminho, _ler(caminho)))
 
 
 # ---------------------------------------------------------------------------
@@ -333,4 +351,31 @@ def test_as_colunas_LENTAS_de_corrente_batem_EM_REGIME(caminho: Path):
     carga, quase sempre menores que dez degraus de uma corrente gravada em
     inteiro, pulam pela resolução do arquivo, com o motivo escrito.
     """
-    _exigir(C.colunas_lentas(caminho, registry.read(caminho)))
+    _exigir(C.colunas_lentas(caminho, _ler(caminho)))
+
+
+# ---------------------------------------------------------------------------
+# 9. O diferencial de transformador contra as colunas IOP/IRT do relé
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("caminho", **_casos(CEVS))
+def test_o_87T_bate_com_as_colunas_IOP_e_IRT_do_rele_EM_REGIME(caminho: Path):
+    """O `.CEV` do 487E grava a Iop e a Irt que ele calculou; o
+    `plot/diferencial.py`, com os ajustes do próprio arquivo, tem que dar o
+    mesmo número. Só em regime — ver `conferencias.TOLERANCIA_DA_IOP` para o
+    porquê, e para o que fica de fora (a decisão e a 2ª harmônica)."""
+    _exigir(C.diferencial_87t(caminho, _ler(caminho)))
+
+
+# ---------------------------------------------------------------------------
+# 10. O plano de impedância contra a falta que o relé localizou
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("caminho", **_casos(CAMINHOS))
+def test_o_plano_de_impedancia_poe_a_falta_onde_o_rele_localizou(caminho: Path):
+    """`LOCATION`/`PER_UNIT_LL` do relé de linha × o % da linha pela
+    REATÂNCIA do laço no platô da falta; no 311C, também a reatância que ele
+    escreveu (`FLT_LOC_Z · sen FLT_LOC_ANG`). Só faltas dentro da linha e com
+    corrente de falta de verdade — ver `conferencias.TOLERANCIA_DA_DISTANCIA`
+    para as tolerâncias e para o que fica de fora."""
+    _exigir(C.distancia(caminho, _ler(caminho)))
