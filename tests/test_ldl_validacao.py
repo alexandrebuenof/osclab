@@ -332,7 +332,8 @@ def test_takagi_com_rf_e_carga(tipo, m, rf):
     assert abs(tk - cen.km_verdadeiro) < abs(laco - cen.km_verdadeiro)
     assert p["resultado"]["metodo"] == "laco"
     limite = max(ldl.DISCORDANCIA_MINIMA_KM, ldl.DISCORDANCIA_DA_LT * cen.linha.km)
-    assert ("discordam" in p["aviso"]) == (abs(tk - laco) > limite)
+    outros = [_km(p, m) for m in ("takagi", "takagi_i2") if _km(p, m) is not None]
+    assert ("discordam" in p["aviso"]) == (max(abs(x - laco) for x in outros) > limite)
 
 
 LT_250 = rede.Linha(250.0, complex(0.08, 0.49), complex(0.35, 1.50), 9.2e-9, 6.2e-9)
@@ -363,3 +364,88 @@ def test_linha_longa_com_capacitancia_usa_a_distribuida(tipo, m, rf):
     assert com["resultado"]["metodo"] == "seqneg"
     assert abs(com["resultado"]["km"] - cen.km_verdadeiro) <= TOL_DISTRIBUIDA
     assert abs(_km(sem, "seqneg") - cen.km_verdadeiro) > 2.0      # 2,7 a 5,4 km
+
+
+# ---------------------------------------------------------------------------
+# Takagi polarizado por I2 (25/10/2026)
+# ---------------------------------------------------------------------------
+
+#: O quanto o Takagi por I2 do programa se afasta da mesma conta sobre os
+#: fasores exatos. Medido na varredura de 25/10/2026 (COMTRADE 2000 Hz e .CEV
+#: de 8 a/c, Rf 0–50 Ω, δ 0/20°, SIR 0,2–4): 0,02 km típico, 0,64 km no pior
+#: (infeed forte com Rf de 25 Ω).
+TOL_IMPL_TAKAGI_I2 = 0.7
+_GIRO = {"A": 1, "B": np.exp(2j * np.pi / 3), "C": np.exp(-2j * np.pi / 3)}
+
+
+def _takagi_i2_ideal(cen: rede.Cenario, laco: str) -> float:
+    """`Im{V·I2*} / Im{Z1·I·I2*}` sobre os fasores exatos, com a I2 do LAÇO."""
+    f = rede.regime(cen, True)
+    k = {"A": 0, "B": 1, "C": 2}
+    z1, z0 = cen.linha.Z1, cen.linha.Z0
+    V, i = f["VS"], f["IS"]
+    i2 = rede.seq(*i)[2]
+    if laco.endswith("N"):
+        v, il = V[k[laco[0]]], i[k[laco[0]]] + (z0 - z1) / (3 * z1) * i.sum()
+        pol = _GIRO[laco[0]] * i2
+    else:
+        v, il = V[k[laco[0]]] - V[k[laco[1]]], i[k[laco[0]]] - i[k[laco[1]]]
+        pol = (_GIRO[laco[0]] - _GIRO[laco[1]]) * i2
+    return (v * pol.conjugate()).imag / (z1 * il * pol.conjugate()).imag * cen.linha.km
+
+
+@pytest.mark.parametrize("formato", ["COMTRADE 2000 Hz", ".CEV 8 a/c"])
+@pytest.mark.parametrize("tipo", ["AG", "BC", "ABG"])
+@pytest.mark.parametrize("m,rf", [(0.5, 10.0), (0.9, 50.0)])
+def test_takagi_i2_com_rf_e_carga(tipo, m, rf, formato):
+    """Um terminal, sem usar pré-falta: o programa reproduz o método, e na
+    monofásica e na bifásica ele fica mais perto da falta que o laço pela
+    reatância (na varredura, pior caso 4,1 km contra 33,5 do laço). Na ABG o
+    laço AB não vê a Rf para a terra e os dois acertam."""
+    cen = _cenario(m=m, tipo=tipo, rf=rf, delta=20.0)
+    fa, _ = FORMATOS[formato]
+    p = _localizar(cen, fa, so_a=True)
+    tk2, laco = _km(p, "takagi_i2"), _km(p, "laco")
+    assert abs(tk2 - _takagi_i2_ideal(cen, p["laco"])) <= TOL_IMPL_TAKAGI_I2
+    assert abs(tk2 - cen.km_verdadeiro) <= 4.5
+    if tipo != "ABG":
+        assert abs(tk2 - cen.km_verdadeiro) < abs(laco - cen.km_verdadeiro)
+    assert p["resultado"]["metodo"] == "laco"           # a preferência não mudou
+
+
+def test_takagi_i2_na_bifasica_e_o_takagi_de_delta_i():
+    """Numa bifásica a carga é toda de sequência positiva e a ΔI do laço é só
+    sequência negativa: as duas polarizações são a MESMA conta."""
+    cen = _cenario(m=0.7, tipo="BC", rf=25.0, delta=20.0, sir_s=4.0, sir_r=0.2)
+    p = _localizar(cen, so_a=True)
+    assert abs(_km(p, "takagi_i2") - _km(p, "takagi")) <= 0.1
+
+
+def test_takagi_i2_corrige_mais_o_infeed_que_o_de_delta_i():
+    """Monofásica com o terminal remoto forte (SIR 4/0,2): o laço erra 18 km,
+    o Takagi por ΔI 18 km para o outro lado, o por I2 8 km (a varredura)."""
+    cen = _cenario(m=0.7, tipo="AG", rf=25.0, delta=20.0, sir_s=4.0, sir_r=0.2)
+    p = _localizar(cen, so_a=True)
+    erro = {m: abs(_km(p, m) - cen.km_verdadeiro) for m in ("laco", "takagi", "takagi_i2")}
+    assert erro["takagi_i2"] < 9.0
+    assert erro["takagi_i2"] < erro["takagi"] and erro["takagi_i2"] < erro["laco"]
+    assert abs(_km(p, "takagi_i2") - _takagi_i2_ideal(cen, "AN")) <= TOL_IMPL_TAKAGI_I2
+
+
+def test_takagi_i2_se_recusa_na_trifasica():
+    p = _localizar(_cenario(m=0.4, tipo="ABC", rf=10.0, delta=20.0), so_a=True)
+    assert _km(p, "takagi_i2") is None
+    assert "trifásica" in p["metodos"]["takagi_i2"]["motivo"]
+    assert _km(p, "takagi") is not None
+
+
+def test_tc_saturado_desvia_o_takagi_i2_e_a_tela_avisa():
+    """O caso da varredura em que o Takagi por I2 mais erra: TC de A com
+    joelho 0,3, AG a 50 km — 13,6 km, contra 2,0 do laço. A discordância
+    tem de aparecer no aviso; é o que impede o número de sair calado."""
+    cen = _cenario(m=0.5, tipo="AG", sir_s=0.3, delta=10.0)
+    fa = rede.Formato(saturacao=0.3, i_falta=rede.corrente_de_falta(cen))
+    p = _localizar(cen, fa, so_a=True)
+    assert abs(_km(p, "laco") - cen.km_verdadeiro) <= 2.5
+    assert abs(_km(p, "takagi_i2") - cen.km_verdadeiro) > 5.0
+    assert "discordam" in p["aviso"]

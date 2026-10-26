@@ -461,6 +461,60 @@ def test_takagi_sem_pre_falta_diz_por_que():
     assert ldl.takagi_vetor({}, {}, "AB", complex(1, 5), None, None) is None
 
 
+def _carga_mais_falta(fase: str, i_f: complex, carga: float = 400.0) -> dict:
+    """Carga equilibrada (sem I2) mais a corrente de falta numa fase só."""
+    a = cmath.exp(2j * math.pi / 3)
+    saida = {f: np.array([carga * g + 0j]) for f, g in zip("ABC", (1, a * a, a), strict=True)}
+    saida[fase] = saida[fase] + i_f
+    return saida
+
+
+@pytest.mark.parametrize("fase", ["A", "C"])
+def test_takagi_i2_ignora_rf_e_carga_sem_pre_falta(fase):
+    """Monofásica com Rf e carga: a I2 do laço é a falta e só ela, então o
+    termo Rf·If sai real e some. Na fase C a I2 da fase A está a 120° da falta
+    — sem o giro de `i2_do_laco` o número sairia errado."""
+    z1, z0, m, rf = complex(10.0, 50.0), complex(30.0, 150.0), 0.4, 25.0
+    i_f = 1500.0 * cmath.exp(-1j * math.radians(70))
+    i = _carga_mais_falta(fase, i_f)
+    i_laco = i[fase] + ldl.k0(z1, z0) * (i["A"] + i["B"] + i["C"])
+    v = {f: np.array([0j]) for f in "ABC"}
+    v[fase] = m * z1 * i_laco + rf * i_f
+    laco = f"{fase}N"
+    assert ldl.takagi_i2_vetor(v, i, laco, z1, z0)[0] == pytest.approx(m, abs=1e-9)
+    assert abs(ldl.laco_vetor(v, i, laco, z1, z0)[0] - m) > 0.01
+
+
+def test_i2_do_laco_fase_fase_fica_em_fase_com_a_falta():
+    """BC: `I2b − I2c` está em fase com `Ib − Ic`; a I2 da fase A, a 90°."""
+    i = {"A": np.array([0j]), "B": np.array([1000 + 0j]), "C": np.array([-1000 + 0j])}
+    i2 = ldl.i2_do_laco(i, "BC")[0]
+    assert cmath.phase(i2) == pytest.approx(0.0, abs=1e-9)
+    a2 = (i["A"] + cmath.exp(-2j * math.pi / 3) * i["B"]
+          + cmath.exp(2j * math.pi / 3) * i["C"])[0] / 3
+    assert abs(math.degrees(cmath.phase(a2))) == pytest.approx(90.0, abs=1e-9)
+
+
+def test_takagi_i2_na_trifasica_e_nan():
+    a = cmath.exp(2j * math.pi / 3)
+    i = {f: np.array([2000 * g + 0j]) for f, g in zip("ABC", (1, a * a, a), strict=True)}
+    v = {f: np.array([5000 * g + 0j]) for f, g in zip("ABC", (1, a * a, a), strict=True)}
+    assert np.isnan(ldl.takagi_i2_vetor(v, i, "AB", complex(10, 50), None)[0])
+
+
+def test_takagi_i2_sem_z0_no_laco_de_terra_e_none():
+    i = _carga_mais_falta("A", 1000 + 0j)
+    assert ldl.takagi_i2_vetor({}, i, "AN", complex(10, 50), None) is None
+
+
+def test_todo_metodo_diz_quando_usar_e_como_calcula():
+    p = _painel(m=0.43, rf=10.0)
+    for metodo in ldl.METODOS:
+        info = p["metodos"][metodo]
+        assert info["quando"] == ldl.QUANDO_USAR[metodo] and info["quando"]
+        assert info["como"] == ldl.COMO_CALCULA[metodo] and info["como"]
+
+
 def test_capacitancia_digitada_e_da_base(tmp_path):
     total = seqneg.linha_digitada({"forma": "rx", "r": 4.8, "x": 24, "km": 60,
                                    "b1": "200", "b0": "120"}, None)

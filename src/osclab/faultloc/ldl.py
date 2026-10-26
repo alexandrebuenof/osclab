@@ -16,11 +16,16 @@ Dois métodos nesta etapa, os padrões da proteção (decidido em 23/10/2026):
   terra e `Iφ1 − Iφ2` no de fase. O laço é o que o classificador de falta
   escolheu (`falta.Veredito.laco`).
 
-E, desde 25/10/2026, um terceiro, de CONFERÊNCIA (não vira resultado):
+E, desde 25/10/2026, dois de CONFERÊNCIA (não viram resultado):
 
 - **Takagi** (`takagi_vetor`): o mesmo laço, com a corrente SUPERPOSTA
   `ΔI = I − I_pré` como referência — `m = Im{V·ΔI*} / Im{Z1L·I·ΔI*}`. Tira o
   efeito da carga sobre a Rf; não tira o do infeed.
+- **Takagi por I2** (`takagi_i2_vetor`): a referência é a I2 do laço, que a
+  carga não tem — não precisa de pré-falta, e não existe na trifásica.
+
+`QUANDO_USAR` e `COMO_CALCULA` vão no pacote de cada método, para a tela só
+exibir.
 
 A seq. negativa usa a linha DISTRIBUÍDA (`seqneg_distribuida`) quando a
 capacitância da linha (`b1`, µS) é conhecida; sem ela, a concentrada.
@@ -59,13 +64,15 @@ from osclab.plot import conversao, escala, serie, unidades
 #: Os métodos desta etapa. Sem as simulações (etapa 2), a preferência do
 #: RESULTADO é fixa (`PREFERENCIA`): a seq. negativa quando há os dois
 #: terminais, o laço da falta quando não há.
-METODOS = ("seqneg", "laco", "takagi")
+METODOS = ("seqneg", "laco", "takagi", "takagi_i2")
 NOMES = {"seqneg": "Sequência negativa · 2 terminais (LocDef)",
          "laco": "Laço da falta · reatância",
-         "takagi": "Laço da falta · Takagi (corrente superposta)"}
-CURTOS = {"seqneg": "Seq. neg. 2T", "laco": "Laço (reatância)", "takagi": "Takagi"}
-#: Quem pode ser o RESULTADO, na ordem. Takagi fica de fora: é conferência
-#: (entra em `conferencia` e no aviso de discordância) até a preferência mudar
+         "takagi": "Laço da falta · Takagi (corrente superposta)",
+         "takagi_i2": "Laço da falta · Takagi polarizado por I2"}
+CURTOS = {"seqneg": "Seq. neg. 2T", "laco": "Laço (reatância)", "takagi": "Takagi",
+          "takagi_i2": "Takagi I2"}
+#: Quem pode ser o RESULTADO, na ordem. Os dois Takagi ficam de fora: são conferência
+#: (entram em `conferencia` e no aviso de discordância) até a preferência mudar
 #: com os números da varredura — ver docs-privados/aprendizado/validacao-ldl.md.
 PREFERENCIA = ("seqneg", "laco")
 
@@ -312,6 +319,78 @@ def takagi_vetor(v: dict[str, np.ndarray], i: dict[str, np.ndarray], laco: str,
     di =i_laco - i_laco[n_pre]
     with np.errstate(divide="ignore", invalid="ignore"):
         return (v_laco * np.conj(di)).imag / (z1l * i_laco * np.conj(di)).imag
+
+
+#: O giro que leva a I2 da fase A à I2 «vista» por cada fase: `I2b = a·I2a`,
+#: `I2c = a²·I2a` (sequência negativa).
+_GIRO_I2 = {"A": 1.0 + 0j, "B": complex(-0.5, math.sqrt(3) / 2),
+            "C": complex(-0.5, -math.sqrt(3) / 2)}
+
+
+def i2_do_laco(i: dict[str, np.ndarray], laco: str) -> np.ndarray:
+    """A I2 do LAÇO: `I2φ` no de terra, `I2φ1 − I2φ2` no de fase.
+
+    Polarizar com a I2 da fase A em qualquer laço daria número sem sentido:
+    numa CG ela está a 120° da corrente de falta, numa BC a 90° — e o Takagi
+    por I2 errava 50 a 2 500 % sobre os fasores exatos (varredura de
+    25/10/2026). Girada para o laço, ela fica em fase com a corrente de falta
+    quando a rede de sequência negativa é homogênea.
+    """
+    i2 = simetricas.de_fasores(i["A"], i["B"], i["C"])[2]
+    if laco.endswith("N"):
+        return _GIRO_I2[laco[0]] * i2
+    return (_GIRO_I2[laco[0]] - _GIRO_I2[laco[1]]) * i2
+
+
+def takagi_i2_vetor(v: dict[str, np.ndarray], i: dict[str, np.ndarray], laco: str,
+                    z1l: complex, z0l: complex | None) -> np.ndarray | None:
+    """Takagi polarizado por I2: `m = Im{V·I2*} / Im{Z1L·I·I2*}`, amostra a amostra.
+
+    A mesma conta de `takagi_vetor`, com a I2 do laço (`i2_do_laco`) no lugar
+    de ΔI: a carga não tem sequência negativa, então I2 é corrente SÓ da falta
+    — sem precisar de pré-falta. Os fasores podem girar (`envoltoria.fasores`):
+    os dois produtos são do mesmo instante e o giro se cancela.
+
+    NaN onde `|I2| < MINIMO_I2_SOBRE_I1 · |I1|` — a trifásica, em que o que
+    sobra de I2 é ruído e desequilíbrio de carga. `None` sem Z0 num laço de
+    terra.
+    """
+    par = _laco(v, i, laco, z1l, z0l)
+    if par is None:
+        return None
+    v_laco, i_laco = par
+    i2 = i2_do_laco(i, laco)
+    _, i1, i2a = simetricas.de_fasores(i["A"], i["B"], i["C"])
+    with np.errstate(divide="ignore", invalid="ignore"):
+        m = (v_laco * np.conj(i2)).imag / (z1l * i_laco * np.conj(i2)).imag
+        pouca = np.abs(i2a) < MINIMO_I2_SOBRE_I1 * np.abs(i1)
+    return np.where(pouca, np.nan, m)
+
+
+#: Quando usar cada método — o que a tela mostra ao lado do número. Sai da
+#: varredura de 25/10/2026 no gerador (`tests/rede_de_falta.py`); os números
+#: estão em docs/localizacao-de-falta.md.
+QUANDO_USAR = {
+    "seqneg": ("O mais preciso, quando há os dois terminais: Rf, carga e Z0 não "
+               "entram. Não existe na trifásica."),
+    "laco": ("Exato na falta franca e o que menos sofre com TC saturado; com Rf e "
+             "carga erra dezenas de km (até 33 km no gerador, 60 km com infeed)."),
+    "takagi": ("Aconselhável com um terminal na trifásica com Rf e carga (pior caso "
+               "7 km, contra 51 do laço). Precisa de pré-falta; não corrige o infeed."),
+    "takagi_i2": ("Aconselhável com um terminal na falta assimétrica com Rf: tira a "
+                  "carga sem pré-falta e é o que menos erra com infeed. Piora com TC "
+                  "saturado; não existe na trifásica."),
+}
+#: Como cada método calcula, numa frase.
+COMO_CALCULA = {
+    "seqneg": ("Iguala a tensão de sequência negativa no ponto da falta vista pelos "
+               "dois terminais: |V2S − m·Z2·I2S| = |V2R − (1−m)·Z2·I2R|."),
+    "laco": "Reatância do laço da falta: m = Im{V_laço / I_laço} / X1L.",
+    "takagi": ("Reatância referida à corrente superposta ΔI = I − I_pré: "
+               "m = Im{V·ΔI*} / Im{Z1L·I·ΔI*}."),
+    "takagi_i2": ("Reatância referida à I2 do laço, que só a falta produz: "
+                  "m = Im{V·I2*} / Im{Z1L·I·I2*}."),
+}
 
 
 def direcao_no_plato(v2: np.ndarray, i2: np.ndarray, z1l: complex,
@@ -719,6 +798,20 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
                                      "o registro não tem um ciclo de pré-falta")
             else:
                 series["takagi"] = m_tk * km
+        if not laco:
+            motivos["takagi_i2"] = motivos["laco"]
+        elif trifasica or (razao_i2 is not None and razao_i2 < MINIMO_I2_SOBRE_I1):
+            motivos["takagi_i2"] = (
+                "falta trifásica: não há sequência negativa para polarizar"
+                if trifasica else
+                f"I2 é só {100 * razao_i2:.1f} % de I1 no platô — pouco para "
+                "polarizar".replace(".", ",", 1))
+        else:
+            m_i2 = takagi_i2_vetor(term_a.v, term_a.i, laco, z1, z0)
+            if m_i2 is None:
+                motivos["takagi_i2"] = "falta o Z0 da linha (para o k0 do laço de terra)"
+            else:
+                series["takagi_i2"] = m_i2 * km
         pacote["km_linha"] = km
 
     # A LDL só existe DURANTE a falta: antes dela o laço mede a carga e dá um
@@ -759,7 +852,9 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
     for metodo in METODOS:
         if metodo not in series:
             pacote["metodos"][metodo] = {"nome": NOMES[metodo], "curto": CURTOS[metodo],
-                                         "km": None, "motivo": motivos.get(metodo, "")}
+                                         "km": None, "motivo": motivos.get(metodo, ""),
+                                         "quando": QUANDO_USAR[metodo],
+                                         "como": COMO_CALCULA[metodo]}
             continue
         s = series[metodo]
         valores = s[no_plato if metodo == "seqneg" else no_plato_a]
@@ -780,7 +875,8 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
                        "ou o platô não pegou a falta".replace(".", ",", 1) if fora else "")
         pacote["metodos"][metodo] = {"nome": NOMES[metodo], "curto": CURTOS[metodo],
                                      "km": km_med, "dispersao": disp, "fora": fora,
-                                     "motivo": motivo}
+                                     "motivo": motivo, "quando": QUANDO_USAR[metodo],
+                                     "como": COMO_CALCULA[metodo]}
         if metodo == "seqneg":
             pacote["metodos"][metodo]["modelo"] = modelo_sn
         # A curva vai à tela limitada a ±1 LT além das pontas: um método que

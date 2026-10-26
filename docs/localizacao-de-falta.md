@@ -119,7 +119,7 @@ comissionamento com registros reais é que vai dizer o de verdade.
 | método | estado | fonte |
 |---|---|---|
 | Reatância polarizada por 3I0 (Takagi modificado) | maquete | Cap. IV 63, 70–72; Exercício 8 (validado); Schweitzer, *A review of impedance-based fault locating experience*, 1990 |
-| Reatância polarizada por I2 | maquete | Cap. IV 63, 70–72, 137, 157, 216 (a polarização preferida: a rede de sequência negativa não muda com manobra de trafo aterrado) |
+| **Takagi polarizado por I2** — `m = Im{V·I2*}/Im{Z1L·I·I2*}`, com a I2 do LAÇO (`I2φ` no de terra, `I2φ1 − I2φ2` no de fase: a I2 da fase A numa CG está a 120° da falta, numa BC a 90°, e o erro ia a centenas de %). Sem pré-falta; recusa a trifásica (\|I2\| < 5 % de \|I1\|). Método de CONFERÊNCIA. Na bifásica é a mesma conta do Takagi por ΔI. Ver a varredura abaixo | **feito** (`faultloc/ldl.py`, 25/10/2026) | Cap. IV 63, 70–72, 137, 157, 216 (a polarização preferida: a rede de sequência negativa não muda com manobra de trafo aterrado); Schweitzer, 1990 |
 | Takagi (corrente superposta, precisa de pré-falta) — `m = Im{V·ΔI*}/Im{Z1L·I·ΔI*}`, `ΔI = I_laço − I_laço,pré`. Método de CONFERÊNCIA (não vira resultado). No gerador, um terminal com carga (δ 20°) e Rf 10–50 Ω: 0,9 km típico e 5,1 km no pior, contra 8 km e 51 km do laço pela reatância; não corrige infeed (SIR 4/0,2: até 18 km) nem a falta de terra perto de S (pior que o laço a 10 km). Sem dado real | **feito** (`faultloc/ldl.py`, 25/10/2026) | Takagi et al., IEEE Trans. PAS-101(8), 1982; o modelo do erro que ele corrige: Cap. IV 56–58 |
 | Reatância simples — `Im{V/(I + k0·3I0)}/X1L` (o laço da falta) | **feito** (`faultloc/ldl.py`) | método da Energisa; Cap. IV 24, 27, 30, 63–66, 138–139; Exercícios 8 e 10 |
 | Impedância aparente `\|Z\|/\|Z1L\|` | maquete (para mostrar por que não se usa) | Cap. IV 25–30, 56–62 |
@@ -128,6 +128,36 @@ comissionamento com registros reais é que vai dizer o de verdade.
 | Compensação de mútua (K0M = Z0M/(3·Z1L), corrente da paralela) | futuro | Cap. IV 28–29, 213–217; Cap. III 44–47; Exercícios 2, 9, 11, 13; Wheeler, Proc. IEE 117(2), 1970 |
 | Compensação da não homogeneidade (girar I_pol por ξ2/ξ0) | futuro | Cap. IV 74–87 |
 | Fator de alcance de linha não transposta (por laço) | futuro | Cap. I 35–41; IEEE Std 1870-2019 |
+
+#### Varredura dos métodos de um terminal (25/10/2026)
+
+No gerador `tests/rede_de_falta.py`, LT de 138 kV e 100 km, só o IED A.
+Erro em km, **mediana / pior**; `(k/n)` quando só `k` dos `n` casos deram
+número na linha. «Hoje» é o resultado atual de um terminal (sempre o laço);
+«proposta» é a regra abaixo.
+
+| cenário | n | laço | Takagi ΔI | Takagi I2 | hoje | proposta |
+|---|---:|---|---|---|---|---|
+| com carga: Rf 10–50 Ω, δ 20° (AG/BC/ABG, COMTRADE + .CEV) | 54 | 2,17 / 33,47 | 0,50 / 4,02 | 0,20 / 4,06 | 2,17 / 33,47 | 0,20 / 4,06 |
+| Rf 10–50 Ω sem carga, δ 0° | 54 | 0,53 / 7,22 | 0,51 / 4,49 | 0,24 / 5,26 | 0,53 / 7,22 | 0,24 / 5,26 |
+| franca (Rf 0), não trifásica | 36 | 0,08 / 0,56 | 0,08 / 0,56 | 0,09 / 0,56 | 0,08 / 0,56 | 0,09 / 0,56 |
+| infeed / remoto fraco (SIR 4/0,2 · 1/20 · 0,2/4, Rf 0/25) | 54 | 0,21 / 59,91 (53/54) | 0,17 / 17,72 (53/54) | 0,17 / 10,26 | 0,21 / 59,91 (53/54) | 0,17 / 10,26 |
+| TC de A saturado (joelho 0,3–1, franca) | 27 | 0,41 / 2,42 | 1,16 / 6,95 | 1,03 / 13,58 | 0,41 / 2,42 | 1,03 / 13,58 |
+| AG perto de S (5–10 km), Rf 10–50 | 36 | 0,91 / 18,30 | 2,16 / 18,94 | 0,66 / 11,31 | 0,91 / 18,30 | 0,66 / 11,31 |
+| trifásica (Rf 0–50, δ 0/20) | 48 | 1,41 / 50,52 (46/48) | 0,49 / 7,13 | — | 1,41 / 50,52 (46/48) | 0,49 / 7,13 |
+| pré-falta curta (1,5–3 ciclos; abaixo de 2 o detector não acha a falta) | 18 | 7,00 / 9,49 (14/18) | 0,10 / 1,62 (14/18) | 0,16 / 0,24 (10/18) | 7,00 / 9,49 (14/18) | 0,09 / 0,24 (14/18) |
+
+Erro acima de 3 km **sem** o aviso de discordância, somando as linhas: 27
+casos hoje, 14 na proposta — e 5 desses 14 são o TC saturado, onde o laço
+não tinha nenhum. A implementação se afasta do método sobre os fasores
+exatos em 0,02 km típico e 0,64 km no pior (`TOL_IMPL_TAKAGI_I2`).
+
+**Proposta para o resultado de um terminal (não aplicada):** falta
+assimétrica → Takagi por I2; trifásica com pré-falta → Takagi por ΔI; senão
+→ laço. O que a varredura não sustenta é o TC saturado: ali o Takagi por I2
+piora (pior caso 2,4 → 13,6 km, este com aviso). Enquanto não houver um
+detector de saturação, a regra troca 27 erros calados por 14, e a discordância
+com o laço continua no aviso.
 
 Fórmulas do nível de curto (Cap. II 21–23; sistema radial, x em pu):
 
