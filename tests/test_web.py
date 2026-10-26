@@ -480,6 +480,62 @@ def test_o_validador_de_paleta_confere_as_cores_QUE_ESTAO_NO_CSS():
             f"tema {tema}: o validador e o CSS discordam")
 
 
+def _paleta_do_repositorio():
+    import importlib.util
+    import pathlib
+
+    caminho = pathlib.Path(__file__).resolve().parents[1] / "tools" / "paleta.py"
+    spec = importlib.util.spec_from_file_location("paleta", caminho)
+    paleta = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(paleta)
+    return paleta
+
+
+def _convencoes_do_css() -> dict[tuple[str, str], dict[str, str]]:
+    """`(id, tema) → cores` de cada bloco do `fases.css`."""
+    import re
+
+    from osclab import paths
+    texto = (paths.STATIC_DIR / "css" / "fases.css").read_text(encoding="utf-8")
+    seletor = r'(:root(?:\[data-tema="claro"\])?\[data-fases="([a-z0-9]+)"\])'
+    blocos = re.findall(seletor + r"\s*\{([^}]*)\}", texto)
+    cor = re.compile(r"(--(?:fase-[abcn]|traco-[123]))\s*:\s*(#[0-9a-f]{6})")
+    return {(ident, "claro" if "claro" in sel else "escuro"): dict(cor.findall(corpo))
+            for sel, ident, corpo in blocos}
+
+
+def _pares(reprovacoes: list[str]) -> set[str]:
+    """`--a × --b em visão`, sem o número: o PAR é o que se compara."""
+    return {r.split(":")[0] for r in reprovacoes}
+
+
+def test_toda_convencao_de_cores_das_fases_passa_no_validador():
+    """Cada convenção troca sete cores de uma vez. No escuro ela tem de sair
+    limpa; no claro, não pode reprovar par nenhum que a paleta de fábrica do
+    claro já não reprove hoje — senão a engrenagem pioraria a tela."""
+    paleta = _paleta_do_repositorio()
+    convencoes = _convencoes_do_css()
+    assert len(convencoes) == 14, sorted(convencoes)  # 7 convenções × 2 temas
+    base = {t: _pares(paleta.conferir(d["cores"], d["fundo"])[0])
+            for t, d in paleta.TEMAS.items()}
+    for (ident, tema), cores in convencoes.items():
+        assert len(cores) == 7, (ident, tema, cores)
+        tudo = {**paleta.TEMAS[tema]["cores"], **cores}
+        novas = _pares(paleta.conferir(tudo, paleta.TEMAS[tema]["fundo"])[0]) - base[tema]
+        assert not novas, (ident, tema, novas)
+
+
+def test_o_menu_de_fases_e_o_css_listam_as_mesmas_convencoes():
+    import re
+
+    from osclab import paths
+    js = (paths.STATIC_DIR / "js" / "tema.js").read_text(encoding="utf-8")
+    trecho = js[js.index("const CONVENCOES"):js.index("];", js.index("const CONVENCOES"))]
+    do_menu = set(re.findall(r'\["([a-z0-9]+)",', trecho))
+    do_css = {ident for ident, _ in _convencoes_do_css()}
+    assert do_menu == do_css | {"energisa"}, (do_menu, do_css)
+
+
 def test_toda_cor_que_a_tela_usa_existe_no_css():
     """Token que não existe devolve string vazia no `getComputedStyle`, e o
     traço sai preto sobre fundo preto — invisível, sem erro nenhum."""

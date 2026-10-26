@@ -9750,20 +9750,32 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
 
     const p = pontoDoCursor(painel, qual);
     const zl = painel.parametros ? painel.parametros.modulo : 0;
+    // O «% da LT» é pela REATÂNCIA, como o localizador do relé: o comprimento
+    // da linha está no X, e a resistência da falta cai quase toda no R. Pelo
+    // módulo, |Z|/|ZL| somava a Rf ao comprimento — 16,5 % onde o relé dizia
+    // 12 (decidido com o Alexandre em 25/10/2026). O do módulo fica no hover:
+    // a diferença entre os dois é a pista de falta resistiva.
+    const xl = painel.parametros
+      ? zl * Math.sin(painel.parametros.angulo * Math.PI / 180) : 0;
+    const pctModulo = zl > 0 && p ? 100 * Math.hypot(p.r, p.x) / zl : null;
     const linhas = p
       ? [["R", `${formatar(p.r, 2)} Ω`],
          ["X", `${formatar(p.x, 2)} Ω`],
          ["|Z|", `${formatar(Math.hypot(p.r, p.x), 2)} Ω`],
          ["∠Z", `${formatar(Math.atan2(p.x, p.r) * 180 / Math.PI, 1)}°`],
-         ["% da LT", zl > 0 ? `${formatar(100 * Math.hypot(p.r, p.x) / zl, 1)} %`
-                            : "—"]]
+         ["% da LT", xl > 0 ? `${formatar(100 * p.x / xl, 1)} %` : "—",
+          xl > 0 ? `Pela reatância (X ÷ XL da linha), como o localizador do relé. `
+                   + `Pelo módulo (|Z| ÷ |ZL|): ${formatar(pctModulo, 1)} % — a diferença `
+                   + `entre os dois é a resistência da falta somada ao comprimento.` : ""]]
       : [["", "cursor fora da janela"]];
 
-    for (const [rotulo, valor] of linhas) {
+    for (const [rotulo, valor, dica] of linhas) {
       const tr = criar("tr");
       const th = criar("th", "canal");
       th.append(criar("span", "rotulo", rotulo));
-      tr.append(th, criar("td", null, valor));
+      const td = criar("td", null, valor);
+      if (dica) td.title = dica;
+      tr.append(th, td);
       tbody.append(tr);
     }
     tabela.append(thead, tbody);
@@ -16355,13 +16367,18 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   const telaLoc = document.getElementById("tela-localizar");
   const estadoLoc = {
     aberta: false, fonte: "auto", pacote: null, lendo: false, denovo: false,
-    modoI: "seq", modoV: "seq", zoom: "lt", ligados: new Set(["seqneg", "laco"]),
+    modoI: "seq", modoV: "seq", zoom: "lt", ligados: new Set(["seqneg", "laco", "takagi", "takagi_i2"]),
     manual: { forma: "rx", r: "", x: "", r0: "", x0: "", mod: "", ang: "", mod0: "", ang0: "",
               rkm: "", xkm: "", r0km: "", x0km: "", km: "", base: "prim" },
   };
   const NOMES_DAS_FONTES = { base: "base de dados", A: "ajustes do IED A", B: "ajustes do IED B", manual: "digitada" };
   // Cores de SOBRA da paleta validada: os dois métodos não são fase de nada.
-  const CORES_LOC = { seqneg: "var(--traco-2)", laco: "var(--traco-1)" };
+  const CORES_LOC = { seqneg: "var(--traco-2)", laco: "var(--traco-1)",
+                      takagi: "var(--traco-3)", takagi_i2: "var(--calculado-1)" };
+  // Todos os métodos que o servidor calculou aparecem, nesta ordem; o
+  // destacado como resultado é escolha do servidor (`ldl.PREFERENCIA`).
+  const ORDEM_LOC = ["seqneg", "laco", "takagi", "takagi_i2"];
+  const metodosLoc = p => ORDEM_LOC.filter(m => p.metodos && p.metodos[m]);
   const htmlLoc = texto => String(texto == null ? "" : texto)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const numLoc = (v, casas) => (v == null || !isFinite(v)) ? "—"
@@ -16490,7 +16507,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       s += `<rect x="${E.x0}" y="${a}" width="${E.x1 - E.x0}" height="${Math.max(1, b - a)}" fill="var(--destaque)" opacity=".10"/>`;
     }
     s += fundoLoc(E, y0, y1, true) + marcasTempoLoc(E, y0, y1, altura - 18);
-    for (const m of ["laco", "seqneg"]) {
+    for (const m of metodosLoc(p).reverse()) {
       const c = p.ldl && p.ldl[m];
       if (!c || !estadoLoc.ligados.has(m)) continue;
       s += `<path d="${caminhoLoc(E, Y, c.t, c.v[0])}" fill="none" stroke="${CORES_LOC[m]}" stroke-width="${res && res.metodo === m ? 2.4 : 1.6}"/>`;
@@ -16504,7 +16521,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const p = estadoLoc.pacote, km = p.km_linha;
     if (!km) return "";
     const x0 = 70, x1 = largura - 70, y = 54, X = v => x0 + Math.max(-0.1, Math.min(1.1, v / km)) * (x1 - x0);
-    const metodos = ["seqneg", "laco"].filter(m => estadoLoc.ligados.has(m) && p.metodos[m] && p.metodos[m].km != null);
+    const metodos = metodosLoc(p).filter(m => estadoLoc.ligados.has(m) && p.metodos[m] && p.metodos[m].km != null);
     const altura = y + 44 + metodos.length * 18;
     let s = `<svg viewBox="0 0 ${largura} ${altura}" width="${largura}" height="${altura}">`
       + `<line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="var(--tinta)" stroke-width="3"/>`
@@ -16602,12 +16619,12 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   }
   function passo2Loc() {
     const p = estadoLoc.pacote, c = p.cursor;
-    const chips = ["seqneg", "laco"].map(m => {
+    const chips = metodosLoc(p).map(m => {
       const info = p.metodos[m] || {}, sem = info.km == null;
       return `<button type="button" class="loc-chip ${estadoLoc.ligados.has(m) && !sem ? "on" : ""}" data-metodo="${m}" ${sem ? "disabled" : ""}
         title="${htmlLoc(sem ? info.motivo : (estadoLoc.ligados.has(m) ? "clique para esconder" : "clique para mostrar"))}"><span class="loc-bolinha" style="background:${CORES_LOC[m]}"></span>${htmlLoc(info.curto || m)}</button>`;
     }).join("");
-    const corpo = `<div class="loc-chips">${chips}<span class="loc-nota">os outros métodos de um terminal entram depois, cada um testado contra os exercícios da pós</span>`
+    const corpo = `<div class="loc-chips">${chips}<span class="loc-nota">todos os métodos calculados aparecem; o «resultado» é o mais confiável que este registro permite</span>`
       + ` ${pilulaLoc("zoom", [["lt", "LT inteira"], ["perto", "perto do resultado"]], estadoLoc.zoom)}</div>`
       + `<div class="loc-g" data-g="ldl" data-h="330"></div>`
       + `<div class="loc-nota">${c && c.no_plato ? "O cursor 1 está no platô: as curvas estão deitadas, o número vale." : "<span class=\"loc-aten\">O cursor 1 está fora do platô — o número lido ali não vale.</span>"} O resultado é a mediana do platô (faixa azul), não o valor no cursor.</div>`;
@@ -16650,9 +16667,22 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       + `<div class="fila-loc">${campo("km", "comprimento (km)")}</div>`
       + `<div class="loc-nota">Linha INTEIRA. Z1 entra nos dois métodos; Z0 só no laço de terra (k0 = (Z0 − Z1)/3Z1). Em secundário, passa a primário pelo RTP/RTC do IED A.</div>`;
   }
+  /** Como cada método calcula e QUANDO ele é o aconselhável. O texto vem do
+   * servidor (`ldl.COMO_CALCULA`, `ldl.QUANDO_USAR`), escrito ao lado da
+   * conta e conferido pela varredura de `tests/test_ldl_validacao.py`. */
+  function ajudaDosMetodosLoc(p) {
+    const itens = metodosLoc(p).filter(m => p.metodos[m].como || p.metodos[m].quando).map(m => {
+      const info = p.metodos[m];
+      return `<li><span class="loc-bolinha" style="background:${CORES_LOC[m]}"></span><b>${htmlLoc(info.nome)}</b>`
+        + (info.como ? `<div class="loc-nota"><b>como calcula:</b> ${htmlLoc(info.como)}</div>` : "")
+        + (info.quando ? `<div class="loc-nota"><b>quando usar:</b> ${htmlLoc(info.quando)}</div>` : "")
+        + `</li>`;
+    }).join("");
+    return itens ? `<details class="loc-ajuda"><summary>como funcionam os métodos, e quando usar cada um</summary><ul>${itens}</ul></details>` : "";
+  }
   function passo3Loc() {
     const p = estadoLoc.pacote, km = p.km_linha;
-    const linhas = ["seqneg", "laco"].map(m => {
+    const linhas = metodosLoc(p).map(m => {
       const info = p.metodos[m];
       if (!info) return "";
       // Sem número, ou com número FORA da linha: o motivo no lugar das colunas.
@@ -16663,6 +16693,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     return passoLoc(3, p.resultado ? "ok" : "aviso", "Resultado", "",
       `<div class="loc-g" data-g="unifilar"></div>`
       + `<table><tr><th>método</th><th>km de A</th><th>km de ${p.nomes && p.nomes.B ? "B" : "R"}</th><th>dispersão no platô (km)</th></tr>${linhas}</table>`
+      + ajudaDosMetodosLoc(p)
       + `<div style="margin-top:10px">${linhaLoc()}</div>`);
   }
 

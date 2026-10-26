@@ -1,0 +1,241 @@
+/* AS CONVENÇÕES DE COR DAS FASES — a engrenagem «cores das fases» do cabeçalho.
+
+   Cada país e cada empresa pinta as fases de um jeito, e o leitor é universal:
+   quem abre uma oscilografia na convenção dele lê a fase pela cor sem tradução.
+   A Energisa MT é a de fábrica e NÃO aparece aqui — é o `osclab.css` como está.
+
+   Cada convenção troca as quatro cores de fase E as três de traço (as
+   «sobras»): a cor de campo vira o tom que se lê na tela, e as sobras são
+   escolhidas para continuar longe das fases novas. Os valores saíram do
+   validador (`tools/paleta.py`) na maquete «cores das fases» (25/10/2026), e
+   `tests/test_web.py` passa cada bloco por ele de novo: no escuro, zero
+   reprovações; no claro, só a que o tema claro já tem hoje.
+
+   O seletor do claro leva DOIS atributos, para ganhar do `:root[data-tema]`
+   do `osclab.css` sem depender da ordem dos arquivos. */
+
+/* A engrenagem do botão: oito dentes em volta de um anel. */
+:root {
+  --ic-engrenagem: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5'><circle cx='8' cy='8' r='2.2'/><circle cx='8' cy='8' r='4.8'/><path d='M8 1v2.2M8 12.8V15M1 8h2.2M12.8 8H15M3.05 3.05l1.55 1.55M11.4 11.4l1.55 1.55M12.95 3.05L11.4 4.6M4.6 11.4l-1.55 1.55' stroke-linecap='round'/></svg>");
+}
+
+/* IEC 60445 / NBR 5410 (escuro): marrom, preto, cinza, azul-claro */
+:root[data-fases="iec60445"] {
+  --fase-a: #99511b;
+  --fase-b: #516375;
+  --fase-c: #808080;
+  --fase-n: #87abc6;
+  --traco-1: #1fecff;
+  --traco-2: #e124fc;
+  --traco-3: #63bd00;
+}
+/* IEC 60445 / NBR 5410 (claro): marrom, preto, cinza, azul-claro */
+:root[data-tema="claro"][data-fases="iec60445"] {
+  --fase-a: #6c3609;
+  --fase-b: #3f3636;
+  --fase-c: #878787;
+  --fase-n: #4899d8;
+  --traco-1: #50a824;
+  --traco-2: #0000fc;
+  --traco-3: #bd00fc;
+}
+/* Vermelho-amarelo-azul (escuro): vermelho, amarelo, azul, preto */
+:root[data-fases="ryb"] {
+  --fase-a: #d42a2a;
+  --fase-b: #b4ab00;
+  --fase-c: #3f63bd;
+  --fase-n: #5a6363;
+  --traco-1: #1fecff;
+  --traco-2: #00cf87;
+  --traco-3: #009051;
+}
+/* Vermelho-amarelo-azul (claro): vermelho, amarelo, azul, preto */
+:root[data-tema="claro"][data-fases="ryb"] {
+  --fase-a: #ea2d3f;
+  --fase-b: #ab906c;
+  --fase-c: #125ae1;
+  --fase-n: #3f3636;
+  --traco-1: #0000fc;
+  --traco-2: #a27efc;
+  --traco-3: #a20012;
+}
+/* EUA 208/120 V (escuro): preto, vermelho, azul, branco */
+:root[data-fases="eua208"] {
+  --fase-a: #5a6363;
+  --fase-b: #d42a2a;
+  --fase-c: #3f63bd;
+  --fase-n: #bdc6d8;
+  --traco-1: #63bd00;
+  --traco-2: #00cf87;
+  --traco-3: #009051;
+}
+/* EUA 208/120 V (claro): preto, vermelho, azul, branco */
+:root[data-tema="claro"][data-fases="eua208"] {
+  --fase-a: #3f3636;
+  --fase-b: #ea2d3f;
+  --fase-c: #125ae1;
+  --fase-n: #999090;
+  --traco-1: #0000fc;
+  --traco-2: #a27efc;
+  --traco-3: #a20012;
+}
+/* EUA 480/277 V (escuro): marrom, laranja, amarelo, cinza */
+:root[data-fases="eua480"] {
+  --fase-a: #99511b;
+  --fase-b: #f07f13;
+  --fase-c: #fcfc1b;
+  --fase-n: #808080;
+  --traco-1: #1fecff;
+  --traco-2: #e124fc;
+  --traco-3: #fc3663;
+}
+/* EUA 480/277 V (claro): marrom, laranja, amarelo, cinza */
+:root[data-tema="claro"][data-fases="eua480"] {
+  --fase-a: #6c3609;
+  --fase-b: #e17509;
+  --fase-c: #ab905a;
+  --fase-n: #878787;
+  --traco-1: #0000fc;
+  --traco-2: #bd00fc;
+  --traco-3: #fc00c6;
+}
+/* Canadá (escuro): vermelho, preto, azul, branco */
+:root[data-fases="canada"] {
+  --fase-a: #d42a2a;
+  --fase-b: #5a6363;
+  --fase-c: #3f63bd;
+  --fase-n: #bdc6d8;
+  --traco-1: #63bd00;
+  --traco-2: #00cf87;
+  --traco-3: #009051;
+}
+/* Canadá (claro): vermelho, preto, azul, branco */
+:root[data-tema="claro"][data-fases="canada"] {
+  --fase-a: #ea2d3f;
+  --fase-b: #3f3636;
+  --fase-c: #125ae1;
+  --fase-n: #999090;
+  --traco-1: #0000fc;
+  --traco-2: #a27efc;
+  --traco-3: #a20012;
+}
+/* Austrália / NZ (escuro): vermelho, branco, azul, preto */
+:root[data-fases="aunz"] {
+  --fase-a: #d42a2a;
+  --fase-b: #bdc6d8;
+  --fase-c: #3f63bd;
+  --fase-n: #5a6363;
+  --traco-1: #63bd00;
+  --traco-2: #00cf87;
+  --traco-3: #009051;
+}
+/* Austrália / NZ (claro): vermelho, branco, azul, preto */
+:root[data-tema="claro"][data-fases="aunz"] {
+  --fase-a: #ea2d3f;
+  --fase-b: #999090;
+  --fase-c: #125ae1;
+  --fase-n: #3f3636;
+  --traco-1: #0000fc;
+  --traco-2: #a27efc;
+  --traco-3: #a20012;
+}
+/* China (GB) (escuro): amarelo, verde, vermelho, azul-claro */
+:root[data-fases="china"] {
+  --fase-a: #b4ab00;
+  --fase-b: #2e9e3e;
+  --fase-c: #cf001b;
+  --fase-n: #87abc6;
+  --traco-1: #e2128c;
+  --traco-2: #1fecff;
+  --traco-3: #e124fc;
+}
+/* China (GB) (claro): amarelo, verde, vermelho, azul-claro */
+:root[data-tema="claro"][data-fases="china"] {
+  --fase-a: #b49000;
+  --fase-b: #249951;
+  --fase-c: #a23636;
+  --fase-n: #4899d8;
+  --traco-1: #0000fc;
+  --traco-2: #bd00fc;
+  --traco-3: #fc5187;
+}
+
+/* O menu: as quatro bolinhas de cada convenção, nas cores DELA (não nas da
+   convenção ativa), para se escolher olhando. */
+.fases-amostra[data-p="energisa"] .a { background: #4b83d6; }
+.fases-amostra[data-p="energisa"] .b { background: #b8860b; }
+.fases-amostra[data-p="energisa"] .c { background: #d45560; }
+.fases-amostra[data-p="energisa"] .n { background: #2c9b75; }
+:root[data-tema="claro"] .fases-amostra[data-p="energisa"] .a { background: #3574de; }
+:root[data-tema="claro"] .fases-amostra[data-p="energisa"] .b { background: #b8860b; }
+:root[data-tema="claro"] .fases-amostra[data-p="energisa"] .c { background: #96172b; }
+:root[data-tema="claro"] .fases-amostra[data-p="energisa"] .n { background: #247e5a; }
+.fases-amostra[data-p="iec60445"] .a { background: #99511b; }
+.fases-amostra[data-p="iec60445"] .b { background: #516375; }
+.fases-amostra[data-p="iec60445"] .c { background: #808080; }
+.fases-amostra[data-p="iec60445"] .n { background: #87abc6; }
+:root[data-tema="claro"] .fases-amostra[data-p="iec60445"] .a { background: #6c3609; }
+:root[data-tema="claro"] .fases-amostra[data-p="iec60445"] .b { background: #3f3636; }
+:root[data-tema="claro"] .fases-amostra[data-p="iec60445"] .c { background: #878787; }
+:root[data-tema="claro"] .fases-amostra[data-p="iec60445"] .n { background: #4899d8; }
+.fases-amostra[data-p="ryb"] .a { background: #d42a2a; }
+.fases-amostra[data-p="ryb"] .b { background: #b4ab00; }
+.fases-amostra[data-p="ryb"] .c { background: #3f63bd; }
+.fases-amostra[data-p="ryb"] .n { background: #5a6363; }
+:root[data-tema="claro"] .fases-amostra[data-p="ryb"] .a { background: #ea2d3f; }
+:root[data-tema="claro"] .fases-amostra[data-p="ryb"] .b { background: #ab906c; }
+:root[data-tema="claro"] .fases-amostra[data-p="ryb"] .c { background: #125ae1; }
+:root[data-tema="claro"] .fases-amostra[data-p="ryb"] .n { background: #3f3636; }
+.fases-amostra[data-p="eua208"] .a { background: #5a6363; }
+.fases-amostra[data-p="eua208"] .b { background: #d42a2a; }
+.fases-amostra[data-p="eua208"] .c { background: #3f63bd; }
+.fases-amostra[data-p="eua208"] .n { background: #bdc6d8; }
+:root[data-tema="claro"] .fases-amostra[data-p="eua208"] .a { background: #3f3636; }
+:root[data-tema="claro"] .fases-amostra[data-p="eua208"] .b { background: #ea2d3f; }
+:root[data-tema="claro"] .fases-amostra[data-p="eua208"] .c { background: #125ae1; }
+:root[data-tema="claro"] .fases-amostra[data-p="eua208"] .n { background: #999090; }
+.fases-amostra[data-p="eua480"] .a { background: #99511b; }
+.fases-amostra[data-p="eua480"] .b { background: #f07f13; }
+.fases-amostra[data-p="eua480"] .c { background: #fcfc1b; }
+.fases-amostra[data-p="eua480"] .n { background: #808080; }
+:root[data-tema="claro"] .fases-amostra[data-p="eua480"] .a { background: #6c3609; }
+:root[data-tema="claro"] .fases-amostra[data-p="eua480"] .b { background: #e17509; }
+:root[data-tema="claro"] .fases-amostra[data-p="eua480"] .c { background: #ab905a; }
+:root[data-tema="claro"] .fases-amostra[data-p="eua480"] .n { background: #878787; }
+.fases-amostra[data-p="canada"] .a { background: #d42a2a; }
+.fases-amostra[data-p="canada"] .b { background: #5a6363; }
+.fases-amostra[data-p="canada"] .c { background: #3f63bd; }
+.fases-amostra[data-p="canada"] .n { background: #bdc6d8; }
+:root[data-tema="claro"] .fases-amostra[data-p="canada"] .a { background: #ea2d3f; }
+:root[data-tema="claro"] .fases-amostra[data-p="canada"] .b { background: #3f3636; }
+:root[data-tema="claro"] .fases-amostra[data-p="canada"] .c { background: #125ae1; }
+:root[data-tema="claro"] .fases-amostra[data-p="canada"] .n { background: #999090; }
+.fases-amostra[data-p="aunz"] .a { background: #d42a2a; }
+.fases-amostra[data-p="aunz"] .b { background: #bdc6d8; }
+.fases-amostra[data-p="aunz"] .c { background: #3f63bd; }
+.fases-amostra[data-p="aunz"] .n { background: #5a6363; }
+:root[data-tema="claro"] .fases-amostra[data-p="aunz"] .a { background: #ea2d3f; }
+:root[data-tema="claro"] .fases-amostra[data-p="aunz"] .b { background: #999090; }
+:root[data-tema="claro"] .fases-amostra[data-p="aunz"] .c { background: #125ae1; }
+:root[data-tema="claro"] .fases-amostra[data-p="aunz"] .n { background: #3f3636; }
+.fases-amostra[data-p="china"] .a { background: #b4ab00; }
+.fases-amostra[data-p="china"] .b { background: #2e9e3e; }
+.fases-amostra[data-p="china"] .c { background: #cf001b; }
+.fases-amostra[data-p="china"] .n { background: #87abc6; }
+:root[data-tema="claro"] .fases-amostra[data-p="china"] .a { background: #b49000; }
+:root[data-tema="claro"] .fases-amostra[data-p="china"] .b { background: #249951; }
+:root[data-tema="claro"] .fases-amostra[data-p="china"] .c { background: #a23636; }
+:root[data-tema="claro"] .fases-amostra[data-p="china"] .n { background: #4899d8; }
+
+.menu-fases { position: absolute; z-index: 60; min-width: 270px; padding: 6px;
+  background: var(--cartao); border: 1px solid var(--cartao-borda); border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .35); }
+.menu-fases .rot { color: var(--suave); font-size: 11px; padding: 2px 8px 6px; }
+.menu-fases button { display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 6px 8px; border: 0; border-radius: 6px; background: none;
+  color: var(--tinta); font: inherit; text-align: left; cursor: pointer; }
+.menu-fases button:hover { background: var(--faixa-da-tabela); }
+.menu-fases button.atual { outline: 1px solid var(--destaque); }
+.menu-fases .peq { color: var(--suave); font-size: 11px; }
+.fases-amostra { display: inline-flex; gap: 3px; flex: none; }
+.fases-amostra span { width: 11px; height: 11px; border-radius: 50%; }

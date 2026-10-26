@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ item.nome }} — OscLab</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/osclab.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fases.css') }}">
   <script src="{{ url_for('static', filename='js/tema.js') }}"></script>
 </head>
 <body data-sha="{{ item.sha }}" data-laco="{{ item.falta_laco or '' }}">
@@ -172,6 +173,11 @@
       <button type="button" class="chave tema com-icone" id="tema"
               style="--ic: var(--ic-tema)"
               title="Alternar tema">tema</button>
+      {#- As CORES DAS FASES: a convenção de cada país ou empresa (ver
+          `fases.css` e `tema.js`). Vale para o programa todo, como o tema. #}
+      <button type="button" class="chave com-icone" id="fases"
+              style="--ic: var(--ic-engrenagem)"
+              title="Cores das fases: a convenção da sua empresa ou do seu país">cores</button>
     </div>
     </div>
   </header>
