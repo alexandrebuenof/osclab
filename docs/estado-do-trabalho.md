@@ -27,10 +27,29 @@ Feito:
 3. Classificador: «falta já em curso» (inclui a falta entre 1 e 2 ciclos do
    começo, xfail em `test_varredura.py`), os 74 religadores «AG sem trip»,
    seleção de fase do relé como prova.
-4. LDL: trifásica EXTERNA ainda vira resultado (xfail em `test_ldl_validacao.py`).
+4. LDL: Takagi como RESULTADO de um terminal quando houver pré-falta (hoje
+   é só conferência; o pior erro com carga cai de 50 para 5 km, mas piora no
+   TC saturado e na falta à terra perto da barra). Antes, medir o Takagi
+   polarizado por I2. A capacitância `b1` ainda não tem campo na tela.
 5. Propostas de função nova (pedem 10 maquetes): diferencial juntando dois
    registros (P139/451), ajustes do MiCOM por exportação de texto do Easergy,
    ajustes do PL300 pelo `AJUSTES_*`.
+
+6. Plano de impedância: a ficha «% da LT» é |Z|/|ZL| e soma a Rf ao
+   comprimento (Rondonópolis CG: 16,5 % contra 12 % do relé). Mostrar a
+   reatância, as duas, ou deixar?
+7. A conferência 1 (resíduo) reprova 72 registros do banco em que o `IN`
+   medido é entrada própria (`Current IN` do MiCOM, `IN` do 311C, `INS`
+   sensível do PL300). Não é defeito de conta; a conferência precisa
+   reconhecer esse caso em vez de reprovar.
+
+Feito depois (commits 7a153f8, 51157ed, f71e71d): 87T com bloqueio e
+restrição juntos; LDL recusa a trifásica externa (a direção comparava fasores
+que giram), Takagi de conferência, seq. negativa pela linha distribuída;
+plano de impedância com k0 sobre a soma das fases (o `IN` do 311C é entrada
+própria e tirava a compensação: 6 de 22 faltas reais erravam até 71 pontos);
+conferências 9 (87T) e 10 (21) contra o relé — na 10, só o 321 de Coxipó
+diverge, sem explicação ainda (conferir no SIGRA).
 
 ## 24/10/2026 — etapa de aprendizagem sobre o banco do parque (sem commit)
 
