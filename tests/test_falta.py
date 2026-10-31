@@ -460,3 +460,98 @@ def test_o_T_solto_da_sigla_da_sel_e_trip():
     assert not falta.trip_na_sigla("CA")
     assert not falta.trip_na_sigla("ER Trigger")
     assert not falta.trip_na_sigla("")
+
+
+# ---------------------------------------------------------------------------
+# Evolução para trifásica, inrush e falta já em curso (exemplos de aula e
+# registros do parque, 31/10/2026)
+# ---------------------------------------------------------------------------
+
+def test_monofasica_que_vira_trifasica_e_evolutiva_mesmo_perdendo_a_terra():
+    """Numa trifásica o 3I0 vai a zero e a terra deixa de ser observável. Sem
+    tratar isso, AG → ABC parecia ter ENCOLHIDO e era descartada."""
+    v = _classificar("A", True, evolui_para=("ABC", False))
+    assert (v.tipo_inicial, v.tipo) == ("AG", "ABC"), v.porques
+
+
+def _com_inrush(r: Record, t_fecha: float = 0.045, tau: float = 0.08,
+                pico: float = 600.0) -> Record:
+    """Antes de `T_FALTA`, o vão estava ABERTO e fecha em `t_fecha` com inrush:
+    corrente unipolar (meia senoide ao quadrado) decaindo com `tau`, e tensão
+    sem afundar. Depois de `T_FALTA` fica a falta do registro de base."""
+    dados = r.analog.copy()
+    t = r.time
+    w = 2 * math.pi * F0
+    antes = t < T_FALTA
+    for j, ang in enumerate((0.0, -120.0, 120.0)):
+        fase = np.sin(w * t + math.radians(ang))
+        onda = np.where(t >= t_fecha,
+                        pico * np.exp(-(t - t_fecha) / tau) * np.clip(fase, 0, None) ** 2, 0.0)
+        dados[3 + j, antes] = onda[antes]
+    return Record(source=None, format_name="teste", station="SE TESTE",
+                  line_frequency=F0, start_time=r.start_time,
+                  analog_channels=r.analog_channels, sample_rates=r.sample_rates,
+                  analog=dados, time=t)
+
+
+def test_o_inrush_do_fechamento_nao_e_a_falta():
+    """O religamento energiza os trafos a jusante: três correntes com muito 2º
+    harmônico. O detector tomava esse inrush pelo início da falta — e a
+    bifásica de verdade, que vinha depois, ficava fora da janela. O inrush
+    aqui é da ordem de um quarto da falta, como no exemplo de aula."""
+    r = _com_inrush(_registro("AB", False), pico=3000.0)
+    v = falta.classificar(r, CANAIS_I, CANAIS_V)
+    assert v.tipo == "AB", v.porques
+    assert any("Energização" in p for p in v.porques)
+    assert falta.energizacao(r, CANAIS_I, CANAIS_V) is not None
+
+
+def test_so_energizacao_nao_e_falta():
+    r = _com_inrush(_registro("AB", False))
+    # Sem a falta: depois de T_FALTA o inrush só continua decaindo.
+    t = r.time
+    w = 2 * math.pi * F0
+    dados = r.analog.copy()
+    for j, ang in enumerate((0.0, -120.0, 120.0)):
+        fase = np.sin(w * t + math.radians(ang))
+        dados[3 + j] = np.where(t >= 0.045, 600.0 * np.exp(-(t - 0.045) / 0.08)
+                                * np.clip(fase, 0, None) ** 2, 0.0)
+        dados[j] = VN * math.sqrt(2) * fase
+    r = Record(source=None, format_name="teste", station="SE TESTE", line_frequency=F0,
+               start_time=r.start_time, analog_channels=r.analog_channels,
+               sample_rates=r.sample_rates, analog=dados, time=t)
+    v = falta.classificar(r, CANAIS_I, CANAIS_V)
+    assert v.tipo == ""
+    assert any("Energização" in p for p in v.porques)
+
+
+def test_a_abertura_de_uma_falta_ja_em_curso_nao_e_inrush():
+    """O registro começa com a falta em curso e a primeira descontinuidade é
+    a ABERTURA — a corrente indo a zero também tem 2º harmônico no
+    transitório. Energização é corrente que sobe."""
+    r = _registro("BC", False)
+    dados = r.analog.copy()
+    por_ciclo = int(TAXA / F0)
+    n_falta = int(T_FALTA * TAXA)
+    deslocamento = (n_falta // por_ciclo + 1) * por_ciclo
+    dados[:, :n_falta] = dados[:, deslocamento:deslocamento + n_falta]
+    r = Record(source=None, format_name="teste", station="SE TESTE", line_frequency=F0,
+               start_time=r.start_time, analog_channels=r.analog_channels,
+               sample_rates=r.sample_rates, analog=dados, time=r.time)
+    assert falta.energizacao(r, CANAIS_I, CANAIS_V) is None
+    assert falta.classificar(r, CANAIS_I, CANAIS_V).tipo != ""
+
+
+def test_tc_saturado_na_falta_nao_vira_inrush_porque_a_tensao_afunda():
+    """A saturação também despeja 2º harmônico. O que separa: na falta a
+    tensão afunda; no fechamento, quase não."""
+    r = _registro("A", True)
+    dados = r.analog.copy()
+    n0 = int(T_FALTA * TAXA)
+    # Satura: corta o semiciclo negativo da corrente de falta (DC + pares).
+    dados[3, n0:] = np.clip(dados[3, n0:], -200.0, None)
+    r = Record(source=None, format_name="teste", station="SE TESTE", line_frequency=F0,
+               start_time=r.start_time, analog_channels=r.analog_channels,
+               sample_rates=r.sample_rates, analog=dados, time=r.time)
+    assert falta.energizacao(r, CANAIS_I, CANAIS_V) is None
+    assert falta.classificar(r, CANAIS_I, CANAIS_V).tipo == "AG"

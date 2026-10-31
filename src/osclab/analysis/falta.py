@@ -54,7 +54,7 @@ import numpy as np
 
 from osclab.dsp import fasor as fasor_mod
 from osclab.dsp import simetricas
-from osclab.formats.base import Record
+from osclab.formats.base import Filtering, Record
 
 FASES = ("A", "B", "C")
 
@@ -87,6 +87,12 @@ FRACAO_MINIMA_DO_SALTO = 0.05
 
 #: Abaixo disto a corrente é fuga: o disjuntor abriu.
 FRACAO_DA_ABERTURA = 0.1
+
+#: A janela que dá o tipo FINAL de uma falta evolutiva tem de ter pelo menos
+#: isto do maior salto da falta: abaixo, ela já está na descida da abertura.
+#: Medido no exemplo AG → ACG → ABC: platô a 0,80 do pico, primeira janela da
+#: extinção a 0,73.
+FRACAO_DO_PLATO = 0.75
 
 
 @dataclass(frozen=True)
@@ -161,16 +167,135 @@ def _superposto(amostras: np.ndarray, por_ciclo: int) -> np.ndarray:
     return d
 
 
-def instante_da_falta(registro: Record, canais: dict[str, int]) -> int | None:
-    """A primeira amostra em que as correntes deixam de ser o que eram.
+#: Acima disto de 2º harmônico / fundamental, nas fases que saltaram, a
+#: descontinuidade é ENERGIZAÇÃO (inrush), não falta. Medido no início de 273
+#: registros brutos do parque com gabarito do relé e nos exemplos de aula:
+#: faltas abaixo de 0,10 (o fechamento SOBRE falta inclusive, 0,10); inrush de
+#: religamento de alimentador entre 0,40 e 0,70 nos primeiros ciclos. É também
+#: a faixa da restrição de 2º harmônico dos diferenciais.
+INRUSH_SEGUNDO_HARMONICO = 0.20
+
+
+def instante_da_falta(registro: Record, canais: dict[str, int],
+                      tensao: dict[str, int] | None = None) -> int | None:
+    """A primeira amostra em que as correntes deixam de ser o que eram — e
+    que não é energização.
 
     Devolve `None` quando nada salta — um registro de carga, uma manobra que
-    não é falta, um trecho só de pré-falta.
+    não é falta, um trecho só de pré-falta — e também quando o único salto é
+    o inrush de um fechamento. Ver `energizacao`.
+    """
+    for inicio in _inicios(registro, canais):
+        if not _e_inrush(registro, canais, inicio, tensao):
+            return inicio
+    return None
+
+
+def energizacao(registro: Record, canais: dict[str, int],
+                tensao: dict[str, int] | None = None) -> int | None:
+    """A amostra da primeira descontinuidade, quando ela é INRUSH; senão None.
+
+    O religamento de um alimentador energiza os trafos a jusante, e as três
+    correntes sobem juntas com muito 2º harmônico, decaindo devagar. Pelo
+    salto sozinho isso é uma trifásica — e era o que o selo dizia: no parque,
+    boa parte dos «ABC» onde o relé partiu numa fase só (31/10/2026).
+    """
+    for inicio in _inicios(registro, canais):
+        return inicio if _e_inrush(registro, canais, inicio, tensao) else None
+    return None
+
+
+def _e_inrush(registro: Record, canais: dict[str, int], inicio: int,
+              tensao: dict[str, int] | None = None) -> bool:
+    """O 2º harmônico das fases que saltaram passa do limiar, dois ciclos
+    depois do início, e a tensão não afundou.
+
+    **A tensão é o que separa o inrush do TC saturado.** Um TC saturando numa
+    falta também despeja 2º harmônico, e pelo espectro sozinho a falta virava
+    energização; mas numa falta a tensão afunda (36 a 63 % nos exemplos de
+    aula), e num fechamento quase não se mexe (13 %). Sem tensão no registro,
+    fica o 2º harmônico sozinho.
+
+    Num registro já filtrado não há harmônico para medir, e a resposta é não
+    — o que mantém o comportamento de antes. A taxa é a do TRECHO onde está o
+    início: com taxa múltipla, a do primeiro trecho dava um espectro de outra
+    janela."""
+    if getattr(registro, "filtering", None) == Filtering.FILTRADO:
+        return False
+    trecho = next((tr for tr in registro.trechos if tr.inicio <= inicio < tr.fim), None)
+    if trecho is None:
+        return False
+    taxa = trecho.taxa_hz
+    por_ciclo = fasor_mod.ciclo_em_amostras(taxa, registro.line_frequency)
+    inteiro = fasor_mod.amostras_por_ciclo(taxa, registro.line_frequency)
+    if por_ciclo < fasor_mod.MINIMO_POR_CICLO or fasor_mod.ordens_mediveis(por_ciclo) < 2:
+        return False
+    n = int(inicio) + 2 * inteiro
+    pesos = fasor_mod.pesos_do_ciclo(por_ciclo)
+    comeco = n - pesos.size + 1
+    if comeco < trecho.inicio or n + 1 > trecho.fim or inicio < 1:
+        return False
+    if tensao and _afundou(registro, tensao, int(inicio) - 1, n):
+        return False
+    antes = _trinca_em(registro, canais, int(inicio) - 1)
+    durante = _trinca_em(registro, canais, n)
+    if antes is None or durante is None:
+        return False
+    # Energização é corrente que SOBE. A abertura de um disjuntor também tem
+    # 2º harmônico no transitório da corrente indo a zero, e um registro que
+    # já começa com a falta em curso tem a abertura como primeira
+    # descontinuidade: sem isto a BC a 0,5 km do AL 54 virava «energização».
+    if sum(abs(x) for x in durante) <= sum(abs(x) for x in antes):
+        return False
+    saltos = _saltos(_girar(registro, antes, int(inicio) - 1, n), durante)
+    maior = max(saltos)
+    if maior <= 0:
+        return False
+    razoes = []
+    for k, fase in enumerate(FASES):
+        if saltos[k] < maior * FRACAO_DA_FASE:
+            continue
+        raias = fasor_mod.espectro(registro.analog[canais[fase], comeco:n + 1],
+                                   por_ciclo, pesos, ate=2)
+        if raias is not None and raias[0] > 0:
+            razoes.append(float(raias[1] / raias[0]))
+    return bool(razoes) and max(razoes) >= INRUSH_SEGUNDO_HARMONICO
+
+
+#: Afundamento de tensão acima disto, em qualquer fase, é falta e não
+#: energização — ver `_e_inrush`.
+AFUNDAMENTO_DA_FALTA = 0.20
+
+
+def _afundou(registro: Record, tensao: dict[str, int], n_pre: int, n: int) -> bool:
+    antes = _trinca_em(registro, tensao, n_pre)
+    depois = _trinca_em(registro, tensao, n)
+    if antes is None or depois is None:
+        return False
+    base = max(abs(x) for x in antes)
+    if base <= 0:
+        return False
+    return max(abs(antes[k]) - abs(depois[k]) for k in range(3)) >= AFUNDAMENTO_DA_FALTA * base
+
+
+def _ms(registro: Record, n: int) -> str:
+    """`123,4 ms` do começo do registro, para os porquês."""
+    if registro.time.size <= n:
+        return f"amostra {n}"
+    return f"{float(registro.time[n]) * 1000:.1f} ms".replace(".", ",")
+
+
+def _inicios(registro: Record, canais: dict[str, int]) -> list[int]:
+    """Cada amostra em que as correntes deixam de ser o que eram, em ordem.
+
+    Uma descontinuidade nova é a que vem depois de pelo menos um ciclo com o
+    detector abaixo do limiar: é o que separa o inrush do fechamento da falta
+    que vem oito ciclos depois dele (exemplo de aula, 31/10/2026).
     """
     taxa = _taxa(registro)
     por_ciclo = fasor_mod.amostras_por_ciclo(taxa, registro.line_frequency)
     if por_ciclo <= 0:
-        return None
+        return []
 
     soma = None
     for fase in FASES:
@@ -180,18 +305,18 @@ def instante_da_falta(registro: Record, canais: dict[str, int]) -> int | None:
         d = np.abs(_superposto(registro.analog[idx], por_ciclo))
         soma = d if soma is None else soma + d
     if soma is None or soma.size <= 2 * por_ciclo:
-        return None
+        return []
 
     # O ruído de REGIME sai dos dois primeiros ciclos depois que o detector
     # tem história: antes disso ele é zero por construção, e usar esse zero
     # como piso faria qualquer coisa virar falta.
     inicio = 2 * por_ciclo
     if soma.size <= inicio + por_ciclo:
-        return None
+        return []
     ruido = float(np.max(soma[por_ciclo:inicio])) if inicio > por_ciclo else 0.0
     maior = float(np.max(soma[inicio:]))
     if maior <= 0:
-        return None
+        return []
 
     # E a descontinuidade tem de ser grande perto da PRÓPRIA CORRENTE, não só
     # perto de si mesma. Num registro de carga limpa o detector é zero exato
@@ -204,12 +329,15 @@ def instante_da_falta(registro: Record, canais: dict[str, int]) -> int | None:
         if idx is not None:
             escala = max(escala, float(np.max(np.abs(registro.analog[idx]))))
     if maior < escala * FRACAO_MINIMA_DO_SALTO:
-        return None
+        return []
     limiar = max(ruido * VEZES_O_RUIDO, maior * PISO_DO_SALTO)
-    acima = np.nonzero(soma[inicio:] > limiar)[0]
+    acima = np.nonzero(soma[inicio:] > limiar)[0] + inicio
     if acima.size == 0:
-        return None
-    return int(acima[0] + inicio)
+        return []
+    # Começa uma descontinuidade nova onde o detector volta a subir depois de
+    # pelo menos um ciclo abaixo do limiar.
+    novas = np.nonzero(np.diff(acima) > por_ciclo)[0] + 1
+    return [int(acima[0])] + [int(acima[i]) for i in novas]
 
 
 def instante_da_abertura(registro: Record, canais: dict[str, int],
@@ -421,13 +549,21 @@ def _evolucao(registro: Record, corrente: dict[str, int],
         return None
     maior_inicial = max(_saltos(no_mesmo(n_falta), primeira))
     passo = max(1, por_ciclo // 2)
-    em_falta = n_falta
+    janelas = [(n_falta, maior_inicial)]
     for n in range(n_falta + passo, ultimo + 1, passo):
         trinca = _trinca_em(registro, corrente, n)
-        if trinca is None or max(_saltos(no_mesmo(n), trinca)) < 0.5 * maior_inicial:
+        if trinca is None:
             break
-        em_falta = n
-    ultimo = em_falta
+        maior = max(_saltos(no_mesmo(n), trinca))
+        if maior < 0.5 * maior_inicial:
+            break
+        janelas.append((n, maior))
+    # E a última janela tem de estar ainda NO PLATÔ da falta, não na descida
+    # do disjuntor abrindo: a abertura se detecta a 10 % do pico, e a janela
+    # um ciclo antes dela já pega a corrente caindo — uma AG → ACG → ABC saía
+    # «AG → ABG», lida em cima da extinção (exemplo de aula, 31/10/2026).
+    pico = max(m for _, m in janelas)
+    ultimo = max(n for n, m in janelas if m >= FRACAO_DO_PLATO * pico)
     if ultimo < n_falta + por_ciclo:
         return None
     durante = _trinca_em(registro, corrente, ultimo)
@@ -435,7 +571,11 @@ def _evolucao(registro: Record, corrente: dict[str, int],
     if medido is None:
         return None
     fases_fim, terra_fim = medido
-    cresceu = (set(fases) <= set(fases_fim) and terra <= terra_fim
+    # Chegar às TRÊS fases é crescer, mesmo «perdendo» a terra: numa trifásica
+    # o 3I0 vai a quase zero e a terra deixa de ser observável — não some.
+    # Sem isto, AG → ABC era descartada como se a falta tivesse encolhido.
+    terra_ok = terra <= terra_fim or len(fases_fim) == 3
+    cresceu = (set(fases) <= set(fases_fim) and terra_ok
                and (set(fases) != set(fases_fim) or terra != terra_fim))
     if not cresceu:
         return None
@@ -459,8 +599,14 @@ def classificar(registro: Record, corrente: dict[str, int],
     `corrente` e `tensao` são `{"A": idx, "B": idx, "C": idx}` — as trincas
     que `formats/conjuntos.py` já identificou.
     """
-    inicio = instante_da_falta(registro, corrente)
+    inicio = instante_da_falta(registro, corrente, tensao)
+    inrush = energizacao(registro, corrente, tensao)
     if inicio is None:
+        if inrush is not None:
+            return Veredito(tipo="", fases=(), terra=False,
+                            porques=(f"Energização em {_ms(registro, inrush)}: as "
+                                     "correntes sobem com 2º harmônico alto (inrush), "
+                                     "e depois dela não há falta.",))
         return Veredito(tipo="", fases=(), terra=False,
                         porques=("Nenhuma descontinuidade nas correntes: "
                                  "este registro não tem falta para classificar.",))
@@ -490,6 +636,9 @@ def classificar(registro: Record, corrente: dict[str, int],
 
     porques: list[str] = []
     discordancias: list[str] = []
+    if inrush is not None and inrush < inicio:
+        porques.append(f"Energização em {_ms(registro, inrush)} (2º harmônico alto, "
+                       f"inrush) ignorada: a falta começa em {_ms(registro, inicio)}.")
 
     por_corrente = tuple(FASES[k] for k in range(3)
                          if saltos[k] >= maior * FRACAO_DA_FASE)
