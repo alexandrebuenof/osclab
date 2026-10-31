@@ -938,3 +938,21 @@ def test_a_conferencia_21_le_o_resumo_do_311C_e_confere_a_falta_sintetica():
     assert all(x.veredito == conferencias.CONFERE for x in linhas), linhas
     assert abs(por_item["% da linha"].erro) < 2.0
     assert abs(por_item["reatância do laço"].rele - x_rele) < 0.01
+
+
+
+def test_a_tolerancia_da_conferencia_10_cresce_com_a_oscilacao_ate_o_teto():
+    """A tolerância é máx(5 pontos, a oscilação do nosso número), no máximo
+    15. Os cinco casos da página de decisão (31/10/2026), opção 4: o arquivo
+    grosseiro sai «dentro da incerteza», e o defeito que faz o número oscilar
+    (D) não se aprova sozinho por causa do teto."""
+    from tests import conferencias as c
+    casos = [
+        ("A · linha longa, arquivo bom", 41.0, 42.1, 0.8, c.CONFERE),
+        ("B · número que anda ±11,6 pontos", 58.2, 47.0, 11.6, c.INCERTEZA),
+        ("C · defeito grande, número firme", 40.0, 68.0, 1.5, c.DIVERGE),
+        ("D · defeito que faz o número oscilar", 50.0, 72.0, 24.0, c.DIVERGE),
+        ("E · defeito pequeno, arquivo bom", 30.0, 39.0, 0.7, c.DIVERGE),
+    ]
+    for caso, rele, nosso, oscilacao, esperado in casos:
+        assert c.julgar_distancia(rele, nosso, oscilacao).veredito == esperado, caso
