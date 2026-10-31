@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 
 from osclab.dsp import simetricas
-from osclab.formats import conjuntos
+from osclab.formats import conjuntos, fases
 from osclab.formats.base import AnalogChannel, Record
 
 #: Uma fase de 100 V eficazes, ângulo zero. As outras giram a partir dela.
@@ -542,3 +542,99 @@ def test_ccbm_que_e_mesmo_de_equipamento_continua_valendo():
                analog=np.zeros((3, 10)), time=np.arange(10) / 1200.0)
     (unico,) = conjuntos.de_registro(r)
     assert unico.nome == "TC BUC" and unico.origem == conjuntos.OrigemDoConjunto.DECLARADA
+
+
+# ---------------------------------------------------------------------------
+# Trincas do GE e do MiCOM P632 (31/10/2026, oscilografias de 8 SEs)
+# ---------------------------------------------------------------------------
+
+def _com_ondas(nomes_e_sinais, secundario=5.0) -> Record:
+    """Registro de 1200 Hz com o sinal que cada canal pedir.
+
+    `sinal` é `"onda"` (senoide de 1 A de pico na fase do canal), `"magnitude"`
+    (50 A, sempre positivo, relação 1/1 como o GE grava) ou `"offset"` (entrada
+    morta: 0,01 a 0,03 A, sem passar por zero).
+    """
+    n = 200
+    t = np.arange(n) / 1200.0
+    canais, linhas = [], []
+    for i, (nome, sinal) in enumerate(nomes_e_sinais):
+        if sinal == "onda":
+            linhas.append(np.sin(2 * np.pi * 60 * t + i * 2 * np.pi / 3))
+            prim, sec = 600.0, secundario
+        elif sinal == "magnitude":
+            linhas.append(np.full(n, 50.0) + np.linspace(0, 5, n))
+            prim, sec = 1.0, 1.0
+        else:
+            linhas.append(0.02 + 0.01 * np.sin(2 * np.pi * 7 * t))
+            prim, sec = 600.0, secundario
+        canais.append(AnalogChannel(index=i, name=nome, unit="A", phase="",
+                                    primary=prim, secondary=sec))
+    return Record(source=None, format_name="teste", station="", line_frequency=60.0,
+                  start_time=None, analog_channels=tuple(canais),
+                  analog=np.array(linhas), time=t)
+
+
+def _trincas(r):
+    return [{f: r.analog_channels[i].name for f, i in c.canais.items()}
+            for c in conjuntos.de_registro(r)]
+
+
+def test_o_P632_fecha_uma_trinca_por_enrolamento_com_o_IY_de_neutro():
+    """`Current IA.a`: a última ocorrência do A era o `.a` do enrolamento, e o
+    `CURRENT IA.*` nunca encontrava o `CURRENT I*.A` da fase B — o diferencial
+    sem trinca nenhuma."""
+    nomes = [f"Current I{f}.{e}" for e in "ab" for f in "ABCY"]
+    r = _com_ondas([(n, "onda") for n in nomes])
+    assert _trincas(r) == [
+        {"A": "Current IA.a", "B": "Current IB.a", "C": "Current IC.a", "N": "Current IY.a"},
+        {"A": "Current IA.b", "B": "Current IB.b", "C": "Current IC.b", "N": "Current IY.b"},
+    ]
+
+
+def test_o_GE_UR_fecha_a_trinca_mesmo_com_o_borne_mudando_por_fase():
+    """`F1-IA`, `F2-IB`, `F3-IC`: o número do borne muda a cada fase, e sem a
+    terceira tentativa as ondas do relé não fechavam trinca nenhuma."""
+    r = _com_ondas([(n, "onda") for n in
+                    ("F1-IA", "F2-IB", "F3-IC", "F4-IG", "M1-IA", "M2-IB", "M3-IC")])
+    assert _trincas(r) == [
+        {"A": "F1-IA", "B": "F2-IB", "C": "F3-IC", "N": "F4-IG"},
+        {"A": "M1-IA", "B": "M2-IB", "C": "M3-IC"},
+    ]
+
+
+def test_magnitude_calculada_pelo_rele_nao_vira_trinca_nem_residuo():
+    """O GE grava o módulo do fasor com a letra da fase no nome (`J1 Ia`). Era
+    ele que fechava a trinca do GE UR: 3I0, I1, I2 e a localização de falta
+    saíam de magnitude. Magnitude não passa por zero."""
+    r = _com_ondas([("J1 -IA", "onda"), ("J1 -IB", "onda"), ("J1 -IC", "onda"),
+                    ("J1 -IG", "onda"),
+                    ("J1 Ia", "magnitude"), ("J1 Ib", "magnitude"), ("J1 Ic", "magnitude"),
+                    ("J1 Ig", "magnitude")])
+    assert _trincas(r) == [{"A": "J1 -IA", "B": "J1 -IB", "C": "J1 -IC", "N": "J1 -IG"}]
+    # O neutro se compara com a onda do NEUTRO, não com as fases.
+    assert conjuntos.residuais_soltos(r) == {}
+
+
+def test_a_entrada_auxiliar_de_tensao_nao_e_neutro():
+    """`J2 -VX` do GE 850 mede 80 V de secundário, como uma fase: deduzido
+    neutro, entrava na trinca de tensão como `VN`. O `Ix` de corrente do
+    SIPROTEC continua neutro."""
+    assert fases.deduzir("J2 -VX") == ""
+    assert fases.deduzir("TC H0 NEUTRO:Ix") == "N"
+
+
+def test_entrada_morta_que_nao_passa_por_zero_continua_trinca():
+    """Uma entrada sem corrente lê o offset do conversor e também não passa por
+    zero — mas é trinca morta, e trinca morta conta para a numeração. A régua
+    é o nominal do canal: 0,03 A num TC de 5 A não é magnitude."""
+    r = _com_ondas([("F1-IA", "onda"), ("F2-IB", "onda"), ("F3-IC", "onda"),
+                    ("L1-IA", "offset"), ("L2-IB", "offset"), ("L3-IC", "offset")])
+    assert _trincas(r)[1] == {"A": "L1-IA", "B": "L2-IB", "C": "L3-IC"}
+
+
+def test_sem_onda_nenhuma_para_comparar_o_nome_decide():
+    """Registro só de magnitudes: não há onda que prove que o relé grava aquela
+    grandeza como onda, e o programa não tem com o que separar."""
+    r = _com_ondas([("Ia Mag", "magnitude"), ("Ib Mag", "magnitude"), ("Ic Mag", "magnitude")])
+    assert len(_trincas(r)) == 1

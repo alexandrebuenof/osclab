@@ -215,6 +215,15 @@ def test_o_titulo_do_grupo_e_SO_a_unidade():
     ("IN-Int.Neutro", "N"), ("INS-Int.N.Sensible", "N"),
     ("VA-Tensión Fase A", "A"), ("VSIN-Tensión Sincronismo", ""),
     ("T1 Phase C Current", "C"),                    # religador
+    # MiCOM P63x: `.a`/`.b` é o ENROLAMENTO, e `IY` o ponto de estrela. A
+    # única letra solta do nome era o `a` do enrolamento — `IY.a` virava fase
+    # A e `IY.b` fase B (31/10/2026).
+    ("Current IA.a", "A"), ("Current IB.b", "B"), ("Current IC.a", "C"),
+    ("Current IY.a", "N"), ("Current IY.b", "N"),
+    # O terceiro banco do SEL-487E é `IY1`, `IY2`, `IY3`: NÃO é neutro.
+    ("IY1", ""), ("IY3", ""),
+    # GE UR: módulo e borne na frente.
+    ("F1-IA", "A"), ("F3-IC", "C"), ("F4-IG", "N"), ("M8-VN", "N"),
 ])
 def test_deduz_a_fase_do_nome(nome, esperado):
     assert fases.deduzir(nome) == esperado

@@ -110,7 +110,7 @@ FRACAO_DO_MAIOR = 0.05
 FUNDAMENTAL_MINIMA = 0.90
 
 
-def _fundamental_relativa(sinal: np.ndarray, por_ciclo: int) -> float:
+def fundamental_relativa(sinal: np.ndarray, por_ciclo: int) -> float:
     """O maior `fundamental / RMS` do canal ao longo do registro.
 
     O MAIOR, e não a mediana: basta o canal ter sido uma senoide limpa em algum
@@ -209,7 +209,7 @@ def sem_sinal(registro: Record) -> frozenset[int]:
             continue
         if picos[canal.index] > FRACAO_DO_MAIOR * maior:
             continue
-        if _fundamental_relativa(registro.analog[canal.index],
+        if fundamental_relativa(registro.analog[canal.index],
                                  por_ciclo) >= FUNDAMENTAL_MINIMA:
             continue
         mortos.add(canal.index)

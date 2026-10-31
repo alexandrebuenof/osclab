@@ -51,6 +51,8 @@ import re
 from dataclasses import dataclass, replace
 from enum import StrEnum
 
+import numpy as np
+
 from osclab.formats import fases
 from osclab.formats.base import Record
 
@@ -173,14 +175,47 @@ def sem_a_fase(nome: str, fase: str) -> str:
     """
     limpo = (nome or "").strip().upper()
     marca = (fase or "").upper()
-    corte = limpo.rfind(marca)
-    if not fase or corte < 0:
+    if not fase:
         return limpo
-    # `len(marca)` e não 1, por causa do laço: em `IAB` a fase é `AB`, e tirar
-    # um caractere só deixaria `I*B` contra o `I*C` de `IBC` — três conjuntos
-    # de um canal cada, onde há uma trinca em delta. Para fase simples o
-    # comprimento é 1 e nada muda.
-    return f"{limpo[:corte]}*{limpo[corte + len(marca):]}"
+    # O sufixo do enrolamento (`Current IA.a`, MiCOM P63x) fica de fora da
+    # busca: sem isso a última ocorrência do A era a do `.a`, e `CURRENT IA.*`
+    # nunca encontrava o `CURRENT I*.A` da fase B — o diferencial inteiro sem
+    # trinca nenhuma (31/10/2026).
+    corpo, sufixo = fases.sem_enrolamento(limpo)
+    achado = _marca_do_neutro(corpo) if marca == "N" else None
+    if achado is not None:
+        inicio, fim = achado
+    else:
+        inicio = corpo.rfind(marca)
+        if inicio < 0:
+            corpo, sufixo = limpo, ""
+            inicio = corpo.rfind(marca)
+        if inicio < 0:
+            return limpo
+        # `len(marca)` e não 1, por causa do laço: em `IAB` a fase é `AB`, e
+        # tirar um caractere só deixaria `I*B` contra o `I*C` de `IBC` — três
+        # conjuntos de um canal cada, onde há uma trinca em delta. Para fase
+        # simples o comprimento é 1 e nada muda.
+        fim = inicio + len(marca)
+    return f"{corpo[:inicio]}*{corpo[fim:]}{sufixo}"
+
+
+#: A marca do neutro colada na grandeza: o `N` de `IN`, o `G` de `IG`, o `Y`
+#: de `IY`, o `NG` de `VNG`. É o que o residual tem no lugar da letra da fase.
+_MARCA_DO_NEUTRO = re.compile(r"(?:^|(?<=[^A-Z0-9]))[IVU]([NGEXY]{1,2})(?![A-Z])")
+
+
+def _marca_do_neutro(nome: str) -> tuple[int, int] | None:
+    """Onde está a letra do neutro no nome, ou `None`.
+
+    O neutro não tem letra de fase para tirar, e a ÚLTIMA ocorrência do `N` não
+    é a marca dele em `CURRENT IY.A` (cairia no `N` de `CURRENT`). Procura-se a
+    marca colada na grandeza, a última que houver.
+    """
+    achados = list(_MARCA_DO_NEUTRO.finditer(nome))
+    if not achados:
+        return None
+    return achados[-1].span(1)
 
 
 def _sem_as_marcas(nome: str, fase: str) -> str | None:
@@ -367,10 +402,13 @@ def _pendurados(registro: Record, achados: list[Conjunto]) -> dict[int, int]:
     `TC H0 NEUTRO:Ix`, que não traz nível nenhum no nome, fica de fora.
     """
     usados = {i for c in achados for i in c.canais.values()}
+    ondas = _ondas(registro)
 
     destino: dict[int, int] = {}
     for canal in registro.analog_channels:
         if canal.index in usados:
+            continue
+        if ondas is not None and canal.index not in ondas:
             continue
         if fases.grandeza_da_unidade(canal.unit) not in ("I", "V"):
             continue
@@ -407,9 +445,12 @@ def _avulsos(registro: Record, achados: list[Conjunto],
     hora de numerar — senão os dois do GE se chamariam os dois `IN`.
     """
     usados = {i for c in achados for i in c.canais.values()}
+    ondas = _ondas(registro)
     saida: dict[int, str] = {}
     for canal in registro.analog_channels:
         if canal.index in usados or canal.index in pendurados:
+            continue
+        if ondas is not None and canal.index not in ondas:
             continue
         grandeza = fases.grandeza_da_unidade(canal.unit)
         if grandeza not in ("I", "V"):
@@ -471,10 +512,13 @@ def _agrupar(registro: Record) -> list[dict]:
     fechar a trinca do religador e a do PL300 sem mexer em nenhuma que já
     fechava.
     """
+    ondas = _ondas(registro)
     candidatos = []
     for canal in registro.analog_channels:
         padrao = fases.padrao(canal)         # "IA", "VB"... já filtra grandeza
         if not padrao:
+            continue
+        if ondas is not None and canal.index not in ondas:
             continue
         fase = padrao[1:]
         if fase not in NECESSARIAS + NECESSARIAS_EM_DELTA + ("N",):
@@ -522,7 +566,131 @@ def _agrupar(registro: Record) -> list[dict]:
         outra = _sem_as_marcas(getattr(canal, "name", ""), fase)
         if outra is not None:
             segunda.append((canal, padrao, fase, outra, origem))
-    return saida + _trincas_de(segunda)
+    saida += _trincas_de(segunda)
+
+    # Terceira tentativa, pelo mesmo critério da segunda (só quem sobrou): o
+    # nome sem o número do BORNE. O GE UR (L90, T60) nomeia o canal pelo
+    # módulo e pelo borne — `F1-IA`, `F2-IB`, `F3-IC`, `F4-IG` —, e o número
+    # muda a cada fase. Sem esta passada as ondas do relé não fechavam trinca
+    # nenhuma (31/10/2026).
+    usados = {i for d in saida for i in d["canais"].values()}
+    terceira = []
+    for canal, padrao, fase in candidatos:
+        if canal.index in usados:
+            continue
+        nome, origem = chave(canal)
+        if origem != OrigemDoConjunto.DEDUZIDA:
+            continue
+        sem_borne = _sem_o_borne(getattr(canal, "name", ""))
+        if sem_borne is not None:
+            terceira.append((canal, padrao, fase, sem_a_fase(sem_borne, fase), origem))
+    return saida + _trincas_de(terceira)
+
+
+#: `F1-`, `M8-`, `L4-` no começo do nome: o módulo (letra) e o borne
+#: (número) do GE UR.
+_BORNE = re.compile(r"^([A-Z])\d{1,2}(?=\s*-)", re.IGNORECASE)
+
+
+def _sem_o_borne(nome: str) -> str | None:
+    """`F#-IA` de `F1-IA`; `None` quando o nome não começa por um borne."""
+    limpo = (nome or "").strip()
+    if not _BORNE.match(limpo):
+        return None
+    return _BORNE.sub(r"\1#", limpo)
+
+
+#: Uma magnitude é comparável às ondas da mesma grandeza; a entrada morta
+#: lendo o offset do conversor, não. Em fração da maior onda VIVA, com tudo em
+#: primário. Medido: magnitudes do GE UR e do 850 entre 11 % e 100 % da onda;
+#: entradas mortas de `.CEV` (1,4 A contra centenas) e do PL300 abaixo de 2 %.
+FRACAO_DA_ONDA = 0.05
+
+
+def _em_primario(canal) -> float:
+    """Quanto multiplica o valor gravado para chegar ao primário, com prefixo."""
+    fator = _prefixo(canal.unit)
+    if (canal.scaling or "S").upper() == "S" and canal.secondary:
+        fator *= (canal.primary or 1.0) / canal.secondary
+    return fator
+
+
+def _prefixo(unidade: str) -> float:
+    """O multiplicador do prefixo: `kV` → 1000, `mA` → 0,001, `V` → 1."""
+    limpa = (unidade or "").strip()
+    if len(limpa) > 1 and fases.grandeza_da_unidade(limpa):
+        return {"k": 1e3, "K": 1e3, "M": 1e6, "m": 1e-3}.get(limpa[0], 1.0)
+    return 1.0
+
+
+def _ondas(registro: Record) -> frozenset[int] | None:
+    """Os canais que podem fechar trinca: tudo menos a MAGNITUDE do relé.
+
+    **Magnitude calculada pelo relé não é fase.** O GE grava, junto das ondas,
+    o módulo do fasor de cada fase com a unidade de corrente e a letra da fase
+    no nome (`SRC 1 … Ia Mag`, `J1 Ia`). Pelo nome e pela unidade ela é uma
+    fase A como outra qualquer, e no GE UR era ela que fechava trinca: 3I0,
+    I1, I2, o classificador e a localização de falta saíam de magnitudes, sem
+    nada na tela dizer isso (31/10/2026).
+
+    Magnitude é o canal que **nunca fica negativo** e é **comparável à maior
+    onda viva da mesma grandeza**, em primário (`FRACAO_DA_ONDA`). Cada
+    ressalva abaixo existe por um caso real:
+
+    - a entrada que ninguém cabeou também não passa por zero (o offset do
+      conversor), e é trinca morta, que conta para a numeração. O que a separa
+      é o tamanho perto da onda viva — e por isso a régua é a ONDA, e não o
+      nominal declarado: o PL300 grava em primário com relação 1/1, e 4 A de
+      offset passavam por magnitude contra um «nominal» de 1 A;
+    - o neutro se compara com o neutro: a magnitude do residual é pequena
+      perto das fases e do tamanho da onda do residual;
+    - onda viva é senoide de 60 Hz de verdade (`presenca.FUNDAMENTAL_MINIMA`).
+      Sem nenhuma, não há com o que comparar — o vão desenergizado inteiro — e
+      nada é excluído: o nome decide, como sempre decidiu.
+
+    O teste `alternados` de `analysis/presenca` não serve aqui: ele compara a
+    fundamental com a média, e o degrau da falta numa magnitude tem 60 Hz de
+    sobra — o `J1 Ia` do 850 passava.
+
+    `None` quando não há amostra com que medir.
+    """
+    if registro.analog.size == 0 or not registro.analog_channels:
+        return None
+    # Import adiado pelo mesmo motivo de `canais_sem_sinal`.
+    from osclab.analysis import presenca
+    from osclab.dsp import fasor
+
+    por_ciclo = fasor.ciclo_em_amostras(registro.base_rate_hz,
+                                        registro.line_frequency)
+    if por_ciclo < fasor.MINIMO_POR_CICLO:
+        return None
+
+    maior_onda: dict[str, float] = {}
+    candidatas: list[tuple[int, str, float]] = []
+    for canal in registro.analog_channels:
+        grandeza = fases.grandeza_da_unidade(canal.unit)
+        if not grandeza:
+            continue
+        # Neutro se compara com neutro: o `J1 Ig` (magnitude do residual,
+        # 10 A) é pequeno perto das FASES e do tamanho do `J1 -IG`.
+        if fases.da_canal(canal)[0] == "N":
+            grandeza += "N"
+        valores = registro.analog[canal.index]
+        finitos = valores[np.isfinite(valores)]
+        if finitos.size == 0:
+            continue
+        pico = float(np.max(np.abs(finitos))) * abs(_em_primario(canal))
+        if float(finitos.min()) >= 0.0:
+            candidatas.append((canal.index, grandeza, pico))
+            continue
+        if presenca.fundamental_relativa(valores, por_ciclo) >= presenca.FUNDAMENTAL_MINIMA:
+            maior_onda[grandeza] = max(maior_onda.get(grandeza, 0.0), pico)
+
+    magnitudes = {i for i, g, pico in candidatas
+                  if maior_onda.get(g, 0.0) > 0.0
+                  and pico >= FRACAO_DA_ONDA * maior_onda[g]}
+    return frozenset(c.index for c in registro.analog_channels
+                     if c.index not in magnitudes)
 
 
 def _trincas_de(canais) -> list[dict]:

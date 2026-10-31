@@ -87,9 +87,39 @@ _NEUTRO_SOZINHO = re.compile(r"(?:^|[^A-Z0-9])([NGE])(?:[^A-Z0-9]|$)",
 #: O ponto não fecha o residual: a Ingeteam abrevia intensidade como `Int.`
 #: (`IA-Int.Fase A`), e `INT` + `.` casava como neutro de terminal `T` — as
 #: três fases de todo PL300 do parque viravam `IN`, e trinca nenhuma fechava.
+#: O `X` só vale para CORRENTE (`NEUTRO:Ix` do SIPROTEC). Em tensão ele é a
+#: entrada AUXILIAR: o `J2 -VX` do GE 850 mede 80 V de secundário, como uma
+#: fase, e deduzido neutro ele entrava na trinca de tensão como `VN` — e
+#: escondia como «nada a pendurar» o neutro calculado do próprio relé
+#: (31/10/2026). O que a entrada auxiliar mede é ajuste do relé; sem vínculo,
+#: o usuário diz.
 _RESIDUAL = re.compile(
-    rf"(?:^|[^A-Z0-9])(3[IVU]0|[IVU][NGE]{{1,2}}|[IVU]X){_TERMINAL}"
+    rf"(?:^|[^A-Z0-9])(3[IVU]0|[IVU][NGE]{{1,2}}|[IU]X){_TERMINAL}"
     rf"(?:[^A-Z0-9.]|$)", re.IGNORECASE)
+
+#: `IY` sozinho — a entrada de corrente do ponto de estrela no MiCOM P63x
+#: (`Current IY.a`, `Current IY.b`: o neutro de cada enrolamento).
+#:
+#: Fica FORA do `_RESIDUAL` de propósito, e sem terminal nenhum depois: o
+#: SEL-487E nomeia o terceiro banco de TC `IY1`, `IY2`, `IY3`, que são fases e
+#: não neutro. Só o `IY` sem nada colado é o do ponto de estrela.
+_NEUTRO_Y = re.compile(r"(?:^|[^A-Z0-9])IY(?:[^A-Z0-9]|$)", re.IGNORECASE)
+
+#: `.a`, `.b` no FIM do nome — o enrolamento, no MiCOM P63x (`Current IA.a`).
+#:
+#: Sem isto a única letra solta do nome era o `a` do enrolamento: `Current
+#: IY.a` virava fase A, `Current IY.b` fase B — e o neutro do trafo entrava na
+#: conta como fase. O sufixo é terminal, como o `W` de `IAW`; a fase se procura
+#: no que vem antes dele.
+_ENROLAMENTO = re.compile(r"\.[A-Z0-9]{1,2}$", re.IGNORECASE)
+
+
+def sem_enrolamento(nome: str) -> tuple[str, str]:
+    """`("Current IA", ".a")` de `Current IA.a`; `(nome, "")` sem sufixo."""
+    achado = _ENROLAMENTO.search(nome or "")
+    if not achado:
+        return nome or "", ""
+    return nome[:achado.start()], nome[achado.start():]
 
 
 def _normalizar(bruta: str) -> str:
@@ -122,7 +152,21 @@ def deduzir(nome: str) -> str:
     if not limpo:
         return ""
 
-    if _RESIDUAL.search(limpo):
+    corpo, sufixo = sem_enrolamento(limpo)
+    if sufixo:
+        # A fase é procurada ANTES do sufixo do enrolamento; só se ali não
+        # houver nenhuma é que o nome inteiro conta (um `Corrente.A` em que a
+        # fase seja o próprio sufixo).
+        return _deduzir(corpo) or _deduzir(limpo)
+    return _deduzir(limpo)
+
+
+def _deduzir(limpo: str) -> str:
+    """`deduzir` sobre um nome já sem acento."""
+    if not limpo:
+        return ""
+
+    if _RESIDUAL.search(limpo) or _NEUTRO_Y.search(limpo):
         return "N"
 
     # O último pedaço depois de ':' costuma ser a parte que nomeia a grandeza:
