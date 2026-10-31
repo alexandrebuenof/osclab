@@ -71,10 +71,28 @@ NOMES = {"seqneg": "Sequência negativa · 2 terminais (LocDef)",
          "takagi_i2": "Laço da falta · Takagi polarizado por I2"}
 CURTOS = {"seqneg": "Seq. neg. 2T", "laco": "Laço (reatância)", "takagi": "Takagi",
           "takagi_i2": "Takagi I2"}
-#: Quem pode ser o RESULTADO, na ordem. Os dois Takagi ficam de fora: são conferência
-#: (entram em `conferencia` e no aviso de discordância) até a preferência mudar
-#: com os números da varredura — ver docs-privados/aprendizado/validacao-ldl.md.
-PREFERENCIA = ("seqneg", "laco")
+#: Quem pode ser o RESULTADO, na ordem — com DOIS terminais, a seq. negativa;
+#: com UM, depende do tipo da falta (`preferencia`). Decidido pelo Alexandre em
+#: 31/10/2026 com os números da varredura de um terminal (LT de 100 km, pior
+#: erro): com carga, laço 33,5 km → Takagi I2 4,1; com infeed 59,9 → 10,3;
+#: trifásica, laço 50,5 → Takagi ΔI 7,1. O laço fica como último recurso: é o
+#: único que não precisa de pré-falta nem de I2. O preço medido é o TC
+#: saturado, onde o Takagi I2 erra mais que o laço (13,6 contra 2,4 km) — e é
+#: por isso que o aviso de discordância continua.
+PREFERENCIA_ASSIMETRICA = ("seqneg", "takagi_i2", "laco")
+PREFERENCIA_TRIFASICA = ("seqneg", "takagi", "laco")
+
+
+def preferencia(tipo: str) -> tuple[str, ...]:
+    """A ordem em que os métodos podem ser o resultado, para este tipo de falta.
+
+    Na trifásica não há I2 (o Takagi I2 dá NaN) e quem polariza é a corrente
+    superposta — o Takagi ΔI, que precisa de pré-falta; sem ela ele não tem
+    número e a vez passa ao laço.
+    """
+    if set("ABC") <= set((tipo or "").upper()):
+        return PREFERENCIA_TRIFASICA
+    return PREFERENCIA_ASSIMETRICA
 
 #: O platô começa DOIS ciclos depois do início da falta: um para a janela do
 #: fasor encher, outro para a contínua da falta amortecer o bastante. Numa
@@ -889,10 +907,10 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
         lo, hi = -0.05 * km, 1.1 * km
         pacote["escala_ldl"] = {"min": lo, "max": hi, "marcas": escala.marcacoes(0, km, 6)}
 
-    # --- o resultado: a preferência fixa desta etapa
+    # --- o resultado: a preferência pelo tipo da falta
     valido = lambda m: (pacote["metodos"].get(m, {}).get("km") is not None  # noqa: E731
                         and not pacote["metodos"][m].get("fora"))
-    escolhido = next((m for m in PREFERENCIA if valido(m)), None)
+    escolhido = next((m for m in preferencia(pacote.get("tipo", "")) if valido(m)), None)
     if escolhido:
         info = pacote["metodos"][escolhido]
         pacote["resultado"] = {

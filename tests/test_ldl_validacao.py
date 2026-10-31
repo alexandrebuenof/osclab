@@ -196,22 +196,23 @@ def test_pre_falta_de_pouco_mais_de_um_ciclo():
     assert abs(p["resultado"]["km"] - cen.km_verdadeiro) <= TOL_SEQNEG
 
 
-def test_um_terminal_so_o_laco_e_o_resultado():
+def test_um_terminal_so_o_takagi_i2_e_o_resultado():
     cen = _cenario(m=0.6, tipo="CG")
     p = _localizar(cen, so_a=True)
-    assert p["resultado"]["metodo"] == "laco"
+    assert p["resultado"]["metodo"] == "takagi_i2"
     assert "outro terminal" in p["metodos"]["seqneg"]["motivo"]
     assert abs(p["resultado"]["km"] - cen.km_verdadeiro) <= TOL_LACO
 
 
 # ---------------------------------------------------------------------------
-# Trifásica: sem I2, o laço responde e a seq. negativa se recusa
+# Trifásica: sem I2, o Takagi ΔI responde e a seq. negativa se recusa
 # ---------------------------------------------------------------------------
 
-def test_trifasica_resultado_pelo_laco():
+def test_trifasica_resultado_pelo_takagi():
     cen = _cenario(m=0.4, tipo="ABC")
     p = _localizar(cen)
-    assert p["resultado"]["metodo"] == "laco"
+    assert p["resultado"]["metodo"] == "takagi"
+    assert abs(p["resultado"]["km"] - cen.km_verdadeiro) <= TOL_LACO
     assert _km(p, "seqneg") is None
     assert "trifásica" in p["metodos"]["seqneg"]["motivo"]
     assert abs(p["resultado"]["km"] - cen.km_verdadeiro) <= TOL_LACO
@@ -322,18 +323,18 @@ def _takagi_ideal(cen: rede.Cenario, laco: str) -> float:
 def test_takagi_com_rf_e_carga(tipo, m, rf):
     """Um terminal, Rf de 10 a 50 Ω e carga (δ = 20°). O programa reproduz o
     Takagi dentro de `TOL_IMPL_TAKAGI`, e o Takagi fica mais perto da falta
-    que o laço pela reatância — é para isso que ele existe. O resultado
-    continua sendo o laço (a preferência não mudou), mas a discordância
-    entre os dois aparece no aviso quando passa do limite."""
+    que o laço pela reatância — é para isso que ele existe. O resultado é o
+    Takagi I2 na assimétrica e o Takagi ΔI na trifásica (`ldl.preferencia`),
+    e a discordância com os outros aparece no aviso quando passa do limite."""
     cen = _cenario(m=m, tipo=tipo, rf=rf, delta=20.0)
     p = _localizar(cen, so_a=True)
     tk, laco = _km(p, "takagi"), _km(p, "laco")
     assert abs(tk - _takagi_ideal(cen, p["laco"])) <= TOL_IMPL_TAKAGI
     assert abs(tk - cen.km_verdadeiro) < abs(laco - cen.km_verdadeiro)
-    assert p["resultado"]["metodo"] == "laco"
+    assert p["resultado"]["metodo"] == ("takagi" if tipo == "ABC" else "takagi_i2")
     limite = max(ldl.DISCORDANCIA_MINIMA_KM, ldl.DISCORDANCIA_DA_LT * cen.linha.km)
-    outros = [_km(p, m) for m in ("takagi", "takagi_i2") if _km(p, m) is not None]
-    assert ("discordam" in p["aviso"]) == (max(abs(x - laco) for x in outros) > limite)
+    maior = max(abs(c["delta"]) for c in p["resultado"]["conferencia"])
+    assert ("discordam" in p["aviso"]) == (maior > limite)
 
 
 LT_250 = rede.Linha(250.0, complex(0.08, 0.49), complex(0.35, 1.50), 9.2e-9, 6.2e-9)
@@ -410,7 +411,7 @@ def test_takagi_i2_com_rf_e_carga(tipo, m, rf, formato):
     assert abs(tk2 - cen.km_verdadeiro) <= 4.5
     if tipo != "ABG":
         assert abs(tk2 - cen.km_verdadeiro) < abs(laco - cen.km_verdadeiro)
-    assert p["resultado"]["metodo"] == "laco"           # a preferência não mudou
+    assert p["resultado"]["metodo"] == "takagi_i2"      # `ldl.preferencia`, 31/10/2026
 
 
 def test_takagi_i2_na_bifasica_e_o_takagi_de_delta_i():

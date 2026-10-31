@@ -36,8 +36,15 @@ funciona.
   antes. O fim da falta é medido pela corrente das fases com defeito voltando
   para menos da metade do caminho entre a pré-falta e a falta — porque quem
   elimina a falta pode ser o outro terminal, e aí a abertura nunca aparece.
-- **O resultado** é, nesta etapa, uma preferência fixa: seq. negativa quando
-  há os dois terminais, laço quando não há. A faixa de patrulha é a
+- **O resultado** sai de uma preferência pelo tipo da falta
+  (`ldl.preferencia`, decidida em 31/10/2026): seq. negativa quando há os
+  dois terminais; com um só, o **Takagi polarizado por I2** na falta
+  assimétrica e o **Takagi ΔI** na trifásica; o laço pela reatância só quando
+  nenhum dos dois tem número (sem I2, sem pré-falta). Medido na varredura de
+  um terminal (LT de 100 km, pior erro): com carga, 33,5 → 4,1 km; com infeed,
+  59,9 → 10,3 km; trifásica, 50,5 → 7,1 km. O preço é o TC saturado (o Takagi
+  I2 erra 13,6 km onde o laço erra 2,4) — por isso o aviso de discordância
+  entre os métodos continua. A faixa de patrulha é a
   dispersão no platô (mínimo 0,3 km) — e a tela diz isso. **Ela não mede o
   erro do método**: o laço com Rf e carga erra uns km com dispersão quase
   zero. Quem mede o erro é a simulação da etapa 2.

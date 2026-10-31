@@ -16376,7 +16376,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   const CORES_LOC = { seqneg: "var(--traco-2)", laco: "var(--traco-1)",
                       takagi: "var(--traco-3)", takagi_i2: "var(--calculado-1)" };
   // Todos os métodos que o servidor calculou aparecem, nesta ordem; o
-  // destacado como resultado é escolha do servidor (`ldl.PREFERENCIA`).
+  // destacado como resultado é escolha do servidor (`ldl.preferencia`).
   const ORDEM_LOC = ["seqneg", "laco", "takagi", "takagi_i2"];
   const metodosLoc = p => ORDEM_LOC.filter(m => p.metodos && p.metodos[m]);
   const htmlLoc = texto => String(texto == null ? "" : texto)

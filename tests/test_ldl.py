@@ -171,11 +171,22 @@ def test_laco_de_terra_sem_z0_diz_por_que_nao_calcula():
     assert p["resultado"]["metodo"] == "seqneg"
 
 
-def test_com_um_terminal_so_vale_o_laco():
+def test_com_um_terminal_a_assimetrica_sai_pelo_takagi_i2():
+    """Decidido em 31/10/2026: com um terminal só, a falta assimétrica sai pelo
+    Takagi polarizado por I2 (ver `ldl.preferencia`)."""
     p = _painel(so_a=True, delta=0.0)
     assert p["metodos"]["seqneg"]["km"] is None
     assert "outro terminal" in p["metodos"]["seqneg"]["motivo"]
-    assert p["resultado"]["metodo"] == "laco"
+    assert p["resultado"]["metodo"] == "takagi_i2"
+
+
+def test_a_preferencia_depende_do_tipo_da_falta():
+    assert ldl.preferencia("AG") == ("seqneg", "takagi_i2", "laco")
+    assert ldl.preferencia("BC") == ("seqneg", "takagi_i2", "laco")
+    assert ldl.preferencia("ABC") == ("seqneg", "takagi", "laco")
+    assert ldl.preferencia("ABCG") == ("seqneg", "takagi", "laco")
+    # Sem tipo, a assimétrica: o Takagi I2 se recusa sozinho sem I2.
+    assert ldl.preferencia("") == ("seqneg", "takagi_i2", "laco")
 
 
 def test_relogio_de_b_atrasado_e_girado_nao_muda_a_seq_negativa():
