@@ -158,7 +158,9 @@ def alternados(registro: Record) -> frozenset[int]:
         valores = registro.analog[canal.index]
         f = envoltoria.fundamental(valores, por_ciclo)
         maior = float(np.nanmax(f)) if np.isfinite(f).any() else 0.0
-        media = float(np.nanmean(valores)) if valores.size else 0.0
+        # Canal todo NaN: `nanmean` avisaria «Mean of empty slice» no log a
+        # cada registro; o resultado é o mesmo (NaN, e o canal fica de fora).
+        media = float(np.nanmean(valores)) if np.isfinite(valores).any() else float("nan")
         if not np.isfinite(media) or maior < abs(media):
             continue
         if maior > 0.0 or fases.grandeza_da_unidade(canal.unit) in ("I", "V"):
@@ -187,7 +189,7 @@ def sem_sinal(registro: Record) -> frozenset[int]:
     picos: dict[int, float] = {}
     for canal in registro.analog_channels:
         valores = registro.analog[canal.index]
-        pico = float(np.nanmax(np.abs(valores))) if valores.size else 0.0
+        pico = float(np.nanmax(np.abs(valores))) if np.isfinite(valores).any() else 0.0
         picos[canal.index] = 0.0 if not np.isfinite(pico) else pico
 
     maior_da_unidade: dict[str, float] = {}

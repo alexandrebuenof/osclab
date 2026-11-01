@@ -58,6 +58,14 @@ def reader_for(path: Path) -> Reader:
             "Esta e' a versao 0.1 do OscLab, que ainda nao le oscilografia — "
             "o leitor COMTRADE entra no marco 0.2."
         )
+    # Arquivo sem conteúdo nenhum não é formato desconhecido: é cópia que não
+    # terminou. No banco havia um `.CEV` de 6 bytes (`=>` e duas quebras de
+    # linha) — «não reconheci o formato» mandava procurar um formato estranho.
+    tamanho = caminho.stat().st_size
+    if tamanho < 64 and not caminho.read_bytes().strip(b" \t\r\n=>\x00\x1a"):
+        raise FormatError(
+            f"{caminho.name} está vazio ({tamanho} bytes) — a cópia do relé "
+            "não terminou? Baixe o registro de novo.")
     conhecidos = ", ".join(sorted({e for r in _LEITORES for e in r.extensions}))
     raise FormatError(
         f"Nao reconheci o formato de {caminho.name}.\n"

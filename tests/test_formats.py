@@ -31,6 +31,15 @@ def test_formato_desconhecido_lista_o_que_da_para_ler(tmp_path):
         registry.read(arquivo)
 
 
+def test_arquivo_VAZIO_diz_que_a_copia_nao_terminou(tmp_path):
+    """No banco havia um `.CEV` de 6 bytes (`=>` e duas quebras de linha):
+    «não reconheci o formato» mandava procurar um formato estranho."""
+    arquivo = tmp_path / "registro.CEV"
+    arquivo.write_bytes(b"\r\n=>\r\n")
+    with pytest.raises(FormatError, match="vazio .*6 bytes.*de novo"):
+        registry.read(arquivo)
+
+
 def test_registry_vazio_explica_em_vez_de_dar_erro_seco(tmp_path, monkeypatch):
     monkeypatch.setattr(registry, "_LEITORES", [])
     arquivo = tmp_path / "qualquer.cfg"
