@@ -116,6 +116,11 @@ FASES: tuple[str, ...] = ("", "A", "B", "C", "AB", "BC", "CA", "N", "fases", "3F
 #: o resto.
 FONTES: tuple[str, ...] = ("", "manual", "ajuste", "deduzido", "digitado")
 
+#: A força de cada fonte na importação: o que chega só corrige o que tem
+#: fonte igual ou mais fraca. Vazio conta como digitado (era o único jeito de
+#: escrever antes desta coluna existir).
+_FORCA = {"deduzido": 1, "manual": 2, "ajuste": 3, "digitado": 4, "": 4}
+
 #: As colunas, na ordem em que o arquivo é GRAVADO. As cinco primeiras são as
 #: de antes de 01/11/2026, na mesma ordem.
 COLUNAS = ("fabricante", "modelo", "sinal", "descricao", "categoria",
@@ -229,12 +234,17 @@ def _de_texto(texto: str) -> list[Verbete]:
         if not linha or not any(_limpo(c) for c in linha):
             continue
         celulas = [_limpo(c) for c in linha]
-        nomes = [_normal(c).lower().replace(" ", "") for c in celulas]
-        if "sinal" in nomes and "fabricante" in nomes:
-            # O CABEÇALHO decide a ordem. Coluna que o programa não conhece é
-            # ignorada; coluna que falta fica vazia.
-            ordem = [n if n in COLUNAS else "" for n in nomes]
-            continue
+        # Só a linha que tem uma célula «sinal» pode ser cabeçalho: testar o
+        # texto cru antes poupa a normalização de dezenas de milhares de
+        # células num dicionário grande.
+        if any(c.lower() == "sinal" for c in celulas):
+            nomes = [_normal(c).lower().replace(" ", "") for c in celulas]
+            if sum(n in COLUNAS for n in nomes) >= 2:
+                # O CABEÇALHO decide a ordem. Coluna que o programa não
+                # conhece é ignorada; coluna que falta fica vazia — inclusive
+                # o `fabricante`, num CSV só de verbetes genéricos.
+                ordem = [n if n in COLUNAS else "" for n in nomes]
+                continue
         valores = dict(zip(ordem, celulas, strict=False))
         if not valores.get("sinal"):
             continue  # sem sinal não há verbete
@@ -274,6 +284,12 @@ def anotar(base, fabricante: str, modelo: str, sinal: str,
         raise ValueError("um verbete precisa do nome do sinal")
     mudancas = {"descricao": descricao, "categoria": categoria}
     mudancas.update({k: v for k, v in outros.items() if k in EDITAVEIS})
+    # Fase escrita e não reconhecida é ERRO, não apagamento: vazio aqui quer
+    # dizer «apague», e `AG` apagaria a fase sem ninguém saber.
+    fase = mudancas.get("fase")
+    if fase is not None and _limpo(fase) and not _fase_valida(fase):
+        raise ValueError(f"fase «{_limpo(fase)}» não reconhecida — use "
+                         + ", ".join(f for f in FASES if f) + ", ou deixe vazio")
     mudancas = {k: _validado(k, v) for k, v in mudancas.items() if v is not None}
     novos = listar(base)
     alvo = Verbete(fabricante, modelo, sinal, instalacao=_limpo(instalacao)).chave
@@ -321,7 +337,10 @@ def importar(base, texto: str) -> dict:
             novos += 1
             continue
         antigo = atuais[i]
-        if antigo.fonte == "digitado" and v.fonte == "deduzido":
+        # Prova não é trocada por palpite: o que chega só mexe num verbete de
+        # fonte igual ou mais fraca. O vazio é o verbete digitado antes de
+        # existir a coluna — tão forte quanto o digitado.
+        if _FORCA.get(v.fonte, 4) < _FORCA.get(antigo.fonte, 4):
             continue
         # Célula de fora vazia não apaga o que você escreveu.
         junto = replace(antigo, **{c: getattr(v, c) or getattr(antigo, c) for c in EDITAVEIS})
@@ -363,14 +382,12 @@ _FAMILIAS = (
 _PELOS_OUTROS_TEXTOS = (
     (re.compile(r"\b(PL\s?\d{3})\b", re.IGNORECASE), "INGETEAM"),
     (re.compile(r"\bINGETEAM\b", re.IGNORECASE), "INGETEAM"),
+    # O SIPROTEC 5 grava o NÚMERO DE SÉRIE no equipamento (`BM…`). Quem decide
+    # que é ele é o ACERVO (`acervo._modelo`), que exige também a prova — os
+    # canais no jeito do DIGSI 5 — e escreve «SIPROTEC 5 · nº de série BM…» no
+    # modelo do item. Aqui só se lê essa conclusão: uma regra só, num lugar só.
+    (re.compile(r"\bSIPROTEC\s*5\b", re.IGNORECASE), "SIEMENS"),
 )
-
-#: O SIPROTEC 5 grava o NÚMERO DE SÉRIE no campo do equipamento: `BM` e dez
-#: dígitos (`BM2603020768`). A prova de que é ele está nos digitais do mesmo
-#: arquivo, que seguem a árvore do DIGSI 5 (`52-1 PROTEÇÃO:79:Cycle 1:…`,
-#: `BO:3BO13- ENVIO DE POTT`). Visto no banco em 14 registros (01/11/2026) —
-#: a conferir com o Alexandre.
-_SERIE_SIPROTEC5 = re.compile(r"^BM\d{10}$", re.IGNORECASE)
 
 
 def identificar(equipamento: str, *outros: str) -> tuple[str, str]:
@@ -381,8 +398,6 @@ def identificar(equipamento: str, *outros: str) -> tuple[str, str]:
     fab, mod = identificar_equipamento(equipamento)
     if fab:
         return fab, mod
-    if _SERIE_SIPROTEC5.match(_limpo(equipamento)):
-        return "SIEMENS", ""
     for texto in outros:
         for padrao, marca in _PELOS_OUTROS_TEXTOS:
             achado = padrao.search(texto or "")
@@ -438,16 +453,32 @@ def instalacao_casa(instalacao: str, textos) -> bool:
     registro diz de si — estação, equipamento, apelido. `SE BUNGE AL12` casa
     com a estação «SE Bunge» e o equipamento «AL12_UPC1». Palavra a palavra,
     e não trecho de texto, para `AL1` não casar com `AL12`.
+
+    `AL-12`, `AL 12` e `AL12` são a mesma coisa dos DOIS lados: letras
+    seguidas de número separado viram uma palavra só (`_juntadas`), na
+    instalação e no registro.
     """
-    alvo = _normal(instalacao).split()
+    alvo = _juntadas(_normal(instalacao).split())
     if not alvo:
         return True
     palavras = set()
     for t in textos:
-        for p in _normal(t).split():
+        soltas = _normal(t).split()
+        for p in soltas + _juntadas(soltas):
             palavras.add(p)
             palavras.update(re.findall(r"[A-Z]+\d+|\d+|[A-Z]+", p))   # AL12UPC1 → AL12, UPC1
     return all(p in palavras for p in alvo)
+
+
+def _juntadas(palavras: list[str]) -> list[str]:
+    """`['SE', 'AL', '12']` → `['SE', 'AL12']`: letras e o número logo depois."""
+    saida: list[str] = []
+    for p in palavras:
+        if saida and p.isdigit() and saida[-1].isalpha():
+            saida[-1] += p
+        else:
+            saida.append(p)
+    return saida
 
 
 def descrever(base, fabricante: str, modelo: str, sinal: str,
@@ -496,10 +527,14 @@ def _resolver(candidatos, fabricante: str, modelo: str,
     def de(v):
         return v.fabricante.strip().upper(), v.modelo.strip().upper()
 
-    for v in candidatos:
-        if v.instalacao and textos and instalacao_casa(v.instalacao, textos) \
-                and de(v)[0] in (fab, "") and de(v)[1] in (mod, ""):
-            return v
+    # Entre as instalações que casam, a mais ESPECÍFICA — a de mais palavras:
+    # «SE BUNGE AL12» vence «SE BUNGE» nos registros do AL12, seja qual for a
+    # ordem no arquivo.
+    casam = [v for v in candidatos
+             if v.instalacao and textos and instalacao_casa(v.instalacao, textos)
+             and de(v)[0] in (fab, "") and de(v)[1] in (mod, "")]
+    if casam:
+        return max(casam, key=lambda v: len(_juntadas(_normal(v.instalacao).split())))
     degraus = [(fab, mod), (fab, ""), ("", "")] if fab else [("", "")]
     for alvo in degraus:
         for v in candidatos:

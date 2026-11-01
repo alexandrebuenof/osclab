@@ -58,6 +58,7 @@ ainda não tem arranjo nenhum, e quem monta o padrão é o servidor.
 
 from __future__ import annotations
 
+import functools
 import io
 import zipfile
 from pathlib import Path
@@ -691,8 +692,10 @@ def create_app() -> Flask:
         corpo = request.get_json(silent=True) or {}
         campos = {c: corpo.get(c) for c in digitais_mod.EDITAVEIS if c in corpo}
         # Quem escreveu pela tela é a fonte, a menos que a tela diga outra:
-        # uma dedução corrigida à mão deixa de ser dedução.
-        if "fonte" not in corpo and any(campos.get(c) for c in campos):
+        # uma dedução corrigida à mão deixa de ser dedução. APAGAR também é
+        # escrever — senão a próxima importação da dedução traria de volta o
+        # valor que o usuário tirou.
+        if "fonte" not in corpo and campos:
             campos["fonte"] = "digitado"
         try:
             verbete = digitais_mod.anotar(
@@ -929,20 +932,31 @@ def _textos_da_instalacao(sha: str, item) -> tuple[str, ...]:
     if item is None:
         return ()
     dados = item.como_dicionario()
+    # O `modelo` é o que o acervo DEDUZIU, com prova (o «SIPROTEC 5 · nº de
+    # série» sai de lá): é ele que deixa o dicionário reconhecer a família.
     textos = [dados.get("estacao") or "", dados.get("equipamento") or "",
-              dados.get("nome") or "", acervo.apelido(sha)]
+              dados.get("modelo") or "", dados.get("nome") or "", acervo.apelido(sha)]
     textos += [str(a) for a in (dados.get("arquivos") or ())]
-    # O `.CEV` da SEL grava a estação VAZIA: quem diz qual relé é são o RID e
-    # o TID dos ajustes que vêm dentro dele.
-    try:
-        lidos = ajustes_mod.do_registro(acervo.pasta_do_registro(sha),
-                                        dados.get("arquivos") or (), ())
-        pares = list(lidos.get("ajustes") or []) + list(lidos.get("logica") or [])
-        textos += [str(par[1]) for par in pares
-                   if len(par) > 1 and str(par[0]).upper() in ("RID", "TID", "SID")]
-    except (OSError, ValueError):
-        pass
+    textos += list(_identidade_nos_ajustes(sha, tuple(dados.get("arquivos") or ())))
     return tuple(t for t in textos if t)
+
+
+@functools.lru_cache(maxsize=256)
+def _identidade_nos_ajustes(sha: str, arquivos: tuple[str, ...]) -> tuple[str, ...]:
+    """RID, TID e SID dos ajustes que vêm dentro do registro.
+
+    O `.CEV` da SEL grava a estação VAZIA: quem diz qual relé é são o RID e o
+    TID. Guardado por `sha` — o acervo é endereçado por conteúdo, então o que
+    está naquela pasta não muda —, porque ler e separar o bloco de ajustes de
+    um `.CEV` de vários MB a cada abertura da tela é custo à toa.
+    """
+    try:
+        lidos = ajustes_mod.do_registro(acervo.pasta_do_registro(sha), arquivos, ())
+    except (OSError, ValueError):
+        return ()
+    pares = list(lidos.get("ajustes") or []) + list(lidos.get("logica") or [])
+    return tuple(str(par[1]) for par in pares
+                 if len(par) > 1 and str(par[0]).upper() in ("RID", "TID", "SID"))
 
 
 def _nome_do_terminal(sha: str, registro, apelido: str) -> str:

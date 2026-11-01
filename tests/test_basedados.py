@@ -16,6 +16,8 @@ import shutil
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from osclab import paths
 from osclab.basedados import digitais, pasta
 
@@ -696,11 +698,80 @@ def test_o_INGETEAM_e_reconhecido_pela_estacao_e_pelo_nome_do_arquivo():
     assert digitais.identificar("56", estacao) == ("INGETEAM", "PL300")
     arquivo = "20260713,12983412,+2t,RELIG,ENERGISA_M,Ingeteam.CFG"
     assert digitais.identificar("RELIG", "ENERGISA_MT", arquivo) == ("INGETEAM", "")
-    # O SIPROTEC 5 grava o número de série (`BM` + dez dígitos).
-    assert digitais.identificar("BM2603020768", "SE_CONFRESA_V17") == ("SIEMENS", "")
+    # O SIPROTEC 5 grava o número de série; quem afirma a família é o ACERVO,
+    # com prova (o modelo «SIPROTEC 5 · nº de série BM…»). Só o número, não.
+    assert digitais.identificar("BM2603020768", "SIPROTEC 5 · nº de série BM2603020768") == \
+        ("SIEMENS", "")
+    assert digitais.identificar("BM2603020768", "SE_CONFRESA_V17") == ("", "BM2603020768")
     # O equipamento que já diz quem é não é trocado por um texto qualquer.
     assert digitais.identificar("SEL-751", "SE PL300 qualquer") == ("SEL", "751")
     assert digitais.identificar("FRA00045", "SE SORRISO") == ("", "FRA00045")
+
+
+def test_importar_nao_troca_PROVA_por_PALPITE():
+    """O que vem do AJUSTE do relé (ou do manual) não é trocado por uma
+    dedução que chega depois; o verbete digitado antes da coluna `fonte`
+    existir (fonte vazia) também não."""
+    with _area():
+        base = pasta.criar("Base")
+        digitais.importar(base, "fabricante;modelo;sinal;descricao;categoria;fonte;instalacao\n"
+                                "SEL;751;50P3T;envio de seletividade;comando;ajuste;SE X AL12\n"
+                                "SEL;751;50P1T;meu texto antigo;trip;;\n")
+        digitais.importar(base, "fabricante;modelo;sinal;descricao;categoria;fonte;instalacao\n"
+                                "SEL;751;50P3T;palpite;trip;deduzido;SE X AL12\n"
+                                "SEL;751;50P1T;palpite;pickup;deduzido;\n")
+        por = {v.sinal: v for v in digitais.listar(base)}
+        assert por["50P3T"].descricao == "envio de seletividade"
+        assert por["50P3T"].fonte == "ajuste"
+        assert por["50P1T"].descricao == "meu texto antigo"
+
+
+def test_fase_DESCONHECIDA_e_recusada_e_nao_apaga_a_fase():
+    """Vazio quer dizer «apague»: `AG` virando vazio apagaria a fase calado."""
+    with _area():
+        base = pasta.criar("Base")
+        digitais.anotar(base, "SEL", "351", "Z1G", fase="N")
+        with pytest.raises(ValueError, match="não reconhecida"):
+            digitais.anotar(base, "SEL", "351", "Z1G", fase="AG")
+        assert digitais.listar(base)[0].fase == "N"
+
+
+def test_cabecalho_sem_FABRICANTE_e_reconhecido():
+    """CSV só de verbetes genéricos: o cabeçalho não pode virar verbete."""
+    with _area():
+        base = pasta.criar("Base")
+        digitais.importar(base, "sinal;descricao;categoria\nTRIP;saída de trip;trip\n")
+        lista = digitais.listar(base)
+        assert len(lista) == 1
+        assert (lista[0].fabricante, lista[0].sinal, lista[0].categoria) == ("", "TRIP", "trip")
+
+
+def test_a_instalacao_MAIS_ESPECIFICA_vence_e_hifen_nao_atrapalha():
+    with _area():
+        base = pasta.criar("Base")
+        digitais.anotar(base, "SEL", "751", "50P3T", "da SE inteira", "comando",
+                        instalacao="SE BUNGE")
+        digitais.anotar(base, "SEL", "751", "50P3T", "do AL12", "bloqueio",
+                        instalacao="SE BUNGE AL-12")
+
+        def descricao(*textos):
+            return digitais.descrever(base, "SEL", "751", "50P3T", textos).descricao
+        assert descricao("SE Bunge", "AL12_UPC1") == "do AL12"
+        assert descricao("SE Bunge", "AL 13") == "da SE inteira"
+
+
+def test_APAGAR_pela_tela_tambem_marca_digitado():
+    """Senão a próxima importação da dedução traria de volta o que se tirou."""
+    with _area():
+        c = _cliente()
+        c.post("/api/base/criar", json={"nome": "Base"})
+        c.post("/api/base/dicionario/importar", json={
+            "texto": "fabricante;modelo;sinal;descricao;fonte\n"
+                     "SEL;351;SV05T;palpite;deduzido\n"})
+        r = c.post("/api/base/dicionario", json={"fabricante": "SEL", "modelo": "351",
+                                               "sinal": "SV05T", "descricao": ""})
+        v = r.get_json()["verbete"]
+        assert (v["descricao"], v["fonte"]) == ("", "digitado")
 
 
 def test_importar_nao_troca_o_que_voce_DIGITOU_por_uma_deducao():

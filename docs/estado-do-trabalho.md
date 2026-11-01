@@ -1,5 +1,27 @@
 # Onde o trabalho está
 
+## Noite de 01/11/2026 — o dicionário dos digitais (commits 3bc20f3, a7665be)
+
+Decisões do Alexandre: `partida` → `pickup`; entram `teleprotecao`, `comando` e `alarme`;
+colunas `funcao` (ANSI), `fase`, `estagio`, `fonte`, `referencia`; e a camada da
+**instalação** — o uso de um elemento é do AJUSTE, não do modelo (o 50 estágio 2 que envia
+seletividade lógica num alimentador, o 50 estágio 3 que bloqueia o religamento noutro). A
+tela da base edita tudo no clique, exporta e importa o CSV.
+
+Conteúdo (fora do repositório, na base do usuário): os verbetes de modelo vieram dos manuais
+(definições dos bits SEL em inglês, com a página); os de instalação, da **lógica SELOGIC que
+vem dentro do `.CEV`** — equação, comentário do engenheiro e apelido do sinal (`fonte =
+ajuste`); os demais, da gramática dos nomes de cada fabricante (`fonte = deduzido`). Mais de
+95 % dos digitais que mudam no banco de oscilografias saem descritos. Scripts e relatório em
+`docs-privados/dicionario/`.
+
+Defeitos achados e corrigidos: Ingeteam (modelo no campo de estação, ou fabricante só no nome
+do arquivo) e SIPROTEC 5 (número de série no campo do equipamento) não casavam verbete de
+modelo; a consulta por registro varria a lista inteira por sinal (1,2 s → 0,28 s).
+
+Pendente com o Alexandre: categoria da seletividade lógica (pus `bloqueio`); confirmar «HCL»
+como linha viva e `BM…` como SIPROTEC 5; a cor do `alarme` no tema claro (ΔE ~6 do bloqueio).
+
 ## 31/10 e 01/11/2026 — trincas, classificador, LDL de um terminal e a base de linhas (commits e68792b … 4585b9c)
 
 Feito no programa:

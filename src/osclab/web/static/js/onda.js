@@ -1678,7 +1678,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   //: mesma coisa ter a mesma cor nos dois lugares.
   const COR_DA_CATEGORIA = {
     trip: "--ruim", pickup: "--atencao", bloqueio: "--calculado-1",
-    teleprotecao: "--traco-3", comando: "--cursor-2", alarme: "--falta-ca",
+    teleprotecao: "--traco-3", comando: "--falta-bc", alarme: "--falta-ca",
     estado: "--digital", io: "--bom", auxiliar: "--suave", "": "--suave",
   };
 

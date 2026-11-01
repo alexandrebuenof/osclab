@@ -4856,10 +4856,13 @@ table.verbetes td.descricao input {
 .tipinho.sem-categoria { color: var(--suave); border-color: var(--linha); border-style: dashed; }
 /* As três de 01/11/2026, em tokens JÁ validados pelo `tools/paleta.py`
    (medido contra as seis de antes, nos dois temas e sob daltonismo).
-   Ressalva conhecida: no tema CLARO o `--falta-ca` do alarme fica a ΔE ~6
-   do roxo do bloqueio — entra na conversa pendente das cores do tema claro. */
+   Ressalvas conhecidas, na conversa pendente das cores: no tema CLARO o
+   `--falta-ca` do alarme fica a ΔE ~6 do roxo do bloqueio; no ESCURO, sob
+   deuteranopia, o `--falta-bc` do comando fica a ΔE ~5 do âmbar do pickup.
+   O comando NÃO usa o `--cursor-2`, que seria o melhor no papel: uma tira de
+   comando da cor do cursor 2, no mesmo eixo do tempo, se lê como o cursor. */
 .tipinho.teleprotecao { color: var(--traco-3); border-color: var(--traco-3); }
-.tipinho.comando { color: var(--cursor-2); border-color: var(--cursor-2); }
+.tipinho.comando { color: var(--falta-bc); border-color: var(--falta-bc); }
 .tipinho.alarme { color: var(--falta-ca); border-color: var(--falta-ca); }
 
 /* As colunas novas da tabela: curtas, em monoespaçada, e a FONTE como
