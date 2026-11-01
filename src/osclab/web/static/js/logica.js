@@ -23,7 +23,13 @@
   const deOnde = document.getElementById("de-onde-a-logica");
   const campo = document.getElementById("busca-da-logica");
   const corpo = document.getElementById("corpo-da-logica");
+  const botaoCru = document.getElementById("cru-da-logica");
   if (!chave || !painel) return;
+
+  /* O botão «como veio» aceso: o arquivo letra por letra, sem separar ajuste
+     de lógica. É a saída para o relé que escreve de um jeito que o leitor não
+     conhece — pedido dele, 02/11/2026. */
+  let verCru = false;
 
   const sha = document.body.dataset.sha || "";
   const LEMBRANCA = "osclab:painel-da-logica";
@@ -48,7 +54,10 @@
     chave.classList.toggle("sem-logica", !tem);
     chave.title = tem
       ? "Os ajustes e a lógica que vieram dentro do arquivo (" + estado.de + ")."
-      : "Este registro não trouxe ajustes — clique para saber por quê.";
+      : estado && estado.bruto
+        ? "O programa não reconheceu ajuste nem lógica no " + estado.de +
+          " — clique para ver o arquivo como veio."
+        : "Este registro não trouxe ajustes — clique para saber por quê.";
   }
 
   async function carregar() {
@@ -124,11 +133,29 @@
     return bloco;
   }
 
+  function pintarCru(aviso) {
+    if (aviso) corpo.append(criar("p", "aviso-dos-eventos", aviso));
+    corpo.append(criar("pre", "texto-cru", estado.bruto));
+  }
+
   function pintar() {
     corpo.replaceChildren();
+    const temCru = !!(estado && estado.bruto);
+    if (botaoCru) {
+      botaoCru.hidden = !temCru;
+      botaoCru.classList.toggle("escolhido", verCru);
+    }
     /* Campo de busca sem nada para buscar é um convite a digitar e não achar
        nada. Some quando o arquivo não trouxe ajuste. */
-    campo.hidden = !(estado && estado.tem);
+    campo.hidden = !(estado && estado.tem) || verCru;
+    if (temCru && verCru) { pintarCru(estado.de + ", como veio"); return; }
+    /* Um texto que o leitor não soube separar vai como veio: relé que nunca
+       vimos não pode virar painel vazio nem painel errado. */
+    if (temCru && !estado.tem) {
+      pintarCru(estado.de + ": o programa não reconheceu ajuste nem lógica " +
+                "neste arquivo, então ele vai como veio.");
+      return;
+    }
     if (!estado || !estado.tem) {
       const vazio = criar("div", "logica-vazia");
       vazio.append(criar("p", null,
@@ -218,6 +245,7 @@
 
   chave.addEventListener("click", () => (painel.hidden ? abrir() : fechar()));
   document.getElementById("fechar-logica").addEventListener("click", fechar);
+  botaoCru?.addEventListener("click", () => { verCru = !verCru; pintar(); });
   campo.addEventListener("input", pintar);
 
   /* Esc fecha, mas só quando o foco está DENTRO do painel: a tecla é dos

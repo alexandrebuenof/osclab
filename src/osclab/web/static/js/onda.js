@@ -543,17 +543,8 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   }
 
   /** A lista do acervo, para pôr mais um registro nesta aba. */
-  // O «eventos» do cabeçalho: cinza até a lista de eventos do relé ser lida.
-  // O clique EXPLICA, em vez de não responder — a regra do dicionário.
-  document.getElementById("eventos")?.addEventListener("click", () => {
-    menuSuspenso("menu-dos-eventos", "eventos do relé", (caixa) => {
-      caixa.append(criar("p", "nada-a-ajustar",
-        "Ainda não implementado. A lista de eventos (partida, trip, abertura "
-        + "do disjuntor, com hora) vai ser lida do .hdr/.txt que acompanha o "
-        + "registro — o da Schneider traz o «Fault log» — ou importada de um "
-        + "arquivo do relé, e vai ficar ligada ao cursor."));
-    });
-  });
+  // O «eventos» do cabeçalho é do eventos.js, que fala com esta tela pela
+  // ponte `window.osclab` (perto de `porCursor`).
 
   async function abrirEscolhaDeRegistro() {
     let itens = [];
@@ -1044,6 +1035,11 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       window.__janela = { de: dados.de, ate: dados.ate };   // para teste no navegador
       arrastoPx = 0;
       desenharTudo();
+      // Os registros da aba e o alinhamento podem ter mudado: quem mostra
+      // algo por registro (a lista de eventos) pergunta de novo.
+      document.dispatchEvent(new CustomEvent("osclab:janela", {
+        detail: { ieds: (dados.ieds || []).map((f) => f.sha + ":" + (f.deslocamento_ms ?? 0)) },
+      }));
     } catch (erro) {
       avisarDaFalha(erro);
     }
@@ -15648,7 +15644,44 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   }
 
   //: Espelho do estado para os testes de navegador olharem.
-  const espelhar = () => { window.__cursores = [...cursores]; };
+  //: Avisa também os painéis de fora deste arquivo (eventos.js), que marcam
+  //: a linha mais perto do cursor.
+  const espelhar = () => {
+    window.__cursores = [...cursores];
+    document.dispatchEvent(new CustomEvent("osclab:cursores",
+      { detail: { cursores: [...cursores], ativo } }));
+  };
+
+  // A PONTE para os painéis que moram fora deste arquivo. Eles não desenham
+  // nem medem nada: perguntam onde estão os cursores e pedem para o cursor ir
+  // a um instante. Quem encosta o cursor na amostra continua sendo o servidor
+  // (`lerCursores`), e quem decide a janela nova continua sendo `navegacao.py`
+  // — a ponte só manda o gesto de andar até o instante ficar no meio da tela.
+  window.osclab = Object.assign(window.osclab || {}, {
+    cursores: () => ({ cursores: [...cursores], ativo }),
+    pedido: () => pedidoComLayout(),
+    async irPara(t) {
+      if (!dados || t === null || t === undefined || !Number.isFinite(t)) return;
+      if (t < dados.de || t > dados.ate) {
+        await carregar({ andar: t - (dados.de + dados.ate) / 2 });
+      }
+      porCursor(ativo, t);
+    },
+    // Seleciona a tira do digital `indice` do IED `letra`, se ela estiver na
+    // tela — o casamento evento → digital é do servidor (`plot/eventos.py`).
+    // Digital que não está em painel nenhum não é posto: só o cursor anda.
+    selecionarDigital(letra, indice) {
+      for (const p of (dados && dados.paineis) || []) {
+        for (const tira of p.tiras || []) {
+          if ((tira.ied || "A") !== letra || tira.indice !== indice) continue;
+          marcarSelecao([{ painel: p.id, tipo: "digital", chave: tira.id || tira.indice,
+                           nome: tira.nome }]);
+          return true;
+        }
+      }
+      return false;
+    },
+  });
 
   function porCursor(k, t) {
     cursores[k] = t;

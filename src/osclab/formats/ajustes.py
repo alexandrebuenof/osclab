@@ -64,6 +64,8 @@ _SO_NUMERO = re.compile(r"^-?[\d.,]+$")
 
 #: Extensões que podem trazer o bloco, na ordem em que se procura.
 _ONDE_PROCURAR = (".cev", ".hdr", ".inf", ".cff")
+#: O texto cru vai à tela até este tamanho (o `.hdr` maior do banco tem 68 kB).
+LIMITE_DO_CRU = 400_000
 
 
 def _texto(caminho: Path) -> str:
@@ -348,6 +350,11 @@ def do_registro(pasta: Path, arquivos, digitais=None) -> dict:
     entraram. Procura o bloco no `.cev`, depois no `.hdr`, depois no `.inf`.
     """
     nomes = set(x.upper() for x in (digitais or ()))
+    # O primeiro texto achado, para quando NENHUM se deixar ler: a tela mostra
+    # o arquivo como veio em vez de dizer que não há nada — relé que nunca
+    # vimos pode escrever ajuste de um jeito que o leitor não conhece, e o
+    # texto cru ao menos não mente (pedido dele, 02/11/2026).
+    cru, cru_de = "", ""
     for extensao in _ONDE_PROCURAR:
         for arquivo in sorted(arquivos or ()):
             if not arquivo.lower().endswith(extensao):
@@ -359,7 +366,13 @@ def do_registro(pasta: Path, arquivos, digitais=None) -> dict:
             bruto = _bloco_do_cev(texto) if extensao == ".cev" else texto
             if not bruto.strip():
                 continue
-            todos = _pares_com_forma(bruto)
+            # O `.cff` é a oscilografia inteira num arquivo: não é texto de ler.
+            if not cru and extensao in (".cev", ".hdr", ".inf"):
+                cru, cru_de = bruto.strip()[:LIMITE_DO_CRU], arquivo
+            try:
+                todos = _pares_com_forma(bruto)
+            except Exception:  # noqa: BLE001 — formato estranho vira texto cru, nunca erro
+                todos = []
             if not todos:
                 continue
             ajustes, logica = separar(todos, nomes)
@@ -373,10 +386,10 @@ def do_registro(pasta: Path, arquivos, digitais=None) -> dict:
             }
     return {
         "tem": False,
-        "de": "",
+        "de": cru_de,
         "ajustes": [],
         "logica": [],
-        "bruto": "",
+        "bruto": cru,
         "motivo": ("o .CEV deste registro não traz o bloco de ajustes"
                    if any(a.lower().endswith(".cev") for a in (arquivos or ()))
                    # O .HDR pode vir SEM ajuste nenhum — o do SIPROTEC traz só

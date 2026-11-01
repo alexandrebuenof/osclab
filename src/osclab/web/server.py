@@ -35,6 +35,7 @@ POST   /api/base/gaveta           liga e desliga uma gaveta
 GET    /api/base/dicionario       o dicionário dos sinais digitais
 GET    /api/dicionario/<sha>      o que o dicionário sabe sobre ESTE registro
 GET    /api/logica/<sha>          os ajustes e a lógica que vieram no arquivo
+POST   /api/eventos/<sha>         a lista de eventos do relé, de cada registro da aba
 POST   /api/base/dicionario         cria ou corrige um verbete
 POST   /api/base/dicionario/importar junta um CSV de fora ao que já existe
 GET    /saude                     diagnóstico
@@ -83,11 +84,13 @@ from osclab.dsp import fasor as fasor_mod
 from osclab.faultloc import ldl as ldl_mod
 from osclab.faultloc import seqneg as seqneg_mod
 from osclab.formats import ajustes as ajustes_mod
+from osclab.formats import eventos as eventos_mod
 from osclab.formats import registry
 from osclab.formats.base import FormatError
 from osclab.library import acervo
 from osclab.plot import alinhamento as alinhamento_mod
 from osclab.plot import contas as contas_mod
+from osclab.plot import eventos as eventos_plot
 from osclab.plot import impedancia as impedancia_mod
 from osclab.plot import janela, leitura, navegacao, paineis, unidades
 from osclab.plot import varios as varios_mod
@@ -779,6 +782,39 @@ def create_app() -> Flask:
             acervo.pasta_do_registro(sha), dados.get("arquivos") or (), nomes)
         saida["equipamento"] = dados.get("equipamento") or ""
         return jsonify(saida)
+
+    @app.route("/api/eventos/<sha>", methods=["GET", "POST"])
+    def eventos_do_registro(sha: str):
+        """A lista de eventos do relé, de cada registro da aba, no tempo da aba.
+
+        O corpo é o mesmo da janela (os outros registros e o alinhamento): o
+        deslocamento de cada um tem de ser o MESMO que desloca as ondas. Ver
+        `plot/eventos.py`.
+        """
+        item = acervo.obter(sha)
+        if item is None:
+            return jsonify(tem=False, listas=[]), 404
+        try:
+            base = acervo.ler(sha)
+        except FormatError:
+            base = None
+        fontes = [("A", sha, acervo.apelido(sha), base, 0.0)]
+        for letra, (outro, apelido, sha_outro) in zip("BC", _outros_registros(sha),
+                                                       strict=False):
+            d = (alinhamento_mod.deslocamento(base, outro, _alinhar())["d"]
+                 if base is not None else 0.0)
+            fontes.append((letra, sha_outro, apelido, outro, d))
+        listas = []
+        for letra, s, apelido, registro, d in fontes:
+            dados = (acervo.obter(s) or item).como_dicionario()
+            achada = eventos_mod.do_registro(acervo.pasta_do_registro(s),
+                                             dados.get("arquivos") or ())
+            fim = (float(registro.time[-1])
+                   if registro is not None and registro.n_samples else None)
+            digitais = (eventos_plot.indice_dos_digitais(registro.status_channels)
+                        if registro is not None else {})
+            listas.append(eventos_plot.lista(letra, s, apelido, achada, d, fim, digitais))
+        return jsonify(tem=any(x["tem"] for x in listas), listas=listas)
 
     @app.get("/api/dicionario/<sha>")
     def dicionario_do_registro(sha: str):

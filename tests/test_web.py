@@ -2657,7 +2657,7 @@ def test_sem_ajustes_o_painel_nao_mostra_campo_de_busca():
     """Campo de busca sem nada para buscar é um convite a digitar e não achar
     nada."""
     js = _logica_js()
-    assert "campo.hidden = !(estado && estado.tem);" in js
+    assert "campo.hidden = !(estado && estado.tem) || verCru;" in js
     assert "if (!campo.hidden) { campo.focus(); campo.select(); }" in js
 
 

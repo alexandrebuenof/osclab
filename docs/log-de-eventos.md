@@ -1,7 +1,37 @@
-# O log de eventos do relé — a fazer
+# O log de eventos do relé
 
-Pedido dele em 20/10/2026. **Nada implementado.** Esta nota existe para o
-recurso não ser inventado no meio da implementação.
+Pedido dele em 20/10/2026.
+
+## O que já existe (02/11/2026)
+
+A maquete 1 de «eventos-10», escolhida por ele: um painel flutuante com a
+tabela do arquivo (tAbs, t, descrição, valor).
+
+- **Lê sozinho o `.hdr` da Schneider**, que o acervo já guarda junto do
+  COMTRADE. São dois dialetos no parque e o leitor entende também o `.txt`
+  (`formats/eventos.py`). O tempo foi conferido nos 250 `.hdr` do banco: dos
+  15 336 eventos que caem dentro da gravação, 15 316 batem com o digital do
+  COMTRADE na mesma amostra.
+- **Ligado ao cursor:** a linha mais perto do cursor ativo fica marcada, e o
+  clique numa linha leva o cursor até ela. Quando o registro grava o mesmo
+  sinal como digital, a tira dele fica selecionada (o casamento é do
+  servidor, pelo nome: `MAIN  Gen. trip command` ↔ `MAIN : Gen. trip
+  command`).
+- **Vários registros na aba:** a lista é uma só, em ordem de tempo, com o
+  selo do IED, e o tempo de cada lista é deslocado no servidor pelo MESMO
+  alinhamento das ondas (`plot/eventos.py`).
+- **Formato que o programa não conhece não vira tabela errada:** sem tabela
+  reconhecida (ou com mais de 20 % das linhas com hora ilegíveis), o arquivo
+  vai como veio, com o aviso, e sem ligação com o cursor. O botão «como veio»
+  está sempre à mão — é a saída para quando o programa ACHA que leu. A mesma
+  regra vale para o painel de lógica. Regra dele: em IED desconhecido, é
+  melhor não oferecer a função do que oferecê-la com defeito.
+- Evento depois do fim da gravação aparece apagado e não move o cursor.
+
+**Falta:** importar o SER da SEL, os SUCESOS da Ingeteam e um `.txt`
+qualquer (o leitor por colunas já está pronto para isso).
+
+## O plano original
 
 ## O que é
 

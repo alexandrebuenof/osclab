@@ -5163,6 +5163,71 @@ table.verbetes td.instalacao { font-size: 12px; color: var(--suave); }
 .logica-vazia p { margin: 0; max-width: 56ch; }
 .logica-vazia .miudo { font-size: 11.5px; opacity: .85; }
 
+/* ----- os EVENTOS do relé (eventos.js) ----------------------------------
+   A tabela do arquivo, como o relé escreveu, com o instante mais perto do
+   cursor marcado. Mono e com dígitos tabulares: a coluna do tempo é para
+   se ler de cima a baixo. */
+#corpo-dos-eventos { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.filtro-dos-eventos { display: flex; flex-wrap: wrap; gap: 6px; flex: none; }
+.filtro-dos-eventos[hidden] { display: none; }
+.filtro-dos-eventos .chave { display: inline-flex; align-items: center; gap: 4px; }
+.tabela-dos-eventos {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.tabela-dos-eventos th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--superficie);
+  color: var(--suave);
+  font-weight: 600;
+  text-align: left;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--linha);
+  white-space: nowrap;
+}
+.tabela-dos-eventos td {
+  padding: 2px 8px;
+  border-bottom: 1px solid var(--linha);
+  white-space: nowrap;
+}
+.tabela-dos-eventos .num { text-align: right; }
+.tabela-dos-eventos td.desc { white-space: pre; }
+.tabela-dos-eventos td.valor.fim { color: var(--suave); }
+.tabela-dos-eventos tr.evento { cursor: pointer; }
+.tabela-dos-eventos tr.evento:hover td { background: var(--faixa-da-lista); }
+/* O instante do cursor: fundo de destaque e um filete à esquerda — o filete
+   é o que se acha rolando depressa. */
+.tabela-dos-eventos tr.perto td { background: var(--destaque-fraco); }
+.tabela-dos-eventos tr.perto td:first-child { box-shadow: inset 3px 0 var(--destaque); }
+/* Depois do fim da gravação: aparece, apagado, e não leva o cursor. */
+.tabela-dos-eventos tr.fora { cursor: default; opacity: .5; }
+.dados-do-rele { margin-bottom: 10px; font-size: 12px; }
+.dados-do-rele summary { cursor: pointer; color: var(--suave); }
+.dados-do-rele .tabela-dos-eventos td.valor { text-align: right; }
+.aviso-dos-eventos { margin: 0 0 8px; font-size: 12px; color: var(--suave); }
+/* O arquivo como veio: letra por letra, com as colunas do relé alinhadas
+   como ele alinhou — por isso `pre` e sem quebra de linha. */
+.texto-cru {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre;
+  overflow-x: auto;
+  background: var(--fundo);
+  border: 1px solid var(--linha);
+  border-radius: 6px;
+  color: var(--tinta);
+}
+.barra-do-painel .como-veio { flex: none; font-size: 11px; padding: 1px 8px; }
+.barra-do-painel .como-veio[hidden] { display: none; }
+
 
 /* === O PINCEL dos sinais digitais ======================================== */
 

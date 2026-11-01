@@ -149,13 +149,12 @@
       <button type="button" class="chave com-icone" id="logica"
               style="--ic: var(--ic-logica)"
               title="Os ajustes e a lógica que vieram dentro do arquivo.">lógica</button>
-      {#- EVENTOS: cinza e clicável, como o dicionário sem dicionário. A lista
-          de eventos do relé ainda não é lida (ver `docs/log-de-eventos.md`);
-          o clique diz isso, em vez de o botão não responder. #}
+      {#- EVENTOS: a lista que o relé gravou, ligada ao cursor (eventos.js).
+          Cinza e clicável quando o registro não traz lista — o clique diz
+          por quê, como o dicionário sem dicionário. #}
       <button type="button" class="chave com-icone sem-eventos" id="eventos"
-              style="--ic: var(--ic-eventos)" aria-haspopup="true"
-              title="A lista de eventos que o relé gravou (partida, trip, abertura), ligada ao cursor. Ainda não implementada.">eventos</button>
-      <span class="ancora-de-menu" id="menu-dos-eventos"></span>
+              style="--ic: var(--ic-eventos)"
+              title="A lista de eventos que o relé gravou (partida, trip, abertura), ligada ao cursor.">eventos</button>
       {#- O DICIONÁRIO fica antes da ajuda, desde 21/10/2026: os dois são
           consulta. Sem dicionário ele fica CINZA e continua
           clicável -- o clique explica o que falta, que é melhor do que um
@@ -310,6 +309,8 @@
             width: 13px; height: 13px"></span>
       <h3>Lógica e ajustes</h3>
       <span class="de-onde" id="de-onde-a-logica"></span>
+      <button type="button" class="chave como-veio" id="cru-da-logica" hidden
+              title="Ver o arquivo como o relé escreveu, sem a separação em ajustes e lógica.">como veio</button>
       <button type="button" class="fechar" id="fechar-logica"
               title="fechar">×</button>
     </div>
@@ -317,6 +318,29 @@
       <input type="search" id="busca-da-logica" class="busca-do-dicionario"
              placeholder="procurar ajuste ou termo…" autocomplete="off">
       <div id="corpo-da-logica"></div>
+    </div>
+  </div>
+
+  {#- A LISTA DE EVENTOS do relé, escolha dele em 02/11/2026 (maquete 1 de
+      «eventos-10»): a tabela do arquivo, com o evento mais perto do cursor
+      marcado, e o clique numa linha levando o cursor até ela. Flutua como a
+      lógica, pelo mesmo motivo: é para ler olhando a onda. #}
+  <div class="painel-flutuante" id="painel-dos-eventos" hidden>
+    <div class="barra-do-painel" id="barra-dos-eventos">
+      <span class="icone-mascara" style="--ic: var(--ic-eventos);
+            width: 13px; height: 13px"></span>
+      <h3>Eventos do relé</h3>
+      <span class="de-onde" id="de-onde-os-eventos"></span>
+      {#- O arquivo como veio, sempre ao alcance: é a saída quando o programa
+          acha que leu a tabela e leu as colunas trocadas. #}
+      <button type="button" class="chave como-veio" id="cru-dos-eventos"
+              title="Ver o arquivo como o relé escreveu, sem a tabela.">como veio</button>
+      <button type="button" class="fechar" id="fechar-eventos"
+              title="fechar">×</button>
+    </div>
+    <div class="miolo-do-painel">
+      <div class="filtro-dos-eventos" id="filtro-dos-eventos"></div>
+      <div id="corpo-dos-eventos"></div>
     </div>
   </div>
 
@@ -567,5 +591,6 @@
   <script src="{{ url_for('static', filename='js/onda.js') }}"></script>
   <script src="{{ url_for('static', filename='js/dicionario.js') }}"></script>
   <script src="{{ url_for('static', filename='js/logica.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/eventos.js') }}"></script>
 </body>
 </html>
