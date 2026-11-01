@@ -696,6 +696,8 @@ def test_o_INGETEAM_e_reconhecido_pela_estacao_e_pelo_nome_do_arquivo():
     assert digitais.identificar("56", estacao) == ("INGETEAM", "PL300")
     arquivo = "20260713,12983412,+2t,RELIG,ENERGISA_M,Ingeteam.CFG"
     assert digitais.identificar("RELIG", "ENERGISA_MT", arquivo) == ("INGETEAM", "")
+    # O SIPROTEC 5 grava o número de série (`BM` + dez dígitos).
+    assert digitais.identificar("BM2603020768", "SE_CONFRESA_V17") == ("SIEMENS", "")
     # O equipamento que já diz quem é não é trocado por um texto qualquer.
     assert digitais.identificar("SEL-751", "SE PL300 qualquer") == ("SEL", "751")
     assert digitais.identificar("FRA00045", "SE SORRISO") == ("", "FRA00045")

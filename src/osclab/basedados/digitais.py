@@ -365,6 +365,13 @@ _PELOS_OUTROS_TEXTOS = (
     (re.compile(r"\bINGETEAM\b", re.IGNORECASE), "INGETEAM"),
 )
 
+#: O SIPROTEC 5 grava o NÚMERO DE SÉRIE no campo do equipamento: `BM` e dez
+#: dígitos (`BM2603020768`). A prova de que é ele está nos digitais do mesmo
+#: arquivo, que seguem a árvore do DIGSI 5 (`52-1 PROTEÇÃO:79:Cycle 1:…`,
+#: `BO:3BO13- ENVIO DE POTT`). Visto no banco em 14 registros (01/11/2026) —
+#: a conferir com o Alexandre.
+_SERIE_SIPROTEC5 = re.compile(r"^BM\d{10}$", re.IGNORECASE)
+
 
 def identificar(equipamento: str, *outros: str) -> tuple[str, str]:
     """`identificar_equipamento`, e, se ele não reconhecer o fabricante, os
@@ -374,6 +381,8 @@ def identificar(equipamento: str, *outros: str) -> tuple[str, str]:
     fab, mod = identificar_equipamento(equipamento)
     if fab:
         return fab, mod
+    if _SERIE_SIPROTEC5.match(_limpo(equipamento)):
+        return "SIEMENS", ""
     for texto in outros:
         for padrao, marca in _PELOS_OUTROS_TEXTOS:
             achado = padrao.search(texto or "")
