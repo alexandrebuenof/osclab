@@ -52,6 +52,11 @@ INCERTEZA = "dentro da incerteza do arquivo"
 #: reprova: os dois números podem ser de instantes diferentes, sem defeito
 #: nenhum (o 321 de Coxipó, 31/10/2026).
 TRANSITORIO = "possível medida no transitório"
+#: O resíduo medido é a soma das fases com o sinal TROCADO (correlação ≤ −0,95
+#: e módulo dentro da tolerância): a conta está certa, e o TC de neutro — ou a
+#: convenção do relé — tem a polaridade oposta à das fases. Informa, não
+#: reprova (o SIPROTEC de Bunge, `TC-LT1:IN`, 31/10/2026).
+POLARIDADE = "polaridade invertida"
 DIVERGE = "diverge"
 NAO_SE_APLICA = "não se aplica"
 ERRO = "erro"
@@ -319,6 +324,21 @@ def e_cev(caminho: Path) -> bool:
 #: toda vez, e um teste que se reprova sozinho vira teste que se desliga.
 TOLERANCIA_DO_RESIDUO = 25.0
 
+#: Abaixo disto de correlação (em módulo) entre o resíduo medido e a soma das
+#: fases, o canal NÃO mede a soma: é entrada própria — neutro sensível (`INS`
+#: do PL300), o `IN` independente do 311C e do 751, o `Current IN` do MiCOM
+#: ligado a um toroidal. Medido no acervo (31/10/2026): os 366 que conferem
+#: têm |r| ≥ 0,957; os de entrada própria, |r| entre 0 e 0,7. Comparar
+#: esses dois números não confere nada, e era a maior parte das reprovações
+#: desta conferência.
+CORRELACAO_MINIMA = 0.95
+
+#: A salvaguarda: só se aceita «entrada própria» quando a NOSSA soma é pequena
+#: na pré-falta — |3I0| até esta fração da maior fase, no primeiro ciclo
+#: inteiro. Uma trinca errada (fase trocada, canal de outro vão) dá uma soma
+#: grande desde a carga, e aí a conferência continua reprovando.
+DESEQUILIBRIO_NA_PRE_FALTA = 0.20
+
 RESIDUO = "1 resíduo × medido"
 NEUTRO_PELO_NOME = "1n neutro ligado pelo nome × resíduo"
 
@@ -383,6 +403,7 @@ def _conferir_residuos(registro: Record, pares, conferencia: str,
     if not pares:
         return [nao_se_aplica(conferencia, vazio)]
     saida = []
+    pendentes = []          # as que divergem, para julgar depois de ver todas
     for i, conjunto, medido in pares:
         item = f"{conjunto.nome} × {registro.analog_channels[medido].name}"
         if conjunto.sem_sinal:
@@ -415,11 +436,80 @@ def _conferir_residuos(registro: Record, pares, conferencia: str,
             saida.append(nao_se_aplica(conferencia, "sem amostra comum", item))
             continue
         erro = float(np.max(np.abs(calculado[onde] - alvo[onde]))) / pico * 100
-        saida.append(julgar(
+        linha = julgar(
             conferencia, item, float(np.max(np.abs(alvo[onde]))),
             float(np.max(np.abs(calculado[onde]))), erro, "% do pico das fases",
-            TOLERANCIA_DO_RESIDUO, "valores: pico do medido e do calculado"))
+            TOLERANCIA_DO_RESIDUO, "valores: pico do medido e do calculado")
+        if linha.veredito == DIVERGE:
+            pendentes.append((len(saida), i, conjunto, calculado, alvo, onde, pico))
+        saida.append(linha)
+    # Outro neutro do MESMO grupo que confere prova que a trinca está certa:
+    # o PL300 grava `IN` (a soma) e `INS` (o sensível); o SEL, `IG` e `IN`.
+    confirmados = {i for (i, _, _), linha in zip(pares, saida, strict=True)
+                   if linha.veredito == CONFERE}
+    for posicao, i, conjunto, calculado, alvo, onde, pico in pendentes:
+        saida[posicao] = _entrada_propria_ou_polaridade(
+            registro, conjunto, calculado, alvo, onde, pico, saida[posicao],
+            i in confirmados)
     return saida
+
+
+def _correlacao(a: np.ndarray, b: np.ndarray) -> float:
+    if a.size < 2 or a.std() == 0 or b.std() == 0:
+        return 0.0
+    return float(np.corrcoef(a, b)[0, 1])
+
+
+#: Abaixo disto, em fração do pico das fases, a pré-falta não tem carga com
+#: que julgar o equilíbrio: o vão estava aberto, ou o registro começa já na
+#: falta e a carga é ruído (0,03 A de fase num MiCOM sem carga).
+SEM_CARGA = 0.05
+
+
+def _equilibrada_na_pre_falta(registro: Record, conjunto, calculado: np.ndarray,
+                              pico: float) -> bool:
+    """|3I0| ≤ `DESEQUILIBRIO_NA_PRE_FALTA` da maior fase no primeiro ciclo —
+    ou a pré-falta sem carga nenhuma, onde não há o que julgar (`SEM_CARGA`)."""
+    por_ciclo = dspf.ciclo_em_amostras(registro.base_rate_hz, registro.line_frequency)
+    n = int(math.ceil(por_ciclo)) + 1
+    if por_ciclo < dspf.MINIMO_POR_CICLO or registro.n_samples < n:
+        return False
+    fases = max(float(np.sqrt(np.mean(registro.analog[k, :n] ** 2))) for k in conjunto.abc)
+    if fases * math.sqrt(2) < SEM_CARGA * pico:
+        return True
+    soma = float(np.sqrt(np.mean(calculado[:n] ** 2)))
+    return fases > 0 and soma <= DESEQUILIBRIO_NA_PRE_FALTA * fases
+
+
+def _entrada_propria_ou_polaridade(registro: Record, conjunto, calculado, alvo, onde,
+                                   pico: float, linha: Linha,
+                                   confirmada: bool = False) -> Linha:
+    """O que um resíduo que não bate é, quando dá para dizer pelo registro.
+
+    Ver `CORRELACAO_MINIMA`, `DESEQUILIBRIO_NA_PRE_FALTA` e `POLARIDADE`.
+    `confirmada` é outro neutro do mesmo grupo conferindo — prova de que a
+    trinca está certa. Nos outros casos a linha volta como veio: `DIVERGE`.
+    """
+    r = _correlacao(calculado[onde], alvo[onde])
+    if r <= -CORRELACAO_MINIMA:
+        invertido = float(np.max(np.abs(calculado[onde] + alvo[onde]))) / pico * 100
+        if invertido <= TOLERANCIA_DO_RESIDUO:
+            linha.veredito = POLARIDADE
+            linha.motivo = (f"o medido é a soma das fases com o sinal trocado (correlação "
+                            f"{r:.3f}; {invertido:.1f} % de erro com o sinal invertido): "
+                            "o TC de neutro, ou a convenção do relé, tem a polaridade "
+                            "oposta à das fases").replace(".", ",")
+            return linha
+    if abs(r) < CORRELACAO_MINIMA and (
+            confirmada or _equilibrada_na_pre_falta(registro, conjunto, calculado, pico)):
+        return nao_se_aplica(
+            linha.conferencia,
+            (f"entrada própria: o canal não acompanha a soma das fases (correlação "
+             f"{r:.2f}) — neutro sensível, TC toroidal ou outro ponto do circuito; "
+             + ("outro neutro do mesmo grupo confere com a soma" if confirmada
+                else "a nossa soma é equilibrada na pré-falta")).replace(".", ",", 1),
+            linha.item)
+    return linha
 
 
 def residuo(caminho: Path, registro: Record) -> list[Linha]:

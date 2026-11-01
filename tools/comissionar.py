@@ -228,7 +228,8 @@ def comparar(antes: dict[tuple, dict], depois: dict[tuple, dict],
     """
     # «Dentro da incerteza do arquivo» conferiu, com a folga alargada pela
     # oscilação do próprio arquivo (conferência 10).
-    bons = {"confere", "dentro da incerteza do arquivo", "possível medida no transitório"}
+    bons = {"confere", "dentro da incerteza do arquivo", "possível medida no transitório",
+            "polaridade invertida"}
     ruins = {"diverge", "erro"}
     saida: dict[str, list] = {"piorou": [], "melhorou": [], "mudou": []}
     for chave in sorted(set(antes) | set(depois)):

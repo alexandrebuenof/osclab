@@ -163,7 +163,8 @@ def _exigir(linhas: list[C.Linha]) -> None:
     # «Dentro da incerteza do arquivo» e «possível medida no transitório»
     # também conferiram, com ressalva — ver `C.TETO_DA_DISTANCIA` e
     # `C.TRANSITORIO`.
-    if not any(x.veredito in (C.CONFERE, C.INCERTEZA, C.TRANSITORIO) for x in linhas):
+    if not any(x.veredito in (C.CONFERE, C.INCERTEZA, C.TRANSITORIO, C.POLARIDADE)
+               for x in linhas):
         pytest.skip("; ".join(sorted({x.motivo for x in linhas})))
 
 
