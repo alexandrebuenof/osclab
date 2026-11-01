@@ -16369,7 +16369,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     aberta: false, fonte: "auto", pacote: null, lendo: false, denovo: false,
     modoI: "seq", modoV: "seq", zoom: "lt", ligados: new Set(["seqneg", "laco", "takagi", "takagi_i2"]),
     manual: { forma: "rx", r: "", x: "", r0: "", x0: "", mod: "", ang: "", mod0: "", ang0: "",
-              rkm: "", xkm: "", r0km: "", x0km: "", km: "", base: "prim" },
+              rkm: "", xkm: "", r0km: "", x0km: "", km: "", b1: "", b1km: "", base: "prim" },
   };
   const NOMES_DAS_FONTES = { base: "base de dados", A: "ajustes do IED A", B: "ajustes do IED B", manual: "digitada" };
   // Cores de SOBRA da paleta validada: os dois métodos não são fase de nada.
@@ -16642,7 +16642,9 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     if (l) {
       s += `<div class="loc-nota">Z1 = <b>${numLoc(l.r, 3)} + j${numLoc(l.x, 3)} Ω</b> · `
         + (l.r0 != null ? `Z0 = <b>${numLoc(l.r0, 3)} + j${numLoc(l.x0, 3)} Ω</b>${p.z0_de && p.z0_de !== p.fonte ? ` (de ${NOMES_DAS_FONTES[p.z0_de]})` : ""}` : `<span class="loc-aten">sem Z0</span>`)
-        + ` · <b>${numLoc(l.km, 2)} km</b> · primário, linha inteira · de ${NOMES_DAS_FONTES[p.fonte]}${estadoLoc.fonte === "auto" ? " (automático)" : ""}</div>`;
+        + ` · <b>${numLoc(l.km, 2)} km</b>`
+        + (l.b1 != null ? ` · B1 = <b>${numLoc(l.b1, 1)} µS</b>` : "")
+        + ` · primário, linha inteira · de ${NOMES_DAS_FONTES[p.fonte]}${estadoLoc.fonte === "auto" ? " (automático)" : ""}</div>`;
     } else {
       s += `<div class="loc-aviso">Nenhuma fonte tem o parâmetro da linha: digite abaixo.</div>`;
     }
@@ -16664,8 +16666,11 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       + (m.forma === "rx" ? `<div class="fila-loc">${campo("r", "R1 (Ω)")}${campo("x", "X1 (Ω)")}${campo("r0", "R0 (Ω)")}${campo("x0", "X0 (Ω)")}</div>` : "")
       + (m.forma === "pol" ? `<div class="fila-loc">${campo("mod", "|Z1| (Ω)")}${campo("ang", "θ1 (°)")}${campo("mod0", "|Z0| (Ω)")}${campo("ang0", "θ0 (°)")}</div>` : "")
       + (m.forma === "km" ? `<div class="fila-loc">${campo("rkm", "R1 (Ω/km)")}${campo("xkm", "X1 (Ω/km)")}${campo("r0km", "R0 (Ω/km)")}${campo("x0km", "X0 (Ω/km)")}</div>` : "")
-      + `<div class="fila-loc">${campo("km", "comprimento (km)")}</div>`
-      + `<div class="loc-nota">Linha INTEIRA. Z1 entra nos dois métodos; Z0 só no laço de terra (k0 = (Z0 − Z1)/3Z1). Em secundário, passa a primário pelo RTP/RTC do IED A.</div>`;
+      + `<div class="fila-loc">${campo("km", "comprimento (km)")}`
+      + (m.forma === "km" ? campo("b1km", "B1 (µS/km), opcional") : campo("b1", "B1 (µS), opcional")) + `</div>`
+      + `<div class="loc-nota">Linha INTEIRA. Z1 entra nos dois métodos; Z0 só no laço de terra (k0 = (Z0 − Z1)/3Z1). `
+      + `B1 é a susceptância capacitiva: com ela a seq. negativa usa a linha distribuída; vazio, a concentrada. `
+      + `Em secundário, passa a primário pelo RTP/RTC do IED A.</div>`;
   }
   /** Como cada método calcula e QUANDO ele é o aconselhável. O texto vem do
    * servidor (`ldl.COMO_CALCULA`, `ldl.QUANDO_USAR`), escrito ao lado da
@@ -16792,7 +16797,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
           const r = await fetch("/api/base/linhas", {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              nome: nome ? nome.value : "", r: l.r, x: l.x, km: l.km, r0: l.r0, x0: l.x0,
+              nome: nome ? nome.value : "", r: l.r, x: l.x, km: l.km, r0: l.r0, x0: l.x0, b1: l.b1, b0: l.b0,
               terminal_s: (p.nomes || {}).A || "", terminal_r: (p.nomes || {}).B || "",
             }),
           });

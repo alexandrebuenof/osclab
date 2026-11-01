@@ -33,8 +33,15 @@ Feito no programa:
 2. Os ajustes dos relés como conferência da base: cobertura parcial (só o `.CEV` da SEL traz o
    ajuste dentro da oscilografia); levantar o que os arquivos de ajuste cobrem.
 3. Os 4 registros de um alimentador em que o relé diz CA e o classificador diz energização.
-4. Fila: o dicionário (lógicas dos IEDs + manuais), cores do tema claro, campo `b1` na tela de
-   localização, o `J2 Vn` do 850 pendurado como resíduo.
+4. Fila: o dicionário (lógicas dos IEDs + manuais), cores do tema claro.
+
+Feito depois: o **`b1`** chega à localização — da base (`seqneg.linha_da_base`; zero não é
+capacitância, é o que o OnLiner escreve sem o dado) e digitado (campo B1, opcional, na tela; o
+«guardar na base» grava junto). O `J2 Vn` do 850 que estava na fila **já não era pendurado** como
+resíduo em nenhum dos 573 registros do banco desde `e68792b`. A régua «resíduo tem de ficar
+negativo» foi tentada e desfeita: ela tirava do grupo a entrada de neutro do PL300 nos registros
+sem falta à terra (só o ruído do conversor) e a deixava nos com falta — o mesmo relé mudando de
+arranjo de um registro para outro.
 
 ## 25/10/2026 — confiabilidade e universalidade (commits b6c1495 … 3b1a958)
 

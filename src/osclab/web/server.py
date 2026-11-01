@@ -499,11 +499,7 @@ def create_app() -> Flask:
         if base is not None and base.existe and base_mod.usa("linhas") and len(terminais) > 1:
             achadas = linhas_mod.procurar(base, textos(terminais[0]), textos(terminais[1]))
             if len(achadas) == 1:
-                linha = achadas[0]
-                fontes["base"] = {"ok": True, "r": linha.r1_ohm, "x": linha.x1_ohm,
-                                  "km": linha.comprimento_km, "como": linha.nome}
-                if linha.r0_ohm is not None:
-                    fontes["base"].update(r0=linha.r0_ohm, x0=linha.x0_ohm)
+                fontes["base"] = seqneg_mod.linha_da_base(achadas[0])
             else:
                 fontes["base"] = {"ok": False, "motivo": (
                     "mais de uma linha da base casa com estes terminais"
@@ -578,7 +574,8 @@ def create_app() -> Flask:
                 str(corpo.get("nome") or "").strip(),
                 str(corpo.get("terminal_s") or "").strip(),
                 str(corpo.get("terminal_r") or "").strip(),
-                float(corpo["r"]), float(corpo["x"]), float(corpo["km"]), r0, x0)
+                float(corpo["r"]), float(corpo["x"]), float(corpo["km"]), r0, x0,
+                opcional("b1"), opcional("b0"))
         except (KeyError, TypeError, ValueError):
             return jsonify(erro="faltam R, X ou o comprimento"), 400
         if not linha.nome or linha.comprimento_km <= 0:

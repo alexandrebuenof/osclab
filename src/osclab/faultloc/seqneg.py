@@ -257,6 +257,24 @@ def linha_dos_ajustes(ajustes: dict[str, str], rtp_rtc: float | None) -> dict:
     return saida
 
 
+def linha_da_base(linha) -> dict:
+    """A linha da gaveta «linhas» da base de dados, como fonte da localização.
+
+    Leva o Z0 e a capacitância quando a base os tem: o `b1_us` estava gravado e
+    a localização o jogava fora, e a seq. negativa ficava na concentrada numa
+    linha cuja capacitância a base conhecia. Zero não é capacitância — é o que
+    o OnLiner escreve quando não tem o dado —, então só vale acima de zero.
+    """
+    saida = {"ok": True, "r": linha.r1_ohm, "x": linha.x1_ohm,
+             "km": linha.comprimento_km, "como": linha.nome}
+    if linha.r0_ohm is not None:
+        saida.update(r0=linha.r0_ohm, x0=linha.x0_ohm)
+    for chave, valor in (("b1", linha.b1_us), ("b0", linha.b0_us)):
+        if valor is not None and math.isfinite(valor) and valor > 0:
+            saida[chave] = valor
+    return saida
+
+
 def linha_digitada(manual: dict | None, rtp_rtc: float | None) -> dict:
     """O que se digitou: `R + jX` total, ou `|Z| ∠ θ`, ou por km.
 

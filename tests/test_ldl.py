@@ -551,3 +551,18 @@ def test_capacitancia_digitada_e_da_base(tmp_path):
     lidas = {x.nome: x for x in linhas.listar(base)}
     assert (lidas["LT X"].b1_us, lidas["LT X"].b0_us) == (204.0, 130.0)
     assert lidas["LT Y"].b1_us is None
+
+
+def test_a_capacitancia_da_base_chega_a_localizacao():
+    """A base guardava o `b1_us` e a fonte «base» o jogava fora: a seq.
+    negativa ficava na linha concentrada sem ninguém saber."""
+    com = seqneg.linha_da_base(
+        linhas.Linha("LT X", "A", "B", 4.8, 24.0, 60.0, 18.0, 72.0, 204.0, 130.0))
+    assert (com["b1"], com["b0"], com["r0"]) == (204.0, 130.0, 18.0)
+    assert ldl.linha_com_z0(com)["b1"] == 204.0
+    sem = seqneg.linha_da_base(linhas.Linha("LT Y", "A", "B", 4.8, 24.0, 60.0))
+    assert "b1" not in sem and "r0" not in sem
+    # Zero é o que o OnLiner escreve quando não tem o dado: não é capacitância.
+    zero = seqneg.linha_da_base(
+        linhas.Linha("LT Z", "A", "B", 4.8, 24.0, 60.0, 18.0, 72.0, 0.0, 0.0))
+    assert "b1" not in zero and "b0" not in zero
