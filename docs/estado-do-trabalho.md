@@ -1,5 +1,41 @@
 # Onde o trabalho está
 
+## 31/10 e 01/11/2026 — trincas, classificador, LDL de um terminal e a base de linhas (commits e68792b … 4585b9c)
+
+Feito no programa:
+
+- **Trincas** do GE UR, do GE 850 e do MiCOM P632; `IY` é neutro; `VX` fica sem vínculo.
+- **Classificador**: inrush não é falta (2º harmônico ≥ 20 %, corrente subindo, tensão sem afundar);
+  a falta que evolui até a trifásica é dita como evolução.
+- **LDL de um terminal**: o resultado sai pelo Takagi I2 na falta assimétrica e pelo Takagi ΔI na
+  trifásica (`ldl.preferencia`).
+- **Conferência 10 (21)**: tolerância pela oscilação do nosso próprio número, com teto, e o veredito
+  «possível medida no transitório».
+- **Conferência 1 (resíduo)**: «polaridade invertida» e «entrada própria» deixaram de ser reprovação.
+
+**Base de linhas da distribuidora (dado privado, fora do repositório).** Montada a partir do OnLiner
+(ASPEN), da planilha de instalações, do PAM e do Caderno de Manobras; os scripts ficam em
+`docs-privados/montagem-base-linhas/`. Três lições de método que valem para qualquer base:
+
+- **O OnLiner tem a linha; quem falha é o casamento.** O nome da barra no estudo é abreviado e não
+  lembra o da SE. O **comprimento** (da planilha ou do traçado das estruturas) serve de impressão
+  digital: uma ponta pelo nome, a outra onde o caminho fecha em 2 %, com tensão igual, só na área
+  ASPEN da distribuidora (a base é nacional) e com saída única. A barra deduzida fica escrita.
+- **Nunca estimar impedância pelo condutor** para preencher buraco. Linha sem parâmetro fica sem
+  parâmetro, com o motivo e a fonte a cobrar.
+- **Derivação** se compara pelo ramal, não pelo tronco; linha **seccionada** sai da base; o
+  comprimento da planilha às vezes é o de um vão.
+
+**Pendente com o Alexandre:**
+
+1. Refinar a base com a proteção: exportar do mesmo `.olr` os relatórios de barras, de chaves e de
+   34,5 kV, e dizer qual barra é cada SE não reconhecida (lista pronta em `docs-privados`).
+2. Os ajustes dos relés como conferência da base: cobertura parcial (só o `.CEV` da SEL traz o
+   ajuste dentro da oscilografia); levantar o que os arquivos de ajuste cobrem.
+3. Os 4 registros de um alimentador em que o relé diz CA e o classificador diz energização.
+4. Fila: o dicionário (lógicas dos IEDs + manuais), cores do tema claro, campo `b1` na tela de
+   localização, o `J2 Vn` do 850 pendurado como resíduo.
+
 ## 25/10/2026 — confiabilidade e universalidade (commits b6c1495 … 3b1a958)
 
 **Princípio novo (CLAUDE.md): o leitor é universal.** Qualquer relé abre e
