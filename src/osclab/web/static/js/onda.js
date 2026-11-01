@@ -555,8 +555,25 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const ja = new Set([sha, ...outrosRegistros.map((x) => x.sha)]);
     menuSuspenso("menu-mais-oscilografia", "pôr nesta aba:", (caixa) => {
       const livres = itens.filter((x) => !ja.has(x.sha));
+      /* O caminho para SUBIR o arquivo que ainda não está no acervo — antes,
+         com o acervo sem outro registro, o menu só dizia isso e parava
+         (pedido dele, 01/11/2026). Abre o acervo numa aba NOVA do navegador:
+         a análise desta continua de pé, e ao voltar este menu relê o acervo. */
+      const subir = () => {
+        const b = criar("button", "opcao-de-registro subir-no-acervo");
+        b.type = "button";
+        b.append(criar("span", "nome-do-registro", "＋ subir outra oscilografia no acervo"));
+        b.append(criar("span", "sub-do-registro",
+                       "abre o acervo numa aba nova; depois volte aqui e escolha"));
+        b.addEventListener("click", () => {
+          if (menuAberto) menuAberto();
+          window.open("/arquivos", "_blank");
+        });
+        return b;
+      };
       if (!livres.length) {
         caixa.append(criar("p", "nota-do-menu", "Não há outro registro no acervo."));
+        caixa.append(subir());
         return;
       }
       for (const x of livres) {
@@ -572,6 +589,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         });
         caixa.append(b);
       }
+      caixa.append(subir());
     });
   }
 

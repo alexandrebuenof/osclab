@@ -615,12 +615,16 @@
                     "alarme", "io", "auxiliar"];
   //: Como cada categoria aparece escrita (o valor no arquivo não tem acento).
   const NOME_DA_CATEGORIA = { teleprotecao: "teleproteção" };
-  //: As colunas que se editam com um clique, além da descrição.
-  const CAMPOS_CURTOS = [["funcao", "função", "ANSI: 50, 51, 67, 21, 79, 85…"],
-                         ["fase", "fase", "A, B, C, AB, BC, CA, N, fases, 3F"],
-                         ["estagio", "estágio", "estágio ou zona: 1, 2, 3…"]];
   let busca = "";
   let novo = false;
+  /* As alterações que ainda NÃO foram para o disco: chave do verbete →
+     `{ apagar, novo, chave, campos }`. Até a versão anterior cada clique
+     gravava na hora, e uma categoria trocada sem querer não tinha volta
+     (pedido dele, 01/11/2026). Agora a tela mostra a mudança, marca a linha,
+     e só grava no «salvar»; «descartar» relê o disco. */
+  const pendentes = new Map();
+  const chaveTexto = (v) => [v.fabricante, v.modelo, v.sinal, v.instalacao || ""]
+    .map((x) => (x || "").toUpperCase()).join("|");
 
   async function abrirDicionario(g) {
     tituloDaGaveta.textContent = g.nome;
@@ -636,6 +640,7 @@
     }
     busca = "";
     novo = false;
+    pendentes.clear();
     pintarGaveta();
   }
 
@@ -664,6 +669,7 @@
     bExportar.title = "Baixa o dicionário inteiro para editar no Excel e importar de volta";
     barra.append(campo, bNovo, bImportar, bExportar);
     corpoDaGaveta.append(barra);
+    corpoDaGaveta.append(barraDeSalvar());
 
     if (novo) corpoDaGaveta.append(formaDeVerbete());
 
@@ -673,13 +679,12 @@
 
     const p = criar("p", "ajuda");
     p.style.marginTop = "10px";
-    p.textContent = "Clique numa descrição, função, fase ou estágio para editar, e na " +
-      "categoria para classificar. Tudo é opcional: o que você não souber fica vazio, " +
-      "e o leitor mostra o nome cru sem reclamar. Um verbete com INSTALAÇÃO vale só " +
-      "para os registros daquele relé e vence o do modelo — é onde se escreve o uso " +
-      "que o ajuste deu a um elemento. A coluna «fonte» diz de onde veio: manual, " +
-      "ajuste (lido da lógica do próprio relé), deduzido (pelo padrão do nome — " +
-      "palpite, a conferir) ou digitado.";
+    p.textContent = "Clique numa descrição para editar, e escolha a categoria na lista. " +
+      "Nada vai para o disco até você apertar «salvar»; «descartar» volta ao que está " +
+      "gravado. Tudo é opcional: o que você não souber fica vazio, e o leitor mostra o " +
+      "nome cru sem reclamar. A coluna «fonte» diz de onde veio: manual, ajuste (lido " +
+      "da lógica do próprio relé), deduzido (pelo padrão do nome — palpite, a conferir) " +
+      "ou digitado.";
     corpoDaGaveta.append(p);
 
     pintarTabela();
@@ -689,8 +694,7 @@
     const forma = criar("div", "barra-da-gaveta");
     const campos = {};
     for (const [chave, rot] of [["fabricante", "fabricante"], ["modelo", "modelo"],
-                                ["sinal", "sinal"],
-                                ["instalacao", "instalação (vazio = o modelo todo)"]]) {
+                                ["sinal", "sinal"]]) {
       const c = criar("input", "busca-da-gaveta");
       c.type = "text";
       c.placeholder = rot;
@@ -703,10 +707,8 @@
     ok.addEventListener("click", async () => {
       const sinal = campos.sinal.value.trim();
       if (!sinal) { campos.sinal.focus(); return; }
-      await anotar({
-        fabricante: campos.fabricante.value, modelo: campos.modelo.value,
-        sinal: sinal, instalacao: campos.instalacao.value,
-      });
+      alterar({ fabricante: campos.fabricante.value.trim(), modelo: campos.modelo.value.trim(),
+                sinal: sinal, instalacao: "" }, {}, true);
       campos.sinal.value = "";
       busca = "";
       pintarGaveta();
@@ -722,7 +724,7 @@
 
     const alvo = busca.trim().toLowerCase();
     const vistos = verbetes.filter((v) => !alvo ||
-      [v.sinal, v.descricao, v.fabricante, v.modelo, v.funcao, v.instalacao, v.categoria]
+      [v.sinal, v.descricao, v.fabricante, v.modelo, v.instalacao, v.categoria]
         .join(" ").toLowerCase().includes(alvo));
 
     if (!vistos.length) {
@@ -735,8 +737,7 @@
     const tabela = criar("table", "verbetes");
     const cabeca = criar("thead");
     const tr = criar("tr");
-    for (const h of ["fabricante", "modelo", "sinal", "descrição", "categoria", "função", "fase",
-                     "estágio", "instalação", "fonte", ""]) {
+    for (const h of ["fabricante", "modelo", "sinal", "descrição", "categoria", "fonte", ""]) {
       tr.append(criar("th", null, h));
     }
     cabeca.append(tr);
@@ -748,13 +749,18 @@
     const TETO = 400;
     if (vistos.length > TETO) {
       rolo.append(criar("p", "ajuda", "Mostrando " + TETO + " de " + vistos.length +
-        " — use a busca (sinal, descrição, modelo, função, instalação ou categoria) para chegar ao resto."));
+        " — use a busca (sinal, descrição, modelo ou categoria) para chegar ao resto."));
     }
     vistos.slice(0, TETO).forEach((v, i) => {
-      const linha = criar("tr", i % 2 ? "par" : "");
+      const linha = criar("tr", (i % 2 ? "par" : "") +
+                          (pendentes.has(chaveTexto(v)) ? " pendente" : ""));
       linha.append(criar("td", null, v.fabricante));
       linha.append(criar("td", "cod", v.modelo));
-      linha.append(criar("td", "cod" + (v.sinal.length > 12 ? " longo" : ""), v.sinal));
+      const cSinal = criar("td", "cod" + (v.sinal.length > 12 ? " longo" : ""), v.sinal);
+      // A instalação saiu da tabela (informação demais, pedido dele); o
+      // verbete que vale só para um relé continua dizendo isso no hover.
+      if (v.instalacao) cSinal.title = "vale só para a instalação " + v.instalacao;
+      linha.append(cSinal);
 
       const celula = criar("td", "descricao");
       if (v.descricao) celula.append(criar("span", null, v.descricao));
@@ -766,29 +772,30 @@
                                                          "deixe vazio se não tiver certeza"));
       linha.append(celula);
 
-      const celulaCategoria = criar("td");
-      const bt = criar("button", "tipinho " + (v.categoria || "sem-categoria"),
-                       NOME_DA_CATEGORIA[v.categoria] || v.categoria || SEM_CATEGORIA);
-      bt.type = "button";
-      bt.title = "clique para classificar — só classifique o que tiver certeza";
-      bt.addEventListener("click", async () => {
-        const i = categorias.indexOf(v.categoria || "");
-        await anotar({ ...chaveDe(v), categoria: categorias[(i + 1) % categorias.length] });
+      /* A categoria é uma LISTA: a setinha abre todas de uma vez. Era um
+         botão que trocava a cada clique — para chegar em «comando» passava-se
+         por cinco outras, e o botão mudava de largura a cada uma. A lista tem
+         largura fixa, e a cor continua dizendo a categoria. */
+      const celulaCategoria = criar("td", "categoria");
+      const lista = criar("select", "tipinho " + (v.categoria || "sem-categoria"));
+      lista.title = "escolha a categoria — só classifique o que tiver certeza";
+      for (const c of categorias) {
+        const op = criar("option", null, NOME_DA_CATEGORIA[c] || c || SEM_CATEGORIA);
+        op.value = c;
+        lista.append(op);
+      }
+      lista.value = v.categoria || "";
+      lista.addEventListener("change", () => {
+        alterar(v, { categoria: lista.value });
         pintarTabela();
       });
-      celulaCategoria.append(bt);
+      celulaCategoria.append(lista);
       linha.append(celulaCategoria);
 
-      for (const [c, , dica] of CAMPOS_CURTOS) {
-        const td = criar("td", "cod curto");
-        td.textContent = v[c] || "";
-        td.title = "clique para editar — " + dica;
-        td.addEventListener("click", () => editarCampo(td, v, c, dica));
-        linha.append(td);
-      }
-      linha.append(criar("td", "instalacao", v.instalacao || ""));
       const fonte = criar("td");
-      if (v.fonte) {
+      if (pendentes.has(chaveTexto(v))) {
+        fonte.append(criar("span", "fonte-do-verbete a-salvar", "a salvar"));
+      } else if (v.fonte) {
         const f = criar("span", "fonte-do-verbete " + v.fonte, v.fonte);
         f.title = { manual: "conferido no manual do fabricante",
                     ajuste: "lido do ajuste deste relé (a equação está na referência)",
@@ -821,20 +828,15 @@
     let armado = false;
     b.addEventListener("click", async () => {
       if (!armado) { armado = true; b.textContent = "apagar?"; return; }
-      try {
-        const r = await fetch("/api/base/dicionario", {
-          method: "DELETE", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(chaveDe(v)) });
-        const dados = await r.json();
-        if (!r.ok) throw new Error(dados.erro || "Não deu para apagar.");
-        verbetes = verbetes.filter((x) => x !== v);
-        const g = (E.gavetas || []).find((x) => x.id === "dicionario");
-        if (g) g.itens = dados.itens;
-        pintarTabela();
-        pintar();
-      } catch (erro) {
-        corpoDaGaveta.append(recado(erro.message, "ruim"));
-      }
+      const k = chaveTexto(v);
+      const antes = pendentes.get(k);
+      // Verbete que só existia como pendência (acabou de ser criado) some
+      // sem deixar pedido nenhum para o disco.
+      if (antes && antes.novo) pendentes.delete(k);
+      else pendentes.set(k, { apagar: true, novo: false, chave: chaveDe(v), campos: {} });
+      verbetes = verbetes.filter((x) => x !== v);
+      pintarBarraDeSalvar();
+      pintarTabela();
     });
     b.addEventListener("blur", () => { armado = false; b.textContent = "×"; });
     td.append(b);
@@ -853,7 +855,7 @@
     const terminar = async (salvar) => {
       if (fechado) return;
       fechado = true;
-      if (salvar && campo.value !== (v[nome] || "")) await anotar({ ...chaveDe(v), [nome]: campo.value });
+      if (salvar && campo.value !== (v[nome] || "")) alterar(v, { [nome]: campo.value });
       pintarTabela();
     };
     campo.addEventListener("blur", () => terminar(true));
@@ -863,31 +865,117 @@
     });
   }
 
-  /* Grava um verbete e atualiza a cópia que a tela tem. A contagem da gaveta
-     vem do servidor junto: é ela que aparece no cartão e na tela inicial, e
-     um número contado aqui divergiria do disco na primeira falha de rede. */
-  async function anotar(v) {
-    try {
-      const dados = await pedir("/api/base/dicionario", v);
-      const salvo = dados.verbete;
-      const i = verbetes.findIndex((x) =>
-        x.sinal.toUpperCase() === salvo.sinal.toUpperCase() &&
-        x.modelo.toUpperCase() === salvo.modelo.toUpperCase() &&
-        x.fabricante.toUpperCase() === salvo.fabricante.toUpperCase() &&
-        (x.instalacao || "").toUpperCase() === (salvo.instalacao || "").toUpperCase());
-      if (i >= 0) verbetes[i] = salvo;
-      else verbetes.push(salvo);
-      const g = (E.gavetas || []).find((x) => x.id === "dicionario");
-      if (g) g.itens = dados.itens;
-      pintar();
-    } catch (erro) {
-      corpoDaGaveta.append(recado(erro.message, "ruim"));
+  /* Muda um verbete NA TELA e guarda a mudança como pendente. Só os campos
+     mexidos vão no pedido, junto com a chave: o servidor trata campo ausente
+     como «não mexa», e mandar o verbete inteiro reescreveria a fonte de tudo
+     como «digitado». `novo` é o verbete criado pelo «＋ sinal». */
+  function alterar(v, campos, novo = false) {
+    const k = chaveTexto(v);
+    const antes = pendentes.get(k);
+    pendentes.set(k, {
+      apagar: false,
+      novo: novo || Boolean(antes && antes.novo),
+      chave: chaveDe(v),
+      campos: { ...((antes && !antes.apagar && antes.campos) || {}), ...campos },
+    });
+    const i = verbetes.findIndex((x) => chaveTexto(x) === k);
+    if (i >= 0) verbetes[i] = { ...verbetes[i], ...campos };
+    else verbetes.push({ ...v, descricao: "", categoria: "", fonte: "", ...campos });
+    pintarBarraDeSalvar();
+  }
+
+  /* A barra que aparece só quando há o que salvar: quantas mudanças, e os
+     dois caminhos. Fica entre a busca e a tabela, à vista de quem edita. */
+  function barraDeSalvar() {
+    const b = criar("div", "barra-de-salvar");
+    b.id = "barra-de-salvar";
+    preencherBarraDeSalvar(b);
+    return b;
+  }
+
+  function pintarBarraDeSalvar() {
+    const b = document.getElementById("barra-de-salvar");
+    if (b) preencherBarraDeSalvar(b);
+  }
+
+  function preencherBarraDeSalvar(b) {
+    b.replaceChildren();
+    b.hidden = pendentes.size === 0;
+    if (b.hidden) return;
+    const n = pendentes.size;
+    b.append(criar("span", "conta-a-salvar",
+                   n === 1 ? "1 alteração não salva" : n + " alterações não salvas"));
+    const bSalvar = criar("button", "chave escolhido", "salvar");
+    bSalvar.type = "button";
+    bSalvar.addEventListener("click", salvarPendentes);
+    const bDescartar = criar("button", "chave", "descartar");
+    bDescartar.type = "button";
+    bDescartar.title = "volta ao que está gravado no disco";
+    bDescartar.addEventListener("click", descartarPendentes);
+    b.append(bSalvar, bDescartar);
+  }
+
+  /* Grava as pendências uma a uma, com o MESMO pedido de antes, e relê o
+     disco no fim: a tela passa a mostrar o que ficou gravado de fato, e a
+     contagem da gaveta vem do servidor. A que falhar continua pendente. */
+  async function salvarPendentes() {
+    let falhas = 0;
+    for (const [k, p] of [...pendentes]) {
+      try {
+        if (p.apagar) {
+          const r = await fetch("/api/base/dicionario", {
+            method: "DELETE", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(p.chave) });
+          if (!r.ok) throw new Error("Não deu para apagar.");
+        } else {
+          await pedir("/api/base/dicionario", { ...p.chave, ...p.campos });
+        }
+        pendentes.delete(k);
+      } catch (erro) {
+        falhas += 1;
+      }
     }
+    await reler();
+    corpoDaGaveta.append(recado(falhas
+      ? falhas + " alteração(ões) não foram gravadas e continuam pendentes."
+      : "Salvo.", falhas ? "ruim" : "bom"));
+  }
+
+  async function descartarPendentes() {
+    pendentes.clear();
+    await reler();
+  }
+
+  /* Lê o dicionário do disco de novo, reaplicando o que ainda está pendente. */
+  async function reler() {
+    try {
+      verbetes = (await (await fetch("/api/base/dicionario")).json()).verbetes || [];
+      E = await (await fetch("/api/base")).json();
+    } catch (erro) {
+      corpoDaGaveta.append(recado("Não deu para reler o dicionário.", "ruim"));
+    }
+    for (const p of pendentes.values()) {
+      const k = chaveTexto(p.chave);
+      if (p.apagar) {
+        verbetes = verbetes.filter((x) => chaveTexto(x) !== k);
+        continue;
+      }
+      const i = verbetes.findIndex((x) => chaveTexto(x) === k);
+      if (i >= 0) verbetes[i] = { ...verbetes[i], ...p.campos };
+      else verbetes.push({ ...p.chave, descricao: "", categoria: "", fonte: "", ...p.campos });
+    }
+    pintarGaveta();
+    pintar();
   }
 
   escolherArquivo.addEventListener("change", async () => {
     const arquivo = escolherArquivo.files && escolherArquivo.files[0];
     if (!arquivo) return;
+    if (pendentes.size) {
+      escolherArquivo.value = "";
+      corpoDaGaveta.append(recado("Salve ou descarte as alterações antes de importar.", "ruim"));
+      return;
+    }
     const forma = new FormData();
     forma.append("arquivo", arquivo);
     try {
@@ -909,7 +997,21 @@
     escolherArquivo.value = "";
   });
 
-  document.getElementById("fechar-gaveta").addEventListener("click", () => janela.close());
+  /* Fechar com alteração pendente não fecha: diz o que falta. Vale para o
+     × e para o Esc (o `cancel` do <dialog>). */
+  function podeFechar() {
+    if (!pendentes.size) return true;
+    corpoDaGaveta.append(recado(
+      "Há alterações não salvas: aperte «salvar» ou «descartar» antes de fechar.", "ruim"));
+    document.getElementById("barra-de-salvar")?.scrollIntoView({ block: "nearest" });
+    return false;
+  }
+  document.getElementById("fechar-gaveta").addEventListener("click", () => {
+    if (podeFechar()) janela.close();
+  });
+  janela.addEventListener("cancel", (ev) => {
+    if (!podeFechar()) ev.preventDefault();
+  });
 
   // =========================================================================
 

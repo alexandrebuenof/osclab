@@ -4865,14 +4865,43 @@ table.verbetes td.descricao input {
 .tipinho.comando { color: var(--falta-bc); border-color: var(--falta-bc); }
 .tipinho.alarme { color: var(--falta-ca); border-color: var(--falta-ca); }
 
-/* As colunas novas da tabela: curtas, em monoespaçada, e a FONTE como
-   etiqueta discreta — «deduzido» é o que pede conferência, e por isso é o
-   único que chama atenção. */
-table.verbetes td.curto { cursor: text; min-width: 3.5em; text-align: center; }
-table.verbetes td.curto input { width: 5em; }
-table.verbetes td.instalacao { font-size: 12px; color: var(--suave); }
+/* Na tabela do dicionário a categoria é uma LISTA (`select`), com a setinha
+   desenhada na cor da categoria e LARGURA FIXA: o botão de antes mudava de
+   tamanho a cada categoria e saía do alinhamento («comando» subia). Altura e
+   alinhamento vertical fixos pelo mesmo motivo. As opções abertas usam as
+   cores do tema, senão o tema escuro abria uma lista branca. */
+select.tipinho {
+  appearance: none; -webkit-appearance: none;
+  box-sizing: border-box; width: 128px; height: 22px; line-height: 18px;
+  padding: 0 22px 0 10px; vertical-align: middle; text-align: left;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 13px) 55%, calc(100% - 9px) 55%;
+  background-size: 4px 4px; background-repeat: no-repeat;
+}
+select.tipinho option { color: var(--tinta); background: var(--superficie); }
+table.verbetes td.categoria { width: 140px; }
+
+/* A FONTE como etiqueta discreta — «deduzido» é o que pede conferência, e
+   por isso é o único que chama atenção. «a salvar» é a linha mexida que
+   ainda não foi para o disco. */
 .fonte-do-verbete { font-size: 10.5px; color: var(--suave); white-space: nowrap; }
 .fonte-do-verbete.deduzido { color: var(--atencao); }
+.fonte-do-verbete.a-salvar { color: var(--destaque); }
+table.verbetes tr.pendente td { background: var(--destaque-fraco); }
+table.verbetes tr.pendente td:first-child { box-shadow: inset 3px 0 0 var(--destaque); }
+
+/* A barra do «salvar»: só aparece com alteração pendente, entre a busca e a
+   tabela. */
+.barra-de-salvar {
+  display: flex; gap: 8px; align-items: center; margin-top: 10px;
+  padding: 6px 10px; border: 1px solid var(--destaque); border-radius: 6px;
+  background: var(--destaque-fraco);
+}
+.barra-de-salvar .conta-a-salvar { flex: 1; font-size: 12.5px; color: var(--tinta); }
+/* O `display: flex` acima venceria o `hidden` e deixaria uma tarja vazia. */
+.barra-de-salvar[hidden] { display: none; }
 .apagar-verbete { padding: 1px 7px; font-size: 12px; color: var(--suave); }
 
 .recado-da-base { margin-top: 10px; font-size: 12.5px; }
@@ -5748,6 +5777,10 @@ table.verbetes td.instalacao { font-size: 12px; color: var(--suave); }
   white-space: nowrap;
 }
 .opcao-de-registro:hover .nome-do-registro { color: var(--destaque); }
+/* «subir outra no acervo» é um CAMINHO, não um registro: fica no fim, depois
+   de um fio, e na cor de ação. */
+.opcao-de-registro.subir-no-acervo { border-top: 1px solid var(--linha); margin-top: 6px; }
+.opcao-de-registro.subir-no-acervo .nome-do-registro { color: var(--destaque); }
 
 /* A vista do plano de impedância, dentro da caixa de ajustes: um rótulo
    curto e as chaves dele na mesma linha. */
