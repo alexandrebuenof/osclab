@@ -192,6 +192,10 @@ def create_app() -> Flask:
             conflita_a_falta=not falta_mod.rele_concorda(
                 dados.get("falta_tipo", ""), dados.get("falta_inicial", ""),
                 dados.get("classificacao_do_rele", "")),
+            # `TRIP`, `ER` no lugar da sigla: não concorda nem discorda, e o
+            # «✓ relé» afirmaria «o mesmo tipo» de um tipo que não existe.
+            rele_tem_tipo=falta_mod.e_tipo_de_falta(
+                dados.get("classificacao_do_rele", "")),
         )
 
     # -----------------------------------------------------------------------

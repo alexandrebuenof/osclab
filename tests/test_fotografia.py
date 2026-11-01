@@ -36,6 +36,36 @@ def test_comparar_acha_cada_campo_que_mudou_e_o_registro_que_sumiu():
     assert not any(campo == "falta" for _, campo, _, _ in dif)
 
 
+def test_a_parte_da_falta_que_mudou_sai_com_o_nome_dela():
+    antes = {"a.cfg": {"falta": {"tipo": "AG", "inicial": "AG", "instante": 10}}}
+    depois = {"a.cfg": {"falta": {"tipo": "ABC", "inicial": "AG", "instante": 10}}}
+    assert fotografia.comparar(antes, depois) == [("a.cfg", "falta.tipo", "AG", "ABC")]
+
+
+def test_campo_que_a_foto_antiga_nao_tinha_nao_e_mudanca():
+    antes = {"a.cfg": {"formato": "x", "falta": {"tipo": "AG"}}}
+    depois = {"a.cfg": {"formato": "x", "falta": {"tipo": "AG", "inicial": "AG"},
+                        "rele": "AG T", "concorda": True}}
+    assert fotografia.comparar(antes, depois) == []
+
+
+def test_registro_que_passou_a_dar_erro_conta_tudo():
+    antes = {"a.cfg": {"formato": "x"}}
+    depois = {"a.cfg": {"erro": "não abre"}}
+    dif = fotografia.comparar(antes, depois)
+    assert ("a.cfg", "erro", None, "não abre") in dif
+    assert ("a.cfg", "formato", "x", None) in dif
+
+
+def test_a_sigla_do_rele_vem_do_hdr_do_mesmo_registro(tmp_path):
+    from tests.fabrica import escrever_comtrade
+
+    cfg = escrever_comtrade(tmp_path, nome="evento")
+    (tmp_path / "evento.HDR").write_text("Event: BG T\n", encoding="utf-8")
+    (tmp_path / "outro.hdr").write_text("Event: AB\n", encoding="utf-8")
+    assert fotografia.foto_de(cfg)["rele"] == "BG T"
+
+
 def test_cfg_sem_dat_nao_e_oscilografia(tmp_path):
     (tmp_path / "pyvenv.cfg").write_text("home = x", encoding="utf-8")
     (tmp_path / "x.cfg").write_text("", encoding="utf-8")

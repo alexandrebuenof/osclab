@@ -14,6 +14,7 @@ import math
 from datetime import datetime
 
 import numpy as np
+import pytest
 
 from osclab.analysis import falta
 from osclab.formats.base import AnalogChannel, Record, SampleRate
@@ -292,6 +293,20 @@ def test_vereditos_diferentes_conflitam():
     assert not falta.mesmo_tipo("ABG", "AB T")     # terra muda o veredito
     assert not falta.mesmo_tipo("BCG", "BC T")
     assert not falta.mesmo_tipo("BC", "CA")
+
+
+@pytest.mark.parametrize("evento", ["TRIP", "ER", "TRIG", "87RB", "ER T"])
+def test_o_motivo_do_relatorio_nao_e_tipo_de_falta_nem_conflito(evento):
+    """O `EVENT` do `.CEV` às vezes é o que DISPAROU o relatório. Lido como
+    sigla, punha toda falta nossa em conflito com o relé."""
+    assert not falta.e_tipo_de_falta(evento)
+    assert falta.mesmo_tipo("ABG", evento)
+    assert falta.rele_concorda("ABC", "CG", evento)
+
+
+@pytest.mark.parametrize("sigla", ["AG", "AB T", "ABCG", "3PH", "CA", "AN"])
+def test_sigla_de_fase_e_tipo_de_falta(sigla):
+    assert falta.e_tipo_de_falta(sigla)
 
 
 def test_sigla_vazia_nao_e_conflito():

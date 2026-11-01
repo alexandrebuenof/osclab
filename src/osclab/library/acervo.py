@@ -492,6 +492,8 @@ def dica_da_falta(item) -> str:
     rele = (item.classificacao_do_rele or "").strip()
     if not rele:
         linhas.append("Relé: não informou o tipo da falta neste arquivo")
+    elif not falta_mod.e_tipo_de_falta(rele):
+        linhas.append(f"Relé: {rele} (o motivo do relatório, não o tipo da falta)")
     else:
         linhas.append(f"Relé: {rele}" + ("  (o T solto é TRIP, não terra)"
                                          if rele.upper().endswith(" T") else ""))

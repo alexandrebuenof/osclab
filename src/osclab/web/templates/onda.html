@@ -245,12 +245,12 @@
         {% if item.classificacao_do_rele and conflita_a_falta %}
         <span class="do-rele conflita"
               title="O relé gravou {{ item.classificacao_do_rele }} no arquivo, e o OscLab leu outro tipo.">relé: {{ item.classificacao_do_rele }}</span>
-        {% elif item.classificacao_do_rele and item.falta_tipo %}
+        {% elif item.classificacao_do_rele and item.falta_tipo and rele_tem_tipo %}
         <span class="do-rele concorda"
               title="O relé gravou {{ item.classificacao_do_rele }} no arquivo, o mesmo tipo. (Na SEL, o T solto é TRIP, não terra.)">✓ relé</span>
         {% elif item.classificacao_do_rele %}
         <span class="do-rele"
-              title="O que o próprio relé gravou no arquivo.">relé: {{ item.classificacao_do_rele }}</span>
+              title="{{ 'O que o próprio relé gravou no arquivo.' if rele_tem_tipo else 'O que o relé gravou no campo do evento — o motivo do relatório, não o tipo da falta.' }}">relé: {{ item.classificacao_do_rele }}</span>
         {% endif %}
       </span></span>
     {% endif %}

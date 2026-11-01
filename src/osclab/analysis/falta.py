@@ -784,15 +784,32 @@ def _so_as_letras(sigla: str) -> tuple[str, bool]:
     return letras, terra
 
 
+def e_tipo_de_falta(sigla: str) -> bool:
+    """`AB T`, `CG`, `3PH` são tipo de falta; `TRIP`, `ER`, `TRIG`, `87RB` não.
+
+    O campo `EVENT` do `.CEV` guarda o que DISPAROU o relatório, e nem sempre
+    é a fase: `ER` é o relatório disparado por lógica, `TRIG` o disparo
+    manual, `87RB` o elemento que atuou. Lidas como sigla, elas não têm fase
+    nenhuma, e toda falta nossa aparecia em conflito com o relé — aviso falso
+    em 26 dos 55 «discorda» do banco (foto de 02/11/2026). A regra é a mesma
+    do `.hdr` (`ajustes.classificacao_no_hdr`): só a primeira palavra, só com
+    letras de fase.
+    """
+    primeira = ((sigla or "").upper().split() or [""])[0]
+    de_fase = "3P" in primeira or any(c in "ABC" for c in primeira)
+    return de_fase and set(primeira) <= set("ABCGN3PH")
+
+
 def mesmo_tipo(nosso: str, do_rele: str) -> bool:
     """`AG` e `AG T` são o mesmo veredito escrito de dois jeitos.
 
     Sem esta normalização todo caso NORMAL apareceria como conflito — e um
     aviso que aparece quando está tudo certo é um aviso que se aprende a
     ignorar. Com uma das duas siglas vazia não há o que comparar, e isso não
-    é conflito: é ausência.
+    é conflito: é ausência. O mesmo vale para o que o relé escreveu e não é
+    tipo de falta (`TRIP`, `ER`): ver `e_tipo_de_falta`.
     """
-    if not nosso or not do_rele:
+    if not nosso or not do_rele or not e_tipo_de_falta(do_rele):
         return True
     return _so_as_letras(nosso) == _so_as_letras(do_rele)
 

@@ -268,10 +268,10 @@ def classificacao_no_hdr(pasta: Path, arquivos) -> str:
         achado = _EVENTO_NO_HDR.search(_texto(caminho))
         if not achado:
             continue
+        from osclab.analysis.falta import e_tipo_de_falta
+
         sigla = achado.group(1).strip().upper()
-        primeira = sigla.split()[0]
-        de_fase = "3P" in primeira or any(c in "ABC" for c in primeira)
-        if de_fase and set(primeira) <= set("ABCGN3PH"):
+        if e_tipo_de_falta(sigla):
             return sigla
     return ""
 
