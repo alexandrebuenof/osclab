@@ -62,7 +62,15 @@ import io
 import zipfile
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request, send_file, send_from_directory
+from flask import (
+    Flask,
+    Response,
+    jsonify,
+    render_template,
+    request,
+    send_file,
+    send_from_directory,
+)
 
 from osclab import paths, version
 from osclab.analysis import falta as falta_mod
@@ -681,19 +689,47 @@ def create_app() -> Flask:
         if base is None or not base.existe:
             return jsonify(erro="Não há base de dados ativa."), 400
         corpo = request.get_json(silent=True) or {}
+        campos = {c: corpo.get(c) for c in digitais_mod.EDITAVEIS if c in corpo}
+        # Quem escreveu pela tela é a fonte, a menos que a tela diga outra:
+        # uma dedução corrigida à mão deixa de ser dedução.
+        if "fonte" not in corpo and any(campos.get(c) for c in campos):
+            campos["fonte"] = "digitado"
         try:
             verbete = digitais_mod.anotar(
                 base,
                 corpo.get("fabricante") or "",
                 corpo.get("modelo") or "",
                 corpo.get("sinal") or "",
-                corpo.get("descricao"),
-                corpo.get("categoria"),
+                instalacao=corpo.get("instalacao") or "",
+                **campos,
             )
         except ValueError as erro:
             return jsonify(erro=str(erro)), 400
         return jsonify(verbete=verbete.como_dicionario(),
                        itens=len(digitais_mod.listar(base)))
+
+    @app.delete("/api/base/dicionario")
+    def apagar_do_dicionario():
+        base = base_mod.ativa()
+        if base is None or not base.existe:
+            return jsonify(erro="Não há base de dados ativa."), 400
+        corpo = request.get_json(silent=True) or {}
+        apagou = digitais_mod.remover(base, corpo.get("fabricante") or "",
+                                      corpo.get("modelo") or "", corpo.get("sinal") or "",
+                                      corpo.get("instalacao") or "")
+        if not apagou:
+            return jsonify(erro="Este verbete não está no dicionário."), 404
+        return jsonify(apagado=True, itens=len(digitais_mod.listar(base)))
+
+    @app.get("/api/base/dicionario/exportar")
+    def exportar_o_dicionario():
+        """O CSV inteiro, para editar no Excel e importar de volta."""
+        base = base_mod.ativa()
+        if base is None or not base.existe:
+            return jsonify(erro="Não há base de dados ativa."), 400
+        texto = "﻿" + digitais_mod.como_csv(digitais_mod.listar(base))
+        return Response(texto.encode("utf-8"), mimetype="text/csv",
+                        headers={"Content-Disposition": "attachment; filename=dicionario.csv"})
 
     @app.post("/api/base/dicionario/importar")
     def importar_para_o_dicionario():
@@ -754,8 +790,9 @@ def create_app() -> Flask:
                 "nenhuma base de dados ativa" if base is None or not base.existe
                 else "o dicionário está desligado nesta base"),
                 equipamento=equipamento, verbetes=[])
-        fabricante, modelo = digitais_mod.identificar(equipamento)
-        verbetes = digitais_mod.aplicaveis(base, equipamento)
+        textos = _textos_da_instalacao(sha, item)
+        fabricante, modelo = digitais_mod.identificar(equipamento, *textos)
+        verbetes = digitais_mod.aplicaveis(base, equipamento, textos)
         return jsonify(
             tem=bool(verbetes),
             motivo="" if verbetes else "o dicionário está vazio",
@@ -879,6 +916,33 @@ def _versao_do_registro(sha: str) -> tuple:
                             for p in Path(pasta).iterdir()))
     except (OSError, TypeError):
         return ()
+
+
+def _textos_da_instalacao(sha: str, item) -> tuple[str, ...]:
+    """O que o registro diz de si — estação, equipamento, apelido, nomes dos
+    arquivos —, para casar o verbete de UMA instalação do dicionário.
+
+    O nome do arquivo entra porque é muitas vezes o único lugar com o vão: a
+    SEL batiza o COMTRADE com o `RID` (`RME_320_TR_TR01_UPC2`), e a estação
+    gravada no cabeçalho diz só a SE.
+    """
+    if item is None:
+        return ()
+    dados = item.como_dicionario()
+    textos = [dados.get("estacao") or "", dados.get("equipamento") or "",
+              dados.get("nome") or "", acervo.apelido(sha)]
+    textos += [str(a) for a in (dados.get("arquivos") or ())]
+    # O `.CEV` da SEL grava a estação VAZIA: quem diz qual relé é são o RID e
+    # o TID dos ajustes que vêm dentro dele.
+    try:
+        lidos = ajustes_mod.do_registro(acervo.pasta_do_registro(sha),
+                                        dados.get("arquivos") or (), ())
+        pares = list(lidos.get("ajustes") or []) + list(lidos.get("logica") or [])
+        textos += [str(par[1]) for par in pares
+                   if len(par) > 1 and str(par[0]).upper() in ("RID", "TID", "SID")]
+    except (OSError, ValueError):
+        pass
+    return tuple(t for t in textos if t)
 
 
 def _nome_do_terminal(sha: str, registro, apelido: str) -> str:

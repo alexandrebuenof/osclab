@@ -4842,7 +4842,7 @@ table.verbetes td.descricao input {
   padding: 2px 9px; border: 1px solid; background: none; cursor: pointer; white-space: nowrap;
 }
 .tipinho.trip { color: var(--ruim); border-color: var(--ruim); }
-.tipinho.partida { color: var(--atencao); border-color: var(--atencao); }
+.tipinho.pickup { color: var(--atencao); border-color: var(--atencao); }
 /* Roxo, e não laranja: laranja ficaria a um passo do âmbar da partida, e
    bloqueio e partida são justamente as duas que não podem ser confundidas
    quando se pergunta por que um elemento não atuou. */
@@ -4854,6 +4854,23 @@ table.verbetes td.descricao input {
    «buraco», e a auxiliar não é buraco, é uma escolha. */
 .tipinho.auxiliar { color: var(--suave); border-color: var(--suave); }
 .tipinho.sem-categoria { color: var(--suave); border-color: var(--linha); border-style: dashed; }
+/* As três de 01/11/2026, em tokens JÁ validados pelo `tools/paleta.py`
+   (medido contra as seis de antes, nos dois temas e sob daltonismo).
+   Ressalva conhecida: no tema CLARO o `--falta-ca` do alarme fica a ΔE ~6
+   do roxo do bloqueio — entra na conversa pendente das cores do tema claro. */
+.tipinho.teleprotecao { color: var(--traco-3); border-color: var(--traco-3); }
+.tipinho.comando { color: var(--cursor-2); border-color: var(--cursor-2); }
+.tipinho.alarme { color: var(--falta-ca); border-color: var(--falta-ca); }
+
+/* As colunas novas da tabela: curtas, em monoespaçada, e a FONTE como
+   etiqueta discreta — «deduzido» é o que pede conferência, e por isso é o
+   único que chama atenção. */
+table.verbetes td.curto { cursor: text; min-width: 3.5em; text-align: center; }
+table.verbetes td.curto input { width: 5em; }
+table.verbetes td.instalacao { font-size: 12px; color: var(--suave); }
+.fonte-do-verbete { font-size: 10.5px; color: var(--suave); white-space: nowrap; }
+.fonte-do-verbete.deduzido { color: var(--atencao); }
+.apagar-verbete { padding: 1px 7px; font-size: 12px; color: var(--suave); }
 
 .recado-da-base { margin-top: 10px; font-size: 12.5px; }
 .recado-da-base.ruim { color: var(--ruim); }

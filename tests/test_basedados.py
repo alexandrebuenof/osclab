@@ -270,10 +270,10 @@ def test_anotar_com_None_nao_mexe_e_com_vazio_apaga():
     with _area():
         base = pasta.criar("Base")
         digitais.anotar(base, "SEL", "351", "51P1T", "trip de fase", "trip")
-        digitais.anotar(base, "SEL", "351", "51P1T", categoria="partida")
+        digitais.anotar(base, "SEL", "351", "51P1T", categoria="pickup")
         v = digitais.listar(base)[0]
         assert v.descricao == "trip de fase"   # None não mexeu
-        assert v.categoria == "partida"
+        assert v.categoria == "pickup"
         digitais.anotar(base, "SEL", "351", "51P1T", descricao="")
         assert digitais.listar(base)[0].descricao == ""
 
@@ -468,6 +468,31 @@ def test_importar_pela_rota_junta_ao_que_ja_existe():
         assert lista["IN101"]["descricao"] == "minha"
 
 
+def test_pela_tela_o_verbete_fica_DIGITADO_e_exporta_e_apaga():
+    """Editar pela tela marca a fonte; o CSV exportado é o mesmo que o Excel
+    abre (BOM e ponto-e-vírgula); apagar tira só o verbete pedido."""
+    with _area():
+        c = _cliente()
+        c.post("/api/base/criar", json={"nome": "Base"})
+        r = c.post("/api/base/dicionario", json={
+            "fabricante": "SEL", "modelo": "751", "sinal": "50P3T",
+            "descricao": "trip do alimentador", "categoria": "trip",
+            "funcao": "50", "estagio": "3"})
+        v = r.get_json()["verbete"]
+        assert (v["fonte"], v["funcao"], v["estagio"]) == ("digitado", "50", "3")
+        c.post("/api/base/dicionario", json={
+            "fabricante": "SEL", "modelo": "751", "sinal": "50P3T",
+            "instalacao": "SE BUNGE AL12", "categoria": "comando"})
+        csv_ = c.get("/api/base/dicionario/exportar").data
+        assert csv_.startswith(b"\xef\xbb\xbf") and b"fabricante;modelo;sinal" in csv_
+        assert csv_.count(b"50P3T") == 2
+        r = c.delete("/api/base/dicionario", json={
+            "fabricante": "SEL", "modelo": "751", "sinal": "50P3T",
+            "instalacao": "SE BUNGE AL12"})
+        assert r.status_code == 200 and r.get_json()["itens"] == 1
+        assert c.delete("/api/base/dicionario", json={"sinal": "NAOEXISTE"}).status_code == 404
+
+
 def test_importar_NADA_volta_400():
     with _area():
         c = _cliente()
@@ -567,23 +592,31 @@ def test_a_rota_da_janela_do_sistema_responde_sem_derrubar_o_servidor():
 def test_a_coluna_chama_se_CATEGORIA_e_nao_tipo():
     """Palavra dele, 19/10/2026 — e a mesma que a engrenagem usa: «agrupar por
     categoria», «pintar por categoria». Uma palavra só para a mesma coisa."""
-    assert digitais.COLUNAS == ("fabricante", "modelo", "sinal", "descricao", "categoria")
+    # As cinco primeiras são as de antes de 01/11/2026, na mesma ordem: um
+    # arquivo de cinco colunas continua sendo um arquivo válido.
+    assert digitais.COLUNAS[:5] == ("fabricante", "modelo", "sinal", "descricao", "categoria")
     with _area():
         base = pasta.criar("Base")
         digitais.anotar(base, "SEL", "351", "51P1T", "trip de fase", "trip")
         texto = (base.pasta / "dicionario" / "dicionario.csv").read_text(encoding="utf-8-sig")
-        assert texto.splitlines()[0] == "fabricante;modelo;sinal;descricao;categoria"
+        assert texto.splitlines()[0].startswith("fabricante;modelo;sinal;descricao;categoria;")
         assert digitais.listar(base)[0].categoria == "trip"
 
 
-def test_as_CATEGORIAS_sao_as_seis_defendidas_e_nao_ha_balde():
+def test_as_CATEGORIAS_sao_as_defendidas_e_nao_ha_balde():
     """Cada uma passou no teste «quero esses sinais juntos e nessa cor?».
     E não há `outros`: balde compete com o vazio, e tudo que dá dúvida acaba
-    nele. Se um sinal real não couber, falta categoria COM NOME."""
+    nele. Se um sinal real não couber, falta categoria COM NOME.
+
+    01/11/2026 (Alexandre): `partida` virou `pickup`; entraram `teleprotecao`
+    (o canal com o outro terminal, essencial na análise de linha), `comando`
+    (quem mandou abrir sem ser a proteção) e `alarme` — que tinha saído com o
+    argumento «ou bloqueia, ou é estado» e voltou porque a SAÚDE do equipamento
+    (autoteste, supervisão de TC/TP e de circuito de trip) não é nenhum dos dois."""
     assert digitais.CATEGORIAS == (
-        "", "trip", "partida", "bloqueio", "estado", "io", "auxiliar")
+        "", "trip", "pickup", "bloqueio", "teleprotecao", "comando", "estado",
+        "alarme", "io", "auxiliar")
     assert "outros" not in digitais.CATEGORIAS
-    assert "alarme" not in digitais.CATEGORIAS   # ou bloqueia, e é bloqueio, ou é estado
 
 
 def test_a_AUXILIAR_guarda_a_logica_interna_do_rele():
@@ -598,15 +631,86 @@ def test_a_AUXILIAR_guarda_a_logica_interna_do_rele():
         assert por_sinal == {"SV01T": "auxiliar", "LOP": "bloqueio", "IN101": "io"}
 
 
-def test_uma_categoria_antiga_que_saiu_vira_VAZIO_e_nao_derruba_o_arquivo():
-    """Uma base montada antes desta decisão pode trazer `alarme`. O arquivo
-    continua abrindo; o verbete só fica sem categoria."""
+def test_a_PARTIDA_de_antes_e_lida_como_PICKUP_e_regravada_assim():
+    """`partida` virou `pickup` em 01/11/2026 (Alexandre). O arquivo antigo
+    continua valendo, e regravado já sai com o nome de hoje. `alarme`, que
+    tinha saído, voltou com sentido próprio: a saúde do equipamento."""
     with _area():
         base = pasta.criar("Base")
-        digitais.importar(base, "SEL;351;IN102;contato de alarme;alarme\n")
+        digitais.importar(base, "SEL;351;51P1P;pickup da 51 de fase;partida\n"
+                                "SEL;351;HALARM;alarme do autoteste;alarme\n")
+        por_sinal = {v.sinal: v.categoria for v in digitais.listar(base)}
+        assert por_sinal == {"51P1P": "pickup", "HALARM": "alarme"}
+        bruto = (base.pasta / "dicionario" / "dicionario.csv").read_text(encoding="utf-8-sig")
+        assert ";pickup;" in bruto and ";partida;" not in bruto
+
+
+def test_as_colunas_sao_lidas_pelo_CABECALHO_e_nao_pela_posicao():
+    """Quem reordena as colunas no Excel não estraga nada, e coluna que o
+    programa não conhece é ignorada."""
+    with _area():
+        base = pasta.criar("Base")
+        digitais.importar(base, "sinal;fabricante;modelo;categoria;funcao;fase;estagio;"
+                                "comentario;descricao\n"
+                                "67G2T;SEL;351;trip;67;G;2;qualquer;"
+                                "trip da direcional de terra 2\n")
         v = digitais.listar(base)[0]
-        assert v.descricao == "contato de alarme"
-        assert v.categoria == ""
+        assert (v.fabricante, v.modelo, v.sinal) == ("SEL", "351", "67G2T")
+        assert (v.categoria, v.funcao, v.fase, v.estagio) == ("trip", "67", "N", "2")
+        assert v.descricao == "trip da direcional de terra 2"
+
+
+def test_as_colunas_novas_sobrevivem_a_ida_e_volta():
+    with _area():
+        base = pasta.criar("Base")
+        digitais.anotar(base, "SEL", "351", "PTRX", "permissivo recebido", "teleprotecao",
+                        funcao="85", fonte="manual", referencia="SEL-351 IM, seção 5")
+        v = digitais.listar(base)[0]
+        assert (v.categoria, v.funcao, v.fonte, v.referencia) == (
+            "teleprotecao", "85", "manual", "SEL-351 IM, seção 5")
+
+
+def test_o_verbete_da_INSTALACAO_vence_o_do_modelo_so_no_rele_dela():
+    """O uso do elemento é do AJUSTE, não do modelo (Alexandre, 01/11/2026):
+    o 50 estágio 3 é trip num alimentador e outra coisa no vizinho."""
+    with _area():
+        base = pasta.criar("Base")
+        digitais.anotar(base, "SEL", "751", "50P3T", "trip da 50 de fase 3", "trip")
+        digitais.anotar(base, "SEL", "751", "50P3T", "envio de seletividade lógica", "comando",
+                        instalacao="SE BUNGE AL12")
+        assert len(digitais.listar(base)) == 2
+        aqui = ("SE Bunge", "AL12_UPC1")
+        vizinho = ("SE Bunge", "AL1_UPC1")       # AL1 não é AL12
+        assert digitais.descrever(base, "SEL", "751", "50P3T", aqui).categoria == "comando"
+        assert digitais.descrever(base, "SEL", "751", "50P3T", vizinho).categoria == "trip"
+        assert digitais.descrever(base, "SEL", "751", "50P3T").categoria == "trip"
+        origem = {v["sinal"]: v["origem"] for v in digitais.aplicaveis(base, "SEL-751", aqui)}
+        assert origem["50P3T"].startswith("deste relé")
+
+
+def test_o_INGETEAM_e_reconhecido_pela_estacao_e_pelo_nome_do_arquivo():
+    """O PL300 grava o número do registro no campo do equipamento e o modelo
+    na estação; o religador grava `RELIG` e o fabricante só no nome do
+    arquivo. Sem isto, ~220 registros do banco não casavam verbete nenhum."""
+    estacao = "P-056 -- UCL 9 -- PL300 - EH3126/I"
+    assert digitais.identificar("56", estacao) == ("INGETEAM", "PL300")
+    arquivo = "20260713,12983412,+2t,RELIG,ENERGISA_M,Ingeteam.CFG"
+    assert digitais.identificar("RELIG", "ENERGISA_MT", arquivo) == ("INGETEAM", "")
+    # O equipamento que já diz quem é não é trocado por um texto qualquer.
+    assert digitais.identificar("SEL-751", "SE PL300 qualquer") == ("SEL", "751")
+    assert digitais.identificar("FRA00045", "SE SORRISO") == ("", "FRA00045")
+
+
+def test_importar_nao_troca_o_que_voce_DIGITOU_por_uma_deducao():
+    with _area():
+        base = pasta.criar("Base")
+        digitais.anotar(base, "SEL", "351", "SV05T", "religamento bloqueado por HCL",
+                        "bloqueio",
+                        fonte="digitado")
+        digitais.importar(base, "fabricante;modelo;sinal;descricao;categoria;fonte\n"
+                                "SEL;351;SV05T;temporizador SELOGIC 5;auxiliar;deduzido\n")
+        v = digitais.listar(base)[0]
+        assert (v.descricao, v.categoria) == ("religamento bloqueado por HCL", "bloqueio")
 
 
 def test_identificar_parte_o_equipamento_em_fabricante_e_modelo():

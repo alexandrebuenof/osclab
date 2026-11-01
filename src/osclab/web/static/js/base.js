@@ -611,7 +611,14 @@
 
   const SEM_CATEGORIA = "sem categoria";
   let verbetes = [];
-  let categorias = ["", "trip", "partida", "estado", "alarme"];
+  let categorias = ["", "trip", "pickup", "bloqueio", "teleprotecao", "comando", "estado",
+                    "alarme", "io", "auxiliar"];
+  //: Como cada categoria aparece escrita (o valor no arquivo não tem acento).
+  const NOME_DA_CATEGORIA = { teleprotecao: "teleproteção" };
+  //: As colunas que se editam com um clique, além da descrição.
+  const CAMPOS_CURTOS = [["funcao", "função", "ANSI: 50, 51, 67, 21, 79, 85…"],
+                         ["fase", "fase", "A, B, C, AB, BC, CA, N, fases, 3F"],
+                         ["estagio", "estágio", "estágio ou zona: 1, 2, 3…"]];
   let busca = "";
   let novo = false;
 
@@ -650,7 +657,12 @@
     const bImportar = criar("button", "chave", "importar CSV");
     bImportar.type = "button";
     bImportar.addEventListener("click", () => escolherArquivo.click());
-    barra.append(campo, bNovo, bImportar);
+    // Exportar é um link: o navegador baixa o arquivo como baixa qualquer
+    // outro, e o que sai é o mesmo texto que está no disco.
+    const bExportar = criar("a", "chave", "exportar CSV");
+    bExportar.href = "/api/base/dicionario/exportar";
+    bExportar.title = "Baixa o dicionário inteiro para editar no Excel e importar de volta";
+    barra.append(campo, bNovo, bImportar, bExportar);
     corpoDaGaveta.append(barra);
 
     if (novo) corpoDaGaveta.append(formaDeVerbete());
@@ -661,9 +673,13 @@
 
     const p = criar("p", "ajuda");
     p.style.marginTop = "10px";
-    p.textContent = "Clique numa descrição para editar e na categoria para " +
-      "classificar. Os dois são opcionais: o que você não souber fica vazio, " +
-      "e o leitor mostra o nome cru sem reclamar.";
+    p.textContent = "Clique numa descrição, função, fase ou estágio para editar, e na " +
+      "categoria para classificar. Tudo é opcional: o que você não souber fica vazio, " +
+      "e o leitor mostra o nome cru sem reclamar. Um verbete com INSTALAÇÃO vale só " +
+      "para os registros daquele relé e vence o do modelo — é onde se escreve o uso " +
+      "que o ajuste deu a um elemento. A coluna «fonte» diz de onde veio: manual, " +
+      "ajuste (lido da lógica do próprio relé), deduzido (pelo padrão do nome — " +
+      "palpite, a conferir) ou digitado.";
     corpoDaGaveta.append(p);
 
     pintarTabela();
@@ -673,7 +689,8 @@
     const forma = criar("div", "barra-da-gaveta");
     const campos = {};
     for (const [chave, rot] of [["fabricante", "fabricante"], ["modelo", "modelo"],
-                                ["sinal", "sinal"]]) {
+                                ["sinal", "sinal"],
+                                ["instalacao", "instalação (vazio = o modelo todo)"]]) {
       const c = criar("input", "busca-da-gaveta");
       c.type = "text";
       c.placeholder = rot;
@@ -688,7 +705,7 @@
       if (!sinal) { campos.sinal.focus(); return; }
       await anotar({
         fabricante: campos.fabricante.value, modelo: campos.modelo.value,
-        sinal: sinal, descricao: "", categoria: "",
+        sinal: sinal, instalacao: campos.instalacao.value,
       });
       campos.sinal.value = "";
       busca = "";
@@ -705,7 +722,8 @@
 
     const alvo = busca.trim().toLowerCase();
     const vistos = verbetes.filter((v) => !alvo ||
-      [v.sinal, v.descricao, v.fabricante, v.modelo].join(" ").toLowerCase().includes(alvo));
+      [v.sinal, v.descricao, v.fabricante, v.modelo, v.funcao, v.instalacao, v.categoria]
+        .join(" ").toLowerCase().includes(alvo));
 
     if (!vistos.length) {
       rolo.append(criar("p", "ajuda", verbetes.length
@@ -717,14 +735,22 @@
     const tabela = criar("table", "verbetes");
     const cabeca = criar("thead");
     const tr = criar("tr");
-    for (const h of ["fabricante", "modelo", "sinal", "descrição", "categoria"]) {
+    for (const h of ["fabricante", "modelo", "sinal", "descrição", "categoria", "função", "fase",
+                     "estágio", "instalação", "fonte", ""]) {
       tr.append(criar("th", null, h));
     }
     cabeca.append(tr);
     tabela.append(cabeca);
 
     const corpo = criar("tbody");
-    vistos.forEach((v, i) => {
+    // O dicionário tem milhares de verbetes: desenhar todos de uma vez são
+    // dezenas de milhares de células, e a gaveta trava. A busca é o caminho.
+    const TETO = 400;
+    if (vistos.length > TETO) {
+      rolo.append(criar("p", "ajuda", "Mostrando " + TETO + " de " + vistos.length +
+        " — use a busca (sinal, descrição, modelo, função, instalação ou categoria) para chegar ao resto."));
+    }
+    vistos.slice(0, TETO).forEach((v, i) => {
       const linha = criar("tr", i % 2 ? "par" : "");
       linha.append(criar("td", null, v.fabricante));
       linha.append(criar("td", "cod", v.modelo));
@@ -734,33 +760,92 @@
       if (v.descricao) celula.append(criar("span", null, v.descricao));
       else celula.append(criar("span", "sem-descricao",
                                "sem descrição — aparece com o nome cru"));
-      celula.title = "clique para escrever o que este sinal é";
-      celula.addEventListener("click", () => editarDescricao(celula, v));
+      celula.title = (v.referencia ? "referência: " + v.referencia + "\n" : "") +
+        "clique para escrever o que este sinal é";
+      celula.addEventListener("click", () => editarCampo(celula, v, "descricao",
+                                                         "deixe vazio se não tiver certeza"));
       linha.append(celula);
 
       const celulaCategoria = criar("td");
       const bt = criar("button", "tipinho " + (v.categoria || "sem-categoria"),
-                       v.categoria || SEM_CATEGORIA);
+                       NOME_DA_CATEGORIA[v.categoria] || v.categoria || SEM_CATEGORIA);
       bt.type = "button";
       bt.title = "clique para classificar — só classifique o que tiver certeza";
       bt.addEventListener("click", async () => {
         const i = categorias.indexOf(v.categoria || "");
-        await anotar({ ...v, categoria: categorias[(i + 1) % categorias.length] });
+        await anotar({ ...chaveDe(v), categoria: categorias[(i + 1) % categorias.length] });
         pintarTabela();
       });
       celulaCategoria.append(bt);
       linha.append(celulaCategoria);
+
+      for (const [c, , dica] of CAMPOS_CURTOS) {
+        const td = criar("td", "cod curto");
+        td.textContent = v[c] || "";
+        td.title = "clique para editar — " + dica;
+        td.addEventListener("click", () => editarCampo(td, v, c, dica));
+        linha.append(td);
+      }
+      linha.append(criar("td", "instalacao", v.instalacao || ""));
+      const fonte = criar("td");
+      if (v.fonte) {
+        const f = criar("span", "fonte-do-verbete " + v.fonte, v.fonte);
+        f.title = { manual: "conferido no manual do fabricante",
+                    ajuste: "lido do ajuste deste relé (a equação está na referência)",
+                    deduzido: "tirado do nome do sinal pelo padrão do fabricante — palpite, a conferir",
+                    digitado: "escrito por alguém pela tela" }[v.fonte] || "";
+        fonte.append(f);
+      }
+      linha.append(fonte);
+      linha.append(botaoDeApagar(v));
       corpo.append(linha);
     });
     tabela.append(corpo);
     rolo.append(tabela);
   }
 
-  function editarDescricao(celula, v) {
+  /* A CHAVE de um verbete: só ela vai no pedido junto com o campo mudado. O
+     servidor trata campo ausente como «não mexa» — mandar o verbete inteiro
+     reescreveria a fonte de tudo como «digitado» a cada clique. */
+  const chaveDe = (v) => ({ fabricante: v.fabricante, modelo: v.modelo, sinal: v.sinal,
+                            instalacao: v.instalacao || "" });
+
+  /* Apagar em DOIS cliques e no fim da linha, longe dos alvos de editar: o
+     primeiro clique arma («apagar?»), o segundo apaga; sair dele desarma. Sem
+     diálogo do navegador, que trava a página. */
+  function botaoDeApagar(v) {
+    const td = criar("td");
+    const b = criar("button", "chave apagar-verbete", "×");
+    b.type = "button";
+    b.title = "apagar este verbete";
+    let armado = false;
+    b.addEventListener("click", async () => {
+      if (!armado) { armado = true; b.textContent = "apagar?"; return; }
+      try {
+        const r = await fetch("/api/base/dicionario", {
+          method: "DELETE", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(chaveDe(v)) });
+        const dados = await r.json();
+        if (!r.ok) throw new Error(dados.erro || "Não deu para apagar.");
+        verbetes = verbetes.filter((x) => x !== v);
+        const g = (E.gavetas || []).find((x) => x.id === "dicionario");
+        if (g) g.itens = dados.itens;
+        pintarTabela();
+        pintar();
+      } catch (erro) {
+        corpoDaGaveta.append(recado(erro.message, "ruim"));
+      }
+    });
+    b.addEventListener("blur", () => { armado = false; b.textContent = "×"; });
+    td.append(b);
+    return td;
+  }
+
+  function editarCampo(celula, v, nome, dica) {
     const campo = criar("input");
     campo.type = "text";
-    campo.value = v.descricao || "";
-    campo.placeholder = "deixe vazio se não tiver certeza";
+    campo.value = v[nome] || "";
+    campo.placeholder = dica;
     celula.replaceChildren(campo);
     campo.focus();
     campo.select();
@@ -768,7 +853,7 @@
     const terminar = async (salvar) => {
       if (fechado) return;
       fechado = true;
-      if (salvar) await anotar({ ...v, descricao: campo.value });
+      if (salvar && campo.value !== (v[nome] || "")) await anotar({ ...chaveDe(v), [nome]: campo.value });
       pintarTabela();
     };
     campo.addEventListener("blur", () => terminar(true));
@@ -788,7 +873,8 @@
       const i = verbetes.findIndex((x) =>
         x.sinal.toUpperCase() === salvo.sinal.toUpperCase() &&
         x.modelo.toUpperCase() === salvo.modelo.toUpperCase() &&
-        x.fabricante.toUpperCase() === salvo.fabricante.toUpperCase());
+        x.fabricante.toUpperCase() === salvo.fabricante.toUpperCase() &&
+        (x.instalacao || "").toUpperCase() === (salvo.instalacao || "").toUpperCase());
       if (i >= 0) verbetes[i] = salvo;
       else verbetes.push(salvo);
       const g = (E.gavetas || []).find((x) => x.id === "dicionario");

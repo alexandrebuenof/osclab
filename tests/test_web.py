@@ -1297,7 +1297,18 @@ def test_AGRUPAR_por_categoria_reordena_os_sinais_e_recarrega():
     js = _onda_js()
     assert "function agruparPorCategoria(" in js
     assert "trocarSinais(painel.id, ordenados);" in js
-    assert 'CATEGORIAS_EM_ORDEM = ["trip", "partida", "bloqueio", "estado", "io",' in js
+    # As categorias do JS são as do Python — todas na ordem e todas com cor.
+    # Duas listas da mesma decisão divergem em silêncio: a categoria nova
+    # entraria no dicionário e cairia no fim da tela, sem cor nenhuma.
+    import re
+
+    from osclab.basedados import digitais
+    ordem = re.search(r"CATEGORIAS_EM_ORDEM = \[(.*?)\];", js, re.S).group(1)
+    cores = re.search(r"COR_DA_CATEGORIA = \{(.*?)\};", js, re.S).group(1)
+    for categoria in digitais.CATEGORIAS:
+        if categoria:
+            assert f'"{categoria}"' in ordem, f"{categoria} fora da ordem do gráfico"
+            assert f"{categoria}:" in cores, f"{categoria} sem cor no gráfico"
 
 
 def _osclab_css() -> str:
@@ -1679,7 +1690,6 @@ def test_as_DICAS_sairam_do_RODAPE_e_viraram_a_janela_de_ajuda():
     """Elas ocupavam tela em toda rolagem e ninguém as lia depois da primeira
     semana. Em abas, cada assunto cabe inteiro numa tela e quem procura uma
     tecla acha pelo título."""
-    from osclab.web import server
     from osclab import paths
     onda = (paths.TEMPLATES_DIR / "onda.html").read_text(encoding="utf-8")
     assert '<ul class="gestos">' not in onda

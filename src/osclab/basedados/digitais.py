@@ -11,8 +11,9 @@ objetivo é só pôr uma descrição em cada sinal.
 
 ```
 <base>/dicionario/dicionario.csv
-fabricante;modelo;sinal;descricao;categoria
-SEL;351;51P1T;trip temporizado da sobrecorrente de fase, estágio 1;trip
+fabricante;modelo;sinal;descricao;categoria;funcao;fase;estagio;fonte;referencia;instalacao
+SEL;351;51P1T;trip temporizado da sobrecorrente de fase 1;trip;51;fases;1;manual;IM
+SEL;751;50P2T;envio de seletividade lógica;comando;50;fases;2;digitado;;SE BUNGE AL12
 ```
 
 Ponto-e-vírgula e UTF-8 **com BOM**: é o par que faz o Excel brasileiro abrir
@@ -20,22 +21,32 @@ o arquivo já nas colunas certas e com os acentos no lugar. Sem o BOM, «estági
 chega como «estÃ¡gio» na primeira vez que alguém abre o arquivo com dois
 cliques — e aí a tabela volta corrompida.
 
+As colunas são lidas **pelo cabeçalho**, não pela posição: o arquivo de cinco
+colunas de antes de 01/11/2026 continua valendo, e quem reordenar as colunas
+no Excel não estraga nada. Sem cabeçalho, vale a ordem acima.
+
 ## A regra conservadora
 
-`descricao` e `categoria` podem ficar vazios, e isso não é um defeito: é a regra que
+Tudo além do `sinal` pode ficar vazio, e isso não é um defeito: é a regra que
 ele pediu. Quem não tem certeza deixa em branco, e o leitor mostra o nome cru
 do arquivo. Inventar significado é pior do que não ter nenhum — numa análise de
 ocorrência, um digital descrito errado manda a conclusão para o lado errado.
 
 `categoria` existe para o programa **agrupar e colorir** os digitais na tela (os
-trips juntos, as partidas juntas) em vez de listá-los na ordem em que o relé
+trips juntos, os pickups juntos) em vez de listá-los na ordem em que o relé
 gravou. Também só se classifica o que tem certeza.
 
-## A chave
+## A chave, e as duas camadas: o MODELO e a INSTALAÇÃO
 
-Um verbete é identificado por `(fabricante, modelo, sinal)`, comparados sem
-olhar maiúscula: o mesmo `51P1T` quer dizer coisas diferentes num SEL-351 e num
-SEL-411L, e o modelo é o que separa os dois.
+Um verbete é identificado por `(fabricante, modelo, sinal, instalacao)`,
+comparados sem olhar maiúscula: o mesmo `51P1T` quer dizer coisas diferentes
+num SEL-351 e num SEL-411L, e o modelo é o que separa os dois.
+
+A `instalacao` existe porque **o uso de um elemento é do ajuste, não do
+modelo** (Alexandre, 01/11/2026): o segundo estágio do 50 de um alimentador
+serve para enviar seletividade lógica, o de outro para bloquear o religamento
+com HCL. O verbete com `instalacao` preenchida vale só para os registros
+daquele relé e vence o do modelo. Vazia, vale para o modelo inteiro.
 """
 
 from __future__ import annotations
@@ -43,19 +54,30 @@ from __future__ import annotations
 import csv
 import io
 import re
-from dataclasses import dataclass, replace
+import unicodedata
+from dataclasses import dataclass, fields, replace
 from pathlib import Path
 
-#: As categorias que o programa entende, e o teste que cada uma passou:
+#: As categorias — o PAPEL do sinal na lógica — e o teste que cada uma passou:
 #: «ao olhar um registro, eu quero esses sinais juntos e nessa cor?».
 #:
 #: * `trip` — o relé mandou abrir. É o que se procura primeiro.
-#: * `partida` — um elemento viu e começou a contar. É o que EXPLICA o trip, e
-#:   a distância entre os dois é o tempo medido.
+#: * `pickup` — um elemento viu e começou a contar. É o que EXPLICA o trip, e
+#:   a distância entre os dois é o tempo medido. (Era `partida` até
+#:   01/11/2026; o arquivo antigo é lido assim mesmo — ver `_SINONIMOS`.)
 #: * `bloqueio` — impediu alguém de atuar: 86, LOP, torque control, bloqueio
 #:   por oscilação. Responde a pergunta mais difícil da análise, que não é
 #:   «por que atuou» e sim «por que NÃO atuou».
+#: * `teleprotecao` — o que vai e vem pelo canal com o outro terminal:
+#:   permissivo e bloqueio enviados e recebidos, transferência de disparo,
+#:   eco, bits espelhados. Numa linha, a pergunta «o outro lado mandou?» vem
+#:   logo depois de «quem disparou?».
+#: * `comando` — abertura ou fechamento que NÃO é a proteção: operador,
+#:   telecomando, religamento. Separa «quem mandou abrir» do trip.
 #: * `estado` — não age, É: 52A, religador pronto, local/remoto.
+#: * `alarme` — a saúde do equipamento: autoteste, supervisão de TC/TP e de
+#:   circuito de trip, falha de comunicação. Não explica a falta; explica por
+#:   que o relé pode não ter visto.
 #: * `io` — fio físico (IN101, OUT201). Fica à parte porque o significado
 #:   deles é da INSTALAÇÃO, não do modelo.
 #: * `auxiliar` — variável interna do relé: temporizador, latch, variável
@@ -72,37 +94,72 @@ from pathlib import Path
 #: não a categoria vazia: um verbete descrito e sem categoria está pronto,
 #: só não vai ser colorido nem agrupado.
 CATEGORIAS: tuple[str, ...] = (
-    "", "trip", "partida", "bloqueio", "estado", "io", "auxiliar")
+    "", "trip", "pickup", "bloqueio", "teleprotecao", "comando", "estado",
+    "alarme", "io", "auxiliar")
 
-COLUNAS = ("fabricante", "modelo", "sinal", "descricao", "categoria")
+#: Nome antigo ou grafia comum → a categoria. Lido, nunca escrito: o arquivo
+#: regravado já sai com o nome de hoje.
+_SINONIMOS = {"partida": "pickup", "teleproteção": "teleprotecao",
+              "telepro": "teleprotecao", "entrada/saída": "io", "e/s": "io"}
+
+#: A FASE que o elemento olha. `fases` é o elemento de fase sem fase
+#: específica (o `51P` da SEL olha as três); `N` é neutro e terra juntos —
+#: a distinção residual × neutro medido está na DESCRIÇÃO, não aqui.
+FASES: tuple[str, ...] = ("", "A", "B", "C", "AB", "BC", "CA", "N", "fases", "3F")
+
+#: De onde veio o que está escrito. `manual`: conferido no manual do
+#: fabricante. `ajuste`: lido do ajuste DAQUELE relé — a equação SELOGIC que
+#: veio dentro da oscilografia (`TR := … + 50P3T`); é a prova mais forte do uso
+#: de um elemento numa instalação. `deduzido`: o programa (ou o Claude) tirou
+#: do nome do sinal, pelo padrão do fabricante — palpite bom, e palpite.
+#: `digitado`: alguém escreveu pela tela. A tela mostra a origem, como em todo
+#: o resto.
+FONTES: tuple[str, ...] = ("", "manual", "ajuste", "deduzido", "digitado")
+
+#: As colunas, na ordem em que o arquivo é GRAVADO. As cinco primeiras são as
+#: de antes de 01/11/2026, na mesma ordem.
+COLUNAS = ("fabricante", "modelo", "sinal", "descricao", "categoria",
+           "funcao", "fase", "estagio", "fonte", "referencia", "instalacao")
 
 ARQUIVO = "dicionario.csv"
 
 
 @dataclass(frozen=True)
 class Verbete:
-    """Um sinal digital de um modelo de relé."""
+    """Um sinal digital de um modelo de relé — ou de UM relé, com `instalacao`."""
 
     fabricante: str
     modelo: str
     sinal: str
     descricao: str = ""
     categoria: str = ""
+    #: A função de proteção, pelo número ANSI: `51`, `67`, `21`, `79`,
+    #: `50BF`, `85`. Texto, porque `50BF` e `87L` não são números.
+    funcao: str = ""
+    fase: str = ""
+    #: O estágio, a zona ou o nível: `1`, `2`, `3`.
+    estagio: str = ""
+    fonte: str = ""
+    #: Onde conferir: manual e seção, norma, documento da instalação.
+    referencia: str = ""
+    #: O relé a que o verbete se restringe — o nome da SE e do vão como o
+    #: registro os traz (`SE BUNGE AL12`). Vazio: o modelo inteiro.
+    instalacao: str = ""
 
     @property
-    def chave(self) -> tuple[str, str, str]:
+    def chave(self) -> tuple[str, str, str, str]:
         return (self.fabricante.strip().upper(),
                 self.modelo.strip().upper(),
-                self.sinal.strip().upper())
+                self.sinal.strip().upper(),
+                _normal(self.instalacao))
 
     def como_dicionario(self) -> dict:
-        return {
-            "fabricante": self.fabricante,
-            "modelo": self.modelo,
-            "sinal": self.sinal,
-            "descricao": self.descricao,
-            "categoria": self.categoria,
-        }
+        return {c: getattr(self, c) for c in COLUNAS}
+
+
+#: Os campos que se editam (todos menos os da chave).
+EDITAVEIS = tuple(f.name for f in fields(Verbete)
+                  if f.name not in ("fabricante", "modelo", "sinal", "instalacao"))
 
 
 def _caminho(base) -> Path:
@@ -114,6 +171,12 @@ def _limpo(valor) -> str:
     return str(valor if valor is not None else "").strip()
 
 
+def _normal(texto) -> str:
+    """Sem acento, maiúsculo, só letra e dígito separados por um espaço."""
+    t = unicodedata.normalize("NFKD", _limpo(texto)).encode("ascii", "ignore").decode().upper()
+    return " ".join(re.findall(r"[A-Z0-9]+", t))
+
+
 def _categoria_valida(valor: str) -> str:
     """Categoria que o programa não conhece vira vazio — e não erro.
 
@@ -122,7 +185,26 @@ def _categoria_valida(valor: str) -> str:
     bloquear; ficar sem a categoria é só não classificar aquele sinal.
     """
     valor = _limpo(valor).lower()
+    valor = _SINONIMOS.get(valor, valor)
     return valor if valor in CATEGORIAS else ""
+
+
+def _fase_valida(valor: str) -> str:
+    v = _limpo(valor)
+    if v.lower() in ("fases", "fase", "p"):
+        return "fases"
+    v = v.upper().replace("G", "N").replace("T", "N")   # terra e neutro, juntos
+    return v if v in FASES else ""
+
+
+def _fonte_valida(valor: str) -> str:
+    v = _limpo(valor).lower()
+    return v if v in FONTES else ""
+
+
+def _validado(campo: str, valor) -> str:
+    return {"categoria": _categoria_valida, "fase": _fase_valida,
+            "fonte": _fonte_valida}.get(campo, _limpo)(valor)
 
 
 def listar(base) -> list[Verbete]:
@@ -142,66 +224,75 @@ def _de_texto(texto: str) -> list[Verbete]:
     # pessoa por um detalhe que o programa consegue ver sozinho.
     primeira = next((l for l in texto.splitlines() if l.strip()), "")
     sep = ";" if primeira.count(";") >= primeira.count(",") else ","
+    ordem = list(COLUNAS)
     for linha in csv.reader(io.StringIO(texto), delimiter=sep):
         if not linha or not any(_limpo(c) for c in linha):
             continue
-        celulas = [_limpo(c) for c in linha] + ["", "", "", "", ""]
-        if celulas[0].lower() == "fabricante" and celulas[2].lower() == "sinal":
-            continue  # o cabeçalho
-        if not celulas[2]:
+        celulas = [_limpo(c) for c in linha]
+        nomes = [_normal(c).lower().replace(" ", "") for c in celulas]
+        if "sinal" in nomes and "fabricante" in nomes:
+            # O CABEÇALHO decide a ordem. Coluna que o programa não conhece é
+            # ignorada; coluna que falta fica vazia.
+            ordem = [n if n in COLUNAS else "" for n in nomes]
+            continue
+        valores = dict(zip(ordem, celulas, strict=False))
+        if not valores.get("sinal"):
             continue  # sem sinal não há verbete
-        saida.append(Verbete(
-            fabricante=celulas[0], modelo=celulas[1], sinal=celulas[2],
-            descricao=celulas[3], categoria=_categoria_valida(celulas[4]),
-        ))
+        saida.append(Verbete(**{c: _validado(c, valores.get(c, "")) for c in COLUNAS}))
     return saida
 
 
 def gravar(base, verbetes) -> Path:
     """Reescreve o arquivo inteiro. É pequeno; não vale um banco."""
     arquivo = _caminho(base)
+    arquivo.write_text(como_csv(verbetes), encoding="utf-8-sig")
+    return arquivo
+
+
+def como_csv(verbetes) -> str:
+    """O texto do arquivo — o mesmo que se grava e que se exporta."""
     buraco = io.StringIO()
     escritor = csv.writer(buraco, delimiter=";", lineterminator="\n")
     escritor.writerow(COLUNAS)
     for v in verbetes:
-        escritor.writerow([v.fabricante, v.modelo, v.sinal, v.descricao, v.categoria])
-    arquivo.write_text(buraco.getvalue(), encoding="utf-8-sig")
-    return arquivo
+        escritor.writerow([getattr(v, c) for c in COLUNAS])
+    return buraco.getvalue()
 
 
 def anotar(base, fabricante: str, modelo: str, sinal: str,
-           descricao: str | None = None, categoria: str | None = None) -> Verbete:
+           descricao: str | None = None, categoria: str | None = None,
+           instalacao: str = "", **outros) -> Verbete:
     """Cria ou corrige um verbete.
 
-    `descricao` e `categoria` em `None` querem dizer «não mexa»; em `""`, «apague» —
-    a diferença importa, porque apagar uma descrição errada é uma operação
-    legítima e frequente.
+    Cada campo em `None` (ou ausente) quer dizer «não mexa»; em `""`,
+    «apague» — a diferença importa, porque apagar uma descrição errada é uma
+    operação legítima e frequente. Os campos além de descrição e categoria
+    (`funcao`, `fase`, `estagio`, `fonte`, `referencia`) vêm por nome.
     """
     fabricante, modelo, sinal = _limpo(fabricante), _limpo(modelo), _limpo(sinal)
     if not sinal:
         raise ValueError("um verbete precisa do nome do sinal")
+    mudancas = {"descricao": descricao, "categoria": categoria}
+    mudancas.update({k: v for k, v in outros.items() if k in EDITAVEIS})
+    mudancas = {k: _validado(k, v) for k, v in mudancas.items() if v is not None}
     novos = listar(base)
-    alvo = Verbete(fabricante, modelo, sinal).chave
+    alvo = Verbete(fabricante, modelo, sinal, instalacao=_limpo(instalacao)).chave
     achado = None
     for i, v in enumerate(novos):
         if v.chave == alvo:
-            achado = replace(
-                v,
-                descricao=v.descricao if descricao is None else _limpo(descricao),
-                categoria=v.categoria if categoria is None else _categoria_valida(categoria),
-            )
+            achado = replace(v, **mudancas)
             novos[i] = achado
             break
     if achado is None:
-        achado = Verbete(fabricante, modelo, sinal,
-                         _limpo(descricao or ""), _categoria_valida(categoria or ""))
+        achado = Verbete(fabricante, modelo, sinal, instalacao=_limpo(instalacao), **mudancas)
         novos.append(achado)
     gravar(base, novos)
     return achado
 
 
-def remover(base, fabricante: str, modelo: str, sinal: str) -> bool:
-    alvo = Verbete(_limpo(fabricante), _limpo(modelo), _limpo(sinal)).chave
+def remover(base, fabricante: str, modelo: str, sinal: str, instalacao: str = "") -> bool:
+    alvo = Verbete(_limpo(fabricante), _limpo(modelo), _limpo(sinal),
+                   instalacao=_limpo(instalacao)).chave
     atuais = listar(base)
     sobrando = [v for v in atuais if v.chave != alvo]
     if len(sobrando) == len(atuais):
@@ -215,7 +306,8 @@ def importar(base, texto: str) -> dict:
 
     O que chega **acrescenta e corrige**, nunca apaga: a tabela de uma equipe
     inteira chegando por cima da sua não pode fazer sumir o que você catalogou
-    e ela não tem.
+    e ela não tem. Pela mesma razão, o que VOCÊ digitou (`fonte = digitado`)
+    não é trocado por uma dedução que chega de fora.
     """
     atuais = listar(base)
     por_chave = {v.chave: i for i, v in enumerate(atuais)}
@@ -229,12 +321,10 @@ def importar(base, texto: str) -> dict:
             novos += 1
             continue
         antigo = atuais[i]
-        # Linha de fora sem descrição não apaga a descrição que você escreveu.
-        junto = replace(
-            antigo,
-            descricao=v.descricao or antigo.descricao,
-            categoria=v.categoria or antigo.categoria,
-        )
+        if antigo.fonte == "digitado" and v.fonte == "deduzido":
+            continue
+        # Célula de fora vazia não apaga o que você escreveu.
+        junto = replace(antigo, **{c: getattr(v, c) or getattr(antigo, c) for c in EDITAVEIS})
         if junto != antigo:
             atuais[i] = junto
             mexidos += 1
@@ -248,7 +338,7 @@ def importar(base, texto: str) -> dict:
 #: casam — que é o comportamento certo, e não um defeito.
 FABRICANTES = ("SEL", "ABB", "SIEMENS", "GE", "SCHNEIDER", "AREVA", "ALSTOM",
                "HITACHI", "ZIV", "EFACEC", "PEXTRON", "REASON", "TOSHIBA",
-               "MITSUBISHI", "NARI", "ERLPHASE", "BECKWITH")
+               "MITSUBISHI", "NARI", "ERLPHASE", "BECKWITH", "INGETEAM", "NOJA")
 
 
 #: A FID da SEL depois do modelo: `-R312-V0-Z106101-D20160115`.
@@ -263,8 +353,37 @@ _FAMILIAS = (
     (re.compile(r"^(SIPROTEC\s*5)\b", re.IGNORECASE), "SIEMENS"),
 )
 
+#: Quando o campo do EQUIPAMENTO não diz quem é, os outros textos do registro
+#: (estação, nome do arquivo) às vezes dizem. Medido no banco (01/11/2026):
+#: o Ingeteam PL300 grava o NÚMERO do registro no equipamento (`56`) e o
+#: modelo na estação (`P-056 -- UCL 9 -- PL300 - EH3126/I`) — ~95 registros;
+#: o religador Ingeteam grava `RELIG` e o fabricante só aparece no nome do
+#: arquivo (`…,RELIG,ENERGISA_M,Ingeteam.CFG`) — 129 registros. Nenhum dos
+#: dois casava verbete de modelo nenhum.
+_PELOS_OUTROS_TEXTOS = (
+    (re.compile(r"\b(PL\s?\d{3})\b", re.IGNORECASE), "INGETEAM"),
+    (re.compile(r"\bINGETEAM\b", re.IGNORECASE), "INGETEAM"),
+)
 
-def identificar(equipamento: str) -> tuple[str, str]:
+
+def identificar(equipamento: str, *outros: str) -> tuple[str, str]:
+    """`identificar_equipamento`, e, se ele não reconhecer o fabricante, os
+    OUTROS textos do registro (`_PELOS_OUTROS_TEXTOS`). Um padrão só de
+    fabricante (`INGETEAM` no nome do arquivo) dá o fabricante e deixa o
+    modelo vazio — é o degrau «de todo Ingeteam» do dicionário."""
+    fab, mod = identificar_equipamento(equipamento)
+    if fab:
+        return fab, mod
+    for texto in outros:
+        for padrao, marca in _PELOS_OUTROS_TEXTOS:
+            achado = padrao.search(texto or "")
+            if achado:
+                modelo = achado.group(1).upper().replace(" ", "") if padrao.groups else ""
+                return marca, modelo
+    return fab, mod
+
+
+def identificar_equipamento(equipamento: str) -> tuple[str, str]:
     """«SEL-351» -> («SEL», «351»). «FRA-01» -> («», «FRA-01»).
 
     O COMTRADE declara o equipamento no cabeçalho do `.cfg`, e o `.CEV` no
@@ -303,11 +422,32 @@ def identificar(equipamento: str) -> tuple[str, str]:
     return ("", texto)
 
 
-def descrever(base, fabricante: str, modelo: str, sinal: str) -> Verbete | None:
+def instalacao_casa(instalacao: str, textos) -> bool:
+    """O verbete de `instalacao` vale para este registro?
+
+    Toda palavra da instalação tem de aparecer entre as palavras do que o
+    registro diz de si — estação, equipamento, apelido. `SE BUNGE AL12` casa
+    com a estação «SE Bunge» e o equipamento «AL12_UPC1». Palavra a palavra,
+    e não trecho de texto, para `AL1` não casar com `AL12`.
+    """
+    alvo = _normal(instalacao).split()
+    if not alvo:
+        return True
+    palavras = set()
+    for t in textos:
+        for p in _normal(t).split():
+            palavras.add(p)
+            palavras.update(re.findall(r"[A-Z]+\d+|\d+|[A-Z]+", p))   # AL12UPC1 → AL12, UPC1
+    return all(p in palavras for p in alvo)
+
+
+def descrever(base, fabricante: str, modelo: str, sinal: str,
+              textos_da_instalacao=(), verbetes=None) -> Verbete | None:
     """O verbete de um sinal, do mais específico para o mais genérico.
 
-    Três degraus, e o primeiro que casar vence:
+    Quatro degraus, e o primeiro que casar vence:
 
+    0. o da INSTALAÇÃO — só para os registros daquele relé (`instalacao_casa`);
     1. `fabricante` + `modelo` — só naquele modelo;
     2. `fabricante` sozinho — qualquer relé da marca;
     3. os dois vazios — qualquer relé.
@@ -317,65 +457,96 @@ def descrever(base, fabricante: str, modelo: str, sinal: str) -> Verbete | None:
     casa, volta `None` — e o leitor mostra o nome cru, que é o caminho normal:
     o dicionário nasce vazio.
     """
-    fab, mod, sin = _limpo(fabricante).upper(), _limpo(modelo).upper(), _limpo(sinal).upper()
+    sin = _limpo(sinal).upper()
     if not sin:
         return None
+    if isinstance(verbetes, dict):          # o índice de `_por_sinal`
+        candidatos = verbetes.get(sin, [])
+    else:
+        todos = listar(base) if verbetes is None else verbetes
+        candidatos = [v for v in todos if v.sinal.strip().upper() == sin]
+    return _resolver(candidatos, fabricante, modelo, textos_da_instalacao)
+
+
+def _por_sinal(verbetes) -> dict[str, list[Verbete]]:
+    """Os verbetes agrupados pelo sinal. Com o dicionário de milhares de
+    verbetes, procurar cada sinal na lista inteira custava ~1 s por registro
+    aberto (medido com 7158 verbetes, 01/11/2026)."""
+    indice: dict[str, list[Verbete]] = {}
+    for v in verbetes:
+        indice.setdefault(v.sinal.strip().upper(), []).append(v)
+    return indice
+
+
+def _resolver(candidatos, fabricante: str, modelo: str,
+              textos_da_instalacao=()) -> Verbete | None:
+    """Os degraus de `descrever` sobre os verbetes de UM sinal."""
+    fab, mod = _limpo(fabricante).upper(), _limpo(modelo).upper()
+    textos = tuple(textos_da_instalacao or ())
+
+    def de(v):
+        return v.fabricante.strip().upper(), v.modelo.strip().upper()
+
+    for v in candidatos:
+        if v.instalacao and textos and instalacao_casa(v.instalacao, textos) \
+                and de(v)[0] in (fab, "") and de(v)[1] in (mod, ""):
+            return v
     degraus = [(fab, mod), (fab, ""), ("", "")] if fab else [("", "")]
-    verbetes = listar(base)
-    for alvo_fab, alvo_mod in degraus:
-        for v in verbetes:
-            if v.sinal.strip().upper() != sin:
-                continue
-            if v.fabricante.strip().upper() == alvo_fab and \
-               v.modelo.strip().upper() == alvo_mod:
+    for alvo in degraus:
+        for v in candidatos:
+            if not v.instalacao and de(v) == alvo:
                 return v
     return None
 
 
-def aplicaveis(base, equipamento: str) -> list[dict]:
+def _origem(v: Verbete) -> str:
+    if v.instalacao:
+        return "deste relé (" + v.instalacao + ")"
+    if v.modelo.strip():
+        return "deste modelo"
+    if v.fabricante.strip():
+        return "de todo " + v.fabricante.strip()
+    return "de qualquer relé"
+
+
+def aplicaveis(base, equipamento: str, textos_da_instalacao=()) -> list[dict]:
     """Os verbetes que valem para este equipamento, um por sinal.
 
-    Para cada sinal do dicionário, resolve os três degraus e devolve só o
-    vencedor — com a `origem` dizendo em que degrau ele venceu. É o que a
-    tela de consulta mostra: dois verbetes do mesmo sinal, um genérico e um
-    do modelo, confundiriam quem está procurando o significado.
+    Para cada sinal do dicionário, resolve os degraus e devolve só o vencedor
+    — com a `origem` dizendo em que degrau ele venceu. É o que a tela de
+    consulta mostra: dois verbetes do mesmo sinal, um genérico e um do modelo,
+    confundiriam quem está procurando o significado.
     """
-    fabricante, modelo = identificar(equipamento)
+    fabricante, modelo = identificar(equipamento, *textos_da_instalacao)
     saida = []
-    vistos = set()
-    for v in listar(base):
-        sinal = v.sinal.strip().upper()
-        if not sinal or sinal in vistos:
+    for sinal, candidatos in _por_sinal(listar(base)).items():
+        if not sinal:
             continue
-        vistos.add(sinal)
-        vence = descrever(base, fabricante, modelo, v.sinal)
+        vence = _resolver(candidatos, fabricante, modelo, textos_da_instalacao)
         if vence is None:
             continue
-        if vence.modelo.strip():
-            origem = "deste modelo"
-        elif vence.fabricante.strip():
-            origem = "de todo " + vence.fabricante.strip()
-        else:
-            origem = "de qualquer relé"
         item = vence.como_dicionario()
-        item["origem"] = origem
+        item["origem"] = _origem(vence)
         saida.append(item)
     saida.sort(key=lambda x: x["sinal"].upper())
     return saida
 
 
-def para_os_sinais(base, equipamento: str, sinais) -> dict:
+def para_os_sinais(base, equipamento: str, sinais, textos_da_instalacao=()) -> dict:
     """O que o dicionário sabe sobre uma lista de sinais de um registro.
 
-    Devolve `{sinal: {descricao, categoria}}` só com os que ele conhece — os
-    que não estão no dicionário simplesmente não aparecem, e a tela trata a
+    Devolve `{sinal: {descricao, categoria, …}}` só com os que ele conhece —
+    os que não estão no dicionário simplesmente não aparecem, e a tela trata a
     ausência como o estado normal.
     """
-    fabricante, modelo = identificar(equipamento)
+    fabricante, modelo = identificar(equipamento, *textos_da_instalacao)
+    indice = _por_sinal(listar(base))
     achados = {}
     for sinal in sinais:
-        v = descrever(base, fabricante, modelo, sinal)
+        v = descrever(base, fabricante, modelo, sinal, textos_da_instalacao, indice)
         if v is None:
             continue
-        achados[sinal] = {"descricao": v.descricao, "categoria": v.categoria}
+        achados[sinal] = {"descricao": v.descricao, "categoria": v.categoria,
+                          "funcao": v.funcao, "fase": v.fase, "estagio": v.estagio,
+                          "fonte": v.fonte, "origem": _origem(v)}
     return achados

@@ -1319,7 +1319,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     ["analogico", "gráfico analógico",
      "Ondas no tempo: o que o relé gravou, amostra por amostra."],
     ["digital", "gráfico digital",
-     "Tiras de digitais: trip, partida, recepção de teleproteção."],
+     "Tiras de digitais: trip, pickup, recepção de teleproteção."],
     ["fasorial", "diagrama fasorial",
      "Módulo e ângulo no instante de um cursor, em pu — é onde se lê "
      + "defasagem e sequência."],
@@ -1670,12 +1670,15 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   let dicionario = null;
   let pedindoDicionario = null;
 
-  const CATEGORIAS_EM_ORDEM = ["trip", "partida", "bloqueio", "estado", "io",
-                               "auxiliar", ""];
+  //: A ordem conta o evento de cima para baixo: quem disparou, quem viu, quem
+  //: impediu, o que o outro terminal mandou, quem comandou, e depois o estado.
+  const CATEGORIAS_EM_ORDEM = ["trip", "pickup", "bloqueio", "teleprotecao", "comando",
+                               "estado", "alarme", "io", "auxiliar", ""];
   //: Uma cor por categoria — as mesmas dos tipinhos da tela da base, para a
   //: mesma coisa ter a mesma cor nos dois lugares.
   const COR_DA_CATEGORIA = {
-    trip: "--ruim", partida: "--atencao", bloqueio: "--calculado-1",
+    trip: "--ruim", pickup: "--atencao", bloqueio: "--calculado-1",
+    teleprotecao: "--traco-3", comando: "--cursor-2", alarme: "--falta-ca",
     estado: "--digital", io: "--bom", auxiliar: "--suave", "": "--suave",
   };
 
@@ -1902,7 +1905,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     b.title = temDic
       ? (qual === "pintar"
          ? "Cada sinal com a cor da categoria que ele tem no dicionário."
-         : "Põe os sinais na ordem das categorias: trip, partida, bloqueio, estado, entrada e saída, auxiliar.")
+         : "Põe os sinais na ordem das categorias: trip, pickup, bloqueio, teleproteção, comando, estado, alarme, entrada e saída, auxiliar.")
       : "Precisa de um dicionário com os sinais deste relé — clique para saber por quê.";
     b.addEventListener("click", () => {
       if (!temDicionario()) {
@@ -1939,7 +1942,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     if (qual === "categoria" && !temDic) b.classList.add("sem-dicionario");
     b.title = qual === "categoria"
       ? (temDic
-         ? "Põe os sinais na ordem das categorias: trip, partida, bloqueio, estado, entrada e saída, auxiliar."
+         ? "Põe os sinais na ordem das categorias: trip, pickup, bloqueio, teleproteção, comando, estado, alarme, entrada e saída, auxiliar."
          : "Precisa de um dicionário com os sinais deste relé — clique para saber por quê.")
       : "Na ordem em que os sinais entraram no gráfico.";
     b.addEventListener("click", () => {
