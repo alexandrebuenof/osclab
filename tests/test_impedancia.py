@@ -956,3 +956,16 @@ def test_a_tolerancia_da_conferencia_10_cresce_com_a_oscilacao_ate_o_teto():
     ]
     for caso, rele, nosso, oscilacao, esperado in casos:
         assert c.julgar_distancia(rele, nosso, oscilacao).veredito == esperado, caso
+
+
+def test_o_rele_dentro_da_nossa_entrada_de_falta_e_possivel_medida_no_transitorio():
+    """O 321 de Coxipó: platô parado em 47 %, relé em 58 %, e a nossa trajetória
+    no primeiro ciclo da falta passando de 39 a 66 %. O texto fala em
+    POSSIBILIDADE — o arquivo não diz em que instante o relé mediu."""
+    from tests import conferencias as c
+    linha = c.julgar_distancia(58.2, 47.0, 0.9, "laço AN", (38.8, 66.3))
+    assert linha.veredito == c.TRANSITORIO
+    assert "é possível" in linha.motivo and "errou" not in linha.motivo
+    # Fora da entrada, continua divergindo; e o defeito firme não se esconde aqui.
+    assert c.julgar_distancia(58.2, 47.0, 0.9, "", (38.8, 50.0)).veredito == c.DIVERGE
+    assert c.julgar_distancia(40.0, 68.0, 1.5, "", None).veredito == c.DIVERGE

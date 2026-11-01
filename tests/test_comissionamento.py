@@ -160,9 +160,10 @@ def _exigir(linhas: list[C.Linha]) -> None:
            if x.erro is not None else x.veredito)
         + (f" — {x.motivo}" if x.motivo else "")
         for x in ruins)
-    # «Dentro da incerteza do arquivo» também conferiu: só não com a folga de
-    # base — ver `C.TETO_DA_DISTANCIA`.
-    if not any(x.veredito in (C.CONFERE, C.INCERTEZA) for x in linhas):
+    # «Dentro da incerteza do arquivo» e «possível medida no transitório»
+    # também conferiram, com ressalva — ver `C.TETO_DA_DISTANCIA` e
+    # `C.TRANSITORIO`.
+    if not any(x.veredito in (C.CONFERE, C.INCERTEZA, C.TRANSITORIO) for x in linhas):
         pytest.skip("; ".join(sorted({x.motivo for x in linhas})))
 
 

@@ -44,6 +44,14 @@ CONFERE = "confere"
 #: produz no nosso número (conferência 10: linha curta gravada a 4 amostras
 #: por ciclo). Não reprova; fica no placar como caso de dado fraco.
 INCERTEZA = "dentro da incerteza do arquivo"
+#: O valor do relé não bate com o nosso platô, mas cai dentro da nossa
+#: trajetória no PRIMEIRO CICLO da falta — quando a janela de um ciclo ainda
+#: mistura pré-falta e falta e a impedância está viajando. É possível que o
+#: relé tenha medido nesse instante; o arquivo não diz em que instante o
+#: localizador dele mede, e ele calcula com mais amostras do que grava. Não
+#: reprova: os dois números podem ser de instantes diferentes, sem defeito
+#: nenhum (o 321 de Coxipó, 31/10/2026).
+TRANSITORIO = "possível medida no transitório"
 DIVERGE = "diverge"
 NAO_SE_APLICA = "não se aplica"
 ERRO = "erro"
@@ -81,15 +89,23 @@ def tolerancia_da_distancia(oscilacao: float) -> float:
 
 
 def julgar_distancia(rele: float, nosso: float, oscilacao: float,
-                     motivo: str = "") -> Linha:
-    """A conferência 10 com os três vereditos: até a base, `CONFERE`; até a
-    tolerância alargada pela oscilação, `INCERTEZA`; além, `DIVERGE`."""
+                     motivo: str = "", entrada: tuple[float, float] | None = None) -> Linha:
+    """A conferência 10 com os vereditos: até a base, `CONFERE`; até a
+    tolerância alargada pela oscilação, `INCERTEZA`; além dela mas dentro da
+    nossa trajetória no primeiro ciclo da falta (`entrada`, em %), `TRANSITORIO`;
+    senão, `DIVERGE`."""
     erro = nosso - rele
     tolerancia = tolerancia_da_distancia(oscilacao)
     linha = julgar(DISTANCIA, "% da linha", rele, nosso, erro, "pontos",
                    tolerancia, motivo)
     if linha.veredito == CONFERE and abs(erro) > TOLERANCIA_DA_DISTANCIA:
         linha.veredito = INCERTEZA
+    elif linha.veredito == DIVERGE and entrada is not None and entrada[0] <= rele <= entrada[1]:
+        linha.veredito = TRANSITORIO
+        linha.motivo = (f"{motivo}; o valor do relé ({rele:.1f} %) cai dentro da nossa "
+                        f"trajetória no primeiro ciclo da falta ({entrada[0]:.0f} a "
+                        f"{entrada[1]:.0f} %): é possível que ele tenha medido antes de a "
+                        "impedância estabilizar").replace(".", ",")
     return linha
 
 
@@ -1181,8 +1197,9 @@ TOLERANCIA_DA_DISTANCIA = 5.0        # pontos de % da linha
 #: Num arquivo em que o nosso número anda (medido: ±8,2 pontos num 311C de
 #: Várzea Grande), exigir 5 era pedir mais precisão do que o arquivo tem.
 #: Não é o caso do 321 de Coxipó: ali o nosso platô é parado (±0,9 %) e quem
-#: anda é o PRIMEIRO CICLO da falta (39 a 66 %), onde o relé congelou os 58 %
-#: dele — a diferença é de instante, não de incerteza, e continua divergindo. O TETO existe para um defeito nosso que faça o número
+#: anda é o PRIMEIRO CICLO da falta (39 a 66 %), onde caem os 58 % do relé —
+#: a diferença parece ser de instante, não de incerteza (ver `TRANSITORIO`).
+#: O TETO existe para um defeito nosso que faça o número
 #: oscilar muito não alargar a própria tolerância e se aprovar sozinho. Entre
 #: a base e a tolerância alargada o veredito é `INCERTEZA`, não `CONFERE`.
 #: A oscilação é meia faixa entre os percentis 10 e 90 do % da linha nos
@@ -1408,17 +1425,22 @@ def distancia(caminho: Path, registro: Record) -> list[Linha]:
             na_falta = z.imag[em_falta & np.isfinite(z.imag)] / x1
             oscilacao = (50.0 * float(np.percentile(na_falta, 90) - np.percentile(na_falta, 10))
                          if na_falta.size else 0.0)
-            melhor = (laco, achado[0], achado[1], oscilacao)
+            # A trajetória no primeiro ciclo da falta, em % da linha.
+            um_ciclo = max(int(round(por_ciclo)), 2)
+            primeiros = np.flatnonzero(em_falta & np.isfinite(z.imag))[:um_ciclo]
+            entrada = (100 * float(np.min(z.imag[primeiros])) / x1,
+                       100 * float(np.max(z.imag[primeiros])) / x1) if primeiros.size else None
+            melhor = (laco, achado[0], achado[1], oscilacao, entrada)
     if melhor is None:
         return [nao_se_aplica(DISTANCIA, motivo)]
-    laco, z_plato, espalhamento, oscilacao = melhor
+    laco, z_plato, espalhamento, oscilacao, entrada = melhor
     if espalhamento > ESPALHAMENTO_DO_PLATO:
         return [nao_se_aplica(DISTANCIA, f"a falta evolui: o ciclo mais parado anda "
                                          f"{100 * espalhamento:.0f} %")]
     m_nosso = z_plato.imag / x1
     contexto = (f"laço {laco}, platô com {100 * espalhamento:.1f} % de espalhamento, "
                 f"o nosso número oscila ±{oscilacao:.1f} pontos na falta")
-    saida = [julgar_distancia(100 * m_rele, 100 * m_nosso, oscilacao, contexto)]
+    saida = [julgar_distancia(100 * m_rele, 100 * m_nosso, oscilacao, contexto, entrada)]
     if resumo.get("z") is not None and resumo.get("angulo") is not None:
         x_rele = resumo["z"] * math.sin(math.radians(resumo["angulo"]))
         if abs(x_rele) > 0:

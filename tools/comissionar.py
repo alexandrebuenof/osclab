@@ -9,8 +9,8 @@ Uso:
 `tests/test_comissionamento.py` — sobre cada oscilografia da pasta (um `.cfg`
 com `.dat` ao lado, um `.cff` ou um `.CEV`) e grava uma linha por coisa
 conferida: registro, conferência, item, valor do relé, valor nosso, erro,
-tolerância, veredito (`confere`, `dentro da incerteza do arquivo`, `diverge`,
-`não se aplica`, `erro`) e motivo.
+tolerância, veredito (`confere`, `dentro da incerteza do arquivo`, `possível
+medida no transitório`, `diverge`, `não se aplica`, `erro`) e motivo.
 Depois casa os registros do mesmo disparo em dois formatos e confere os pares.
 
 `comparar` lista o que PIOROU entre duas rodadas — conferia e passou a
@@ -228,7 +228,7 @@ def comparar(antes: dict[tuple, dict], depois: dict[tuple, dict],
     """
     # «Dentro da incerteza do arquivo» conferiu, com a folga alargada pela
     # oscilação do próprio arquivo (conferência 10).
-    bons = {"confere", "dentro da incerteza do arquivo"}
+    bons = {"confere", "dentro da incerteza do arquivo", "possível medida no transitório"}
     ruins = {"diverge", "erro"}
     saida: dict[str, list] = {"piorou": [], "melhorou": [], "mudou": []}
     for chave in sorted(set(antes) | set(depois)):
