@@ -3670,6 +3670,13 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     return "esta conta não existe para este sinal.";
   }
 
+  /** A onda crua de uma trinca: o resíduo (`IN G1`) e as tensões de linha
+   * (`VAB G1`). É onda como um canal — tem fasor e espectro —, e o id é o
+   * que a separa da componente simétrica. Ver `catalogo.PESOS_DA_ONDA`. */
+  function ondaDaTrinca(id) {
+    return /^q\d+:(n|ab|bc|ca):instantaneo$/.test(id);
+  }
+
   /** O catálogo de um diagrama FASORIAL: uma linha, uma caixinha.
    *
    * A matriz de contas não existe aqui, e não deve existir: `IAW`,
@@ -3694,7 +3701,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     for (const x of (dados.catalogo || [])) {
       const base = x.canal >= 0
         ? x.id === `c${x.canal}:instantaneo`
-        : (x.id.endsWith(":n:instantaneo") || x.bloco === "sequencia");
+        : (ondaDaTrinca(x.id) || x.bloco === "sequencia");
       if (!base || x.bloco === "outros" || vistas.has(x.linha || x.nome)) continue;
       vistas.add(x.linha || x.nome);
       saida.push(x);
@@ -3710,7 +3717,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
    */
   function comEspectro() {
     return comFasor().filter(
-      (x) => x.canal >= 0 || x.id.endsWith(":n:instantaneo"));
+      (x) => x.canal >= 0 || ondaDaTrinca(x.id));
   }
 
   /** O nome de um sinal pelo id, como ele aparece no diagrama. */

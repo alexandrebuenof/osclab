@@ -302,7 +302,8 @@ def test_dois_pedidos_no_mesmo_traco_sao_desenhados_uma_vez_so():
 
 def test_cada_conjunto_trifasico_rende_as_tres_componentes():
     componentes = {s.id: s.nome for s in catalogo.de_registro(trifasico())
-                   if s.id.startswith("q") and ":n:" not in s.id}
+                   if s.id.startswith("q")
+                   and not catalogo.e_onda_da_trinca(s.id.split(":")[1])}
     assert componentes == {"q0:0:rms": "3I0 G1", "q0:1:rms": "I1 G1",
                            "q0:2:rms": "I2 G1", "q1:0:rms": "3V0 G2",
                            "q1:1:rms": "V1 G2", "q1:2:rms": "V2 G2"}
@@ -1177,3 +1178,87 @@ def test_em_delta_a_curva_e_o_cursor_continuam_batendo():
                                         "arquivo", 1.0)
     assert lido is not None
     assert abs(lido[0] - float(serie[i])) < 0.01
+
+
+# ---------------------------------------------------------------------------
+# As tensões de LINHA que o OscLab monta de uma trinca em estrela
+# ---------------------------------------------------------------------------
+
+def test_a_trinca_de_tensao_em_estrela_rende_VAB_VBC_VCA():
+    """Pedido do usuário (nov/2026): `VAB`, `VBC` e `VCA` como o `VN` — onda,
+    com as colunas de um canal. Só da trinca de TENSÃO: a corrente de linha
+    não é grandeza que se procure numa oscilografia de proteção."""
+    nomes = {s.id: s.nome for s in catalogo.de_registro(trifasico())
+             if s.id.split(":")[1:2] and s.id.split(":")[1] in catalogo.LINHAS}
+    assert nomes == {
+        f"q1:{k}:{g}": f"V{k.upper()} G2{sufixo}"
+        for k in ("ab", "bc", "ca")
+        for g, sufixo in (("instantaneo", ""), ("rms", " · RMS"),
+                          ("dc", " · DC"), ("filtrado", " · 60Hz"),
+                          ("fundamental", " · 60Hz RMS"))}
+
+
+def test_VAB_e_va_menos_vb_amostra_por_amostra():
+    r = trifasico()
+    alvo = {s.id: s for s in catalogo.de_registro(r)}["q1:ab:instantaneo"]
+    n = r.analog.shape[1]
+    serie = catalogo.serie(r, alvo, 0, n, r.trechos, "arquivo", {})
+    assert np.allclose(serie, r.analog[3] - r.analog[4])
+    assert alvo.origem == "Voltage A-G, Voltage B-G"
+    assert alvo.conjunto["canais"] == {"A": 3, "B": 4, "C": 5}
+
+
+def test_VAB_mede_raiz_de_tres_e_adianta_30_graus_da_VA():
+    """O par que confere a conta: em sequência ABC, `VAB = √3·VA∠+30°`."""
+    r = trifasico()
+    i = 450
+    lido = leitura.em(r, [(float(r.time[i]), 0, 0.0), (None, 0, 0.0)],
+                      layout=[arranjo.analogico(["q1:ab:fundamental",
+                                                 "q1:ca:rms",
+                                                 "c3:instantaneo"])])
+    v = lido["cursores"][0]["sinais"]
+    eficaz = math.sqrt(3.0) * PICO / math.sqrt(2.0)
+    assert v["q1:ab:fundamental"]["valor"] == pytest_aprox(eficaz, rel=1e-3)
+    assert v["q1:ca:rms"]["valor"] == pytest_aprox(eficaz, rel=1e-3)
+    giro = (v["q1:ab:fundamental"]["angulo"] - v["c3:instantaneo"]["angulo"]
+            + 180.0) % 360.0 - 180.0
+    assert abs(giro - 30.0) < 0.1
+
+
+def test_tensao_de_linha_tem_fasor_e_espectro_como_o_VN():
+    from osclab.plot import fasorial, harmonicos
+    por_id = {s.id: s for s in catalogo.de_registro(trifasico())}
+    assert fasorial.tem_fasor(por_id["q1:bc:instantaneo"])
+    assert harmonicos.tem_espectro(por_id["q1:bc:instantaneo"])
+    assert not fasorial.tem_fasor(por_id["q1:bc:rms"])
+
+
+def test_o_filtro_empurra_VAB_para_o_par_de_60Hz():
+    r = trifasico()
+    r.filtering = Filtering.BRUTO
+    efetivo = {x["id"]: x["efetivo"] for x in
+               janela.montar(r, filtro=True, colunas=1000)["catalogo"]}
+    assert efetivo["q1:ab:instantaneo"]["instantaneo"] == "q1:ab:filtrado"
+
+
+def test_registro_ja_filtrado_oferece_so_a_onda_e_o_eficaz_da_linha():
+    r = trifasico()
+    r.filtering = Filtering.FILTRADO
+    ids = {s.id for s in catalogo.de_registro(r) if s.id.startswith("q1:ab:")}
+    assert ids == {"q1:ab:instantaneo", "q1:ab:rms"}
+
+
+def test_em_delta_nao_se_oferece_tensao_de_linha_nossa():
+    """Os canais JÁ SÃO as tensões de linha: `VAB G1` ao lado do `VAB` do relé
+    seria o mesmo sinal com dois nomes."""
+    nomes = {s.nome for s in catalogo.de_registro(_em_delta())}
+    assert not [x for x in nomes if x.startswith(("VAB G", "VBC G", "VCA G"))]
+
+
+def test_o_rodape_diz_que_a_tensao_de_linha_e_diferenca_de_fases():
+    r = trifasico()
+    painel = janela.montar(r, colunas=1000, layout=[
+        arranjo.analogico(["q1:ab:instantaneo", "q1:bc:instantaneo"])])["paineis"][0]
+    rodape = " | ".join(painel.get("rodape") or [])
+    assert "VAB G2, VBC G2: diferença de duas fases" in rodape
+    assert '"Voltage A-G", "Voltage B-G", "Voltage C-G"' in rodape

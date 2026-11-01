@@ -232,7 +232,7 @@
         <b class="selo-da-falta {{ item.falta_cor }}">{{ item.falta_sigla }}</b>
         {#- O raio: o relé disparou. Sem trip, nada — a ausência não afirma
             que ele restringiu. Pedido dele, 22/10/2026. #}
-        {% if item.falta_trip %}<i class="raio-do-trip" aria-label="trip">&#x26A1;&#xFE0E;</i>{% endif %}
+        {% if item.falta_trip %}<i class="raio-do-trip">TRIP</i>{% endif %}
         <i class="ponto-da-confianca {{ item.falta_confianca }}" aria-label="confiança {{ item.falta_confianca }}"></i>
         {% else %}
         <b class="selo-da-falta vazio">sem falta</b>

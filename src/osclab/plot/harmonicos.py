@@ -99,7 +99,7 @@ def tem_espectro(sinal: catalogo.Sinal) -> bool:
     if not sinal.id.startswith("q"):
         return False
     _, chave, grandeza = sinal.id.split(":")
-    return chave == catalogo.RESIDUAL and grandeza == "instantaneo"
+    return catalogo.e_onda_da_trinca(chave) and grandeza == "instantaneo"
 
 
 def teto_do_registro(registro: Record) -> int:

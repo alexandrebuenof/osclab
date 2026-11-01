@@ -174,10 +174,10 @@
       ponto.title = selo.title;
       const caixa = criar("span", "selo-com-ponto");
       caixa.append(selo);
-      // O raio: o relé disparou. Sem trip, nada (a ausência não afirma que
+      // O TRIP: o relé disparou. Sem trip, nada (a ausência não afirma que
       // ele restringiu).
       if (item.falta_trip) {
-        const raio = criar("i", "raio-do-trip", "⚡︎");
+        const raio = criar("i", "raio-do-trip", "TRIP");
         raio.title = selo.title;
         caixa.append(raio);
       }

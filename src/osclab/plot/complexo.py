@@ -136,8 +136,8 @@ def fasores_do_sinal(registro: Record, sinal: catalogo.Sinal, lado: str,
     if not 0 <= posicao < len(achados):
         return None
     conjunto = achados[posicao]
-    if chave == catalogo.RESIDUAL:
-        onda = catalogo.residuo(registro, conjunto, 0, n, lado, divisor)
+    if catalogo.e_onda_da_trinca(chave):
+        onda = catalogo.residuo(registro, conjunto, 0, n, lado, divisor, chave)
         return None if onda is None else da_onda(onda)
 
     # Componente simétrica: as três fases viram fasor e Fortescue combina —

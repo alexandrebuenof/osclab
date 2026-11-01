@@ -532,6 +532,23 @@ MOLDE_DO_RESIDUO_FILTRADO = ("{nomes}: soma das três fases, só a componente "
                              "de {f} Hz")
 
 
+#: A nota das tensões de linha que o OscLab montou (`VAB G1`). Uma linha só
+#: para as três: o que cada uma subtrai já está no nome.
+MOLDE_DA_LINHA = "{nomes}: diferença de duas fases, amostra a amostra"
+MOLDE_DA_LINHA_FILTRADA = ("{nomes}: diferença de duas fases, só a componente "
+                           "de {f} Hz")
+
+
+def nota_da_linha(nomes, filtrado: bool = False,
+                  frequencia: float = sinais.FREQUENCIA_PADRAO) -> str:
+    """A nota do rodapé para as tensões de linha presentes no painel."""
+    juntos = ", ".join(sorted(nomes))
+    if filtrado:
+        return MOLDE_DA_LINHA_FILTRADA.format(
+            nomes=juntos, f=sinais.frequencia_no_nome(frequencia))
+    return MOLDE_DA_LINHA.format(nomes=juntos)
+
+
 def nota_do_residuo(nomes, filtrado: bool = False,
                     frequencia: float = sinais.FREQUENCIA_PADRAO) -> str:
     """A nota do rodapé para os resíduos presentes no painel."""
@@ -581,6 +598,8 @@ Aparece **só** quando o painel tem algo que saiu de uma trinca:
     #: Par, e não dicionário: `IN G1` e `IN G1 · 60Hz` no mesmo painel são as
     #: duas coisas ao mesmo tempo, e cada uma leva a sua nota.
     residuos: set[tuple[str, bool]] = set()
+    #: O mesmo, para as tensões de linha (`VAB G1`).
+    de_linha: set[tuple[str, bool]] = set()
     for _identidade, alvo in pedidos:
         if alvo.id.startswith("q"):
             partes = alvo.id.split(":")
@@ -595,6 +614,12 @@ Aparece **só** quando o painel tem algo que saiu de uma trinca:
                                                    trinca.rotulo),
                                   sempre_filtrado
                                   or alvo.coluna.startswith("filtrado.")))
+            elif partes[1:2] and partes[1] in catalogo.LINHAS:
+                if 0 <= posicao < len(achados):
+                    de_linha.add((conjuntos.juntar(
+                        f"V{partes[1].upper()}", achados[posicao].rotulo),
+                        sempre_filtrado
+                        or alvo.coluna.startswith("filtrado.")))
             else:
                 tem_componente = True
         else:
@@ -628,6 +653,10 @@ Aparece **só** quando o painel tem algo que saiu de uma trinca:
             if quais:
                 linhas.append(nota_do_residuo(quais, filtrado,
                                               registro.line_frequency))
+            quais = {n for n, f in de_linha if f == filtrado}
+            if quais:
+                linhas.append(nota_da_linha(quais, filtrado,
+                                            registro.line_frequency))
         if tem_componente:
             linhas.append(NOTA_DAS_COMPONENTES)
     return linhas

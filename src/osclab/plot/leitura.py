@@ -274,7 +274,7 @@ def _linhas(registro: Record, i: int, lado: str, escalas: dict,
         # amostra a amostra e lê-se o resultado como se lê qualquer canal —
         # com instantâneo, eficaz verdadeiro, DC e distorção. É justamente
         # essa diferença para `3I0` que faz o resíduo valer a tela.
-        if sinal.id.split(":")[1:2] == [catalogo.RESIDUAL]:
+        if catalogo.e_onda_da_trinca(sinal.id.split(":")[1]):
             linha.update(_linha_de_residuo(
                 registro, sinal, i, lado, divisor, por_ciclo, angulo_zero,
                 ate if identidade in quer_espectro else 0))
@@ -370,7 +370,7 @@ def _linha_de_residuo(registro: Record, sinal, i: int, lado: str,
     if conjunto is None:
         return vazio
     onda = catalogo.residuo(registro, conjunto, 0, registro.analog.shape[1],
-                            lado, divisor)
+                            lado, divisor, sinal.id.split(":")[1])
     if onda is None or not (0 <= i < onda.size):
         return vazio
 
@@ -642,7 +642,8 @@ def espectro_entre(registro: Record, a: dict, b: dict, lado: str,
             if conjunto is None:
                 continue
             onda = catalogo.residuo(registro, conjunto, 0,
-                                    registro.analog.shape[1], lado, divisor)
+                                    registro.analog.shape[1], lado, divisor,
+                                    sinal.id.split(":")[1])
             if onda is None:
                 continue
             fator = 1.0

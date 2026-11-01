@@ -5379,11 +5379,14 @@ table.verbetes td.instalacao { font-size: 12px; color: var(--suave); }
    e encolhia — o «AB → ABG» da evolutiva vazava por cima do «remover». Quem
    cede a largura é o título, que já quebra linha. */
 .selo-com-ponto { display: inline-flex; align-items: center; gap: 6px; flex: none; }
-/* O raio do trip, ao lado do selo. Vermelho de LED de trip; `FE0E` pede a
-   forma de TEXTO, senão o Windows pinta o emoji amarelo e ignora a cor. */
+/* O TRIP ao lado do selo, só quando a oscilografia tem trip. Era um raio;
+   virou a palavra, que se lê sem legenda (pedido dele, 02/11/2026).
+   Vermelho de LED de trip. */
 .raio-do-trip {
   font-style: normal;
   font-weight: 700;
+  font-size: 0.72em;
+  letter-spacing: 0.06em;
   line-height: 1;
   color: var(--ruim);
   flex: none;

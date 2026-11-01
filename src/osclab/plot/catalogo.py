@@ -267,6 +267,29 @@ COMPONENTES = {
 #: ele **não** é componente de Fortescue: é soma no tempo. Ver o cabeçalho.
 RESIDUAL = "n"
 
+#: As tensões de LINHA que o OscLab monta de uma trinca de tensão em estrela:
+#: `VAB G1 = va − vb` amostra a amostra, e assim por diante. Moram no mesmo
+#: espaço de nomes do resíduo (`q0:ab:instantaneo`) pelo mesmo motivo: saem
+#: dos três canais da trinca, que o programa escolheu olhando nomes, e levam
+#: o mesmo lápis de correção.
+#:
+#: São ONDA, como o resíduo, e por isso têm as colunas de um canal. Em delta
+#: não existem: ali os três canais JÁ SÃO as tensões de linha, e oferecer
+#: `VAB` ao lado do `VAB` do relé seria o mesmo sinal com dois nomes.
+#:
+#: A diferença é de dois canais, e os dois pesos ficam aqui em vez de numa
+#: conta escrita à mão em cada lugar: são as mesmas posições de `conjunto.abc`.
+PESOS_DA_ONDA = {RESIDUAL: (1.0, 1.0, 1.0),
+                 "ab": (1.0, -1.0, 0.0),
+                 "bc": (0.0, 1.0, -1.0),
+                 "ca": (-1.0, 0.0, 1.0)}
+LINHAS = ("ab", "bc", "ca")
+
+
+def e_onda_da_trinca(chave: str) -> bool:
+    """O sinal da trinca é ONDA (resíduo, tensão de linha), e não fasor."""
+    return chave in PESOS_DA_ONDA
+
 #: O que o OscLab oferece sobre o resíduo de uma trinca num registro BRUTO.
 #:
 #: A onda `IN` se decompõe em três pedaços ORTOGONAIS, e a tela oferece os
@@ -317,6 +340,27 @@ _O_QUE_E_O_RESIDUO_FILTRADO = {
                    "filtrado, então esta já é a onda de 60 Hz do resíduo",
     "rms": "o eficaz dessa onda, pela DFT de um ciclo: é o MESMO número do "
            "3{g}0, que continua no catálogo",
+}
+
+#: Num registro que o relé já gravou filtrado, a tensão de linha é a diferença
+#: de duas ondas de 60 Hz — outra onda de 60 Hz —, e sobra o que sobra num
+#: canal: a onda e o eficaz dela.
+LINHA_DE_FILTRADO = (("instantaneo", "instantaneo"), ("rms", "rms"))
+
+#: O hover de cada uma. `{p}` e `{q}` são as duas fases, em minúscula.
+_O_QUE_E_A_LINHA = {
+    "instantaneo": "v{p}−v{q} amostra a amostra — a tensão de linha, com DC e "
+                   "harmônicos",
+    "rms": "eficaz verdadeiro dessa diferença, janela de um ciclo",
+    "dc": "a componente contínua da tensão de linha",
+    "filtrado": "só a componente de 60 Hz da diferença, no tempo",
+    "fundamental": "o eficaz dessa componente de 60 Hz",
+}
+
+_O_QUE_E_A_LINHA_FILTRADA = {
+    "instantaneo": "v{p}−v{q} amostra a amostra — o relé gravou filtrado, "
+                   "então esta já é a onda de 60 Hz",
+    "rms": "o eficaz dessa onda, janela de um ciclo",
 }
 
 #: O que o OscLab oferece a partir de UM canal: `(o que o sinal É, que conta
@@ -678,6 +722,40 @@ def de_registro(registro: Record, lado: str = "arquivo",
                 sem_sinal=conjunto.sem_sinal,
                 conjunto=trinca,
             ))
+
+        # --- as tensões de linha: `VAB G1`, `VBC G1`, `VCA G1` -----------
+        #
+        # Só de tensão em estrela: em delta os canais já são elas. Ver
+        # `PESOS_DA_ONDA`.
+        oferta_de_linha = () if (conjunto.grandeza != "V"
+                                 or conjunto.e_de_linha) else (
+            LINHA_DE_FILTRADO if ja_filtrado else RESIDUO_DE_BRUTO)
+        textos = _O_QUE_E_A_LINHA_FILTRADA if ja_filtrado else _O_QUE_E_A_LINHA
+        for chave in LINHAS if oferta_de_linha else ():
+            p, q = chave
+            base = conjuntos.juntar(f"V{chave.upper()}", conjunto.rotulo)
+            for grandeza, conta in oferta_de_linha:
+                saida.append(Sinal(
+                    id=f"q{i}:{chave}:{grandeza}",
+                    nome=sinais.nome(base, grandeza, hz),
+                    unidade=conjunto.unidade,
+                    unidade_mostrada=mostrada,
+                    familia="calculado",
+                    grandeza=grandeza,
+                    conta=conta,
+                    coluna=coluna_da_grandeza(grandeza, ja_filtrado),
+                    descricao=textos[grandeza].format(p=p, q=q),
+                    origem=", ".join(
+                        nomes_de_canal.get(conjunto.canais[f.upper()],
+                                           f.upper())
+                        for f in (p, q)),
+                    linha=base,
+                    grupo=conjunto.rotulo,
+                    nota="calculado: diferença de duas fases, amostra por "
+                         "amostra",
+                    sem_sinal=conjunto.sem_sinal,
+                    conjunto=trinca,
+                ))
 
         for chave, (_, molde, descricao) in COMPONENTES.items():
             if chave == "0" and conjunto.e_de_linha:
@@ -1110,9 +1188,9 @@ def efetivo(identidade: str, medida: str, filtro: bool,
     # O resíduo é onda como um canal, e tem o par dele: `IN G1` →
     # `IN G1 · 60Hz`. A componente simétrica não tem: já é fasor de 60 Hz.
     trinca, chave, _ = original.id.split(":")
-    if chave != RESIDUAL:
+    if not e_onda_da_trinca(chave):
         return original
-    return disponiveis.get(f"{trinca}:{RESIDUAL}:{par}", original)
+    return disponiveis.get(f"{trinca}:{chave}:{par}", original)
 
 
 # ---------------------------------------------------------------------------
@@ -1180,8 +1258,11 @@ def _serie_de_conta(registro: Record, sinal: Sinal, j0: int, i1: int,
 
 
 def residuo(registro: Record, conjunto, j0: int, i1: int, lado: str,
-            divisor: float) -> np.ndarray | None:
+            divisor: float, chave: str = RESIDUAL) -> np.ndarray | None:
     """`ia + ib + ic` amostra a amostra, na janela `[j0, i1)`.
+
+    Com `chave` de linha (`ab`, `bc`, `ca`), a mesma soma com outros pesos:
+    `va − vb`. Ver `PESOS_DA_ONDA`.
 
     A conversão de TC/TP vem **antes** da soma, e tem que vir: nada garante que
     as três fases estejam gravadas na mesma relação. Somar primeiro e converter
@@ -1194,12 +1275,15 @@ def residuo(registro: Record, conjunto, j0: int, i1: int, lado: str,
     """
     canais = _canal_por_indice(registro)
     soma = None
-    for indice in conjunto.abc:
+    for indice, peso in zip(conjunto.abc, PESOS_DA_ONDA[chave], strict=True):
+        if not peso:
+            continue
         canal = canais.get(indice)
         if canal is None:
             return None
         convertido, _, _ = conversao.converter(registro.analog[indice, j0:i1],
                                                canal, lado)
+        convertido = convertido * peso
         soma = convertido if soma is None else soma + convertido
     return None if soma is None else soma / divisor
 
@@ -1213,8 +1297,8 @@ def _serie_de_componente(registro: Record, sinal: Sinal, j0: int, i1: int,
 
     # O resíduo NÃO passa por Fortescue: é soma no tempo, e depois a mesma
     # envoltória de qualquer onda. Ver o cabeçalho.
-    if chave == RESIDUAL:
-        onda = residuo(registro, conjunto, j0, i1, lado, divisor)
+    if e_onda_da_trinca(chave):
+        onda = residuo(registro, conjunto, j0, i1, lado, divisor, chave)
         if onda is None:
             return np.full(i1 - j0, np.nan)
         return envoltoria.calcular(onda, trechos, registro.line_frequency,
@@ -1332,7 +1416,7 @@ def fasor_de_componente(registro: Record, sinal: Sinal, i: int,
     _, chave, _ = sinal.id.split(":")
     # O resíduo tem onda, então tem instantâneo, RMS, DC e distorção como
     # qualquer canal — a tabelinha dele sai por outro caminho, em `leitura`.
-    if chave == RESIDUAL:
+    if e_onda_da_trinca(chave):
         return None
     posicao, _, _ = COMPONENTES[chave]
 

@@ -148,7 +148,7 @@ def tem_fasor(sinal: catalogo.Sinal) -> bool:
     if not sinal.id.startswith("q"):
         return False
     _, chave, grandeza = sinal.id.split(":")
-    if chave == catalogo.RESIDUAL:
+    if catalogo.e_onda_da_trinca(chave):
         return grandeza == "instantaneo"
     return chave in catalogo.COMPONENTES
 
@@ -362,8 +362,8 @@ def _fundamental_de(sinal: catalogo.Sinal,
         return (por_id.get(f"{base}:fundamental")
                 or por_id.get(f"{base}:rms"))
     partes = sinal.id.split(":")
-    if partes[1:2] == [catalogo.RESIDUAL]:
-        base = f"{partes[0]}:{catalogo.RESIDUAL}"
+    if catalogo.e_onda_da_trinca(partes[1] if len(partes) > 1 else ""):
+        base = f"{partes[0]}:{partes[1]}"
         return por_id.get(f"{base}:fundamental") or por_id.get(f"{base}:rms")
     return sinal                      # componente simétrica já é fasor
 
