@@ -309,4 +309,8 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
+    # Saída redirecionada para arquivo, no Windows, vira cp1252 — e o «→» do
+    # `comparar` derrubava o script no meio da lista.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     raise SystemExit(main(sys.argv[1:]))

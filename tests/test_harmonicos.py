@@ -107,6 +107,27 @@ def test_o_espectro_nunca_passa_do_teto_mesmo_se_pedirem():
     assert raias.size == 10
 
 
+@pytest.mark.parametrize("por_ciclo,ciclos,fino", [
+    (20.0, 1, False),
+    (200.0, 1, False),        # 487E a 12 kHz
+    (200.0, 7, False),
+    (200.0, 7, True),         # cursores nas pontas: todas as raias da janela
+])
+def test_a_FFT_da_o_MESMO_espectro_que_a_soma_cheia(por_ciclo, ciclos, fino,
+                                                       monkeypatch):
+    """Com taxa inteira o espectro sai da FFT (era 6,5 s num 487E com os
+    cursores nas pontas). O atalho não pode mudar número nenhum: aqui ele é
+    comparado com a soma de sempre, a que já foi conferida."""
+    rng = np.random.default_rng(7)
+    n = int(por_ciclo * ciclos)
+    y = _onda({1: 100.0, 3: 12.0, 5: 7.0}, por_ciclo, n=n) + rng.normal(0, 0.5, n)
+    rapido = fasor.espectro(y, por_ciclo * ciclos, ciclos=ciclos, fino=fino)
+    monkeypatch.setattr(fasor.np, "rint", lambda v: v + 0.5)  # desliga o atalho
+    cheio = fasor.espectro(y, por_ciclo * ciclos, ciclos=ciclos, fino=fino)
+    assert rapido.size == cheio.size
+    np.testing.assert_allclose(rapido, cheio, rtol=1e-9, atol=1e-9)
+
+
 def test_sem_janela_inteira_nao_ha_espectro():
     """Meia janela daria um espectro plausível e errado — a pior espécie."""
     assert fasor.espectro(np.ones(2), 20.0) is None

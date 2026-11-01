@@ -414,6 +414,15 @@ def espectro(amostras: np.ndarray, por_ciclo: float | None = None,
         ordens = np.arange(1, quantas * int(round(ciclos)) + 1, dtype=np.float64)
     else:
         ordens = np.arange(1, quantas + 1, dtype=np.float64) * float(ciclos)
+    indices = np.rint(ordens).astype(np.int64)
+    if (abs(n - tamanho) < 1e-9 and np.all(pesos == 1.0)
+            and np.array_equal(indices, ordens) and indices[-1] < tamanho):
+        # Janela de amostras inteiras: a soma abaixo é, termo a termo, a
+        # transformada inversa — e a FFT a faz em n·log n. A matriz cheia,
+        # num 487E a 12 kHz com os cursores nas pontas, eram ~5900 raias ×
+        # 12 000 amostras (1 GB de complexos) por sinal: 6,5 s de espera.
+        x = (2.0 / n) * (np.fft.ifft(janela) * tamanho)[indices]
+        return np.abs(x) / math.sqrt(2.0)
     giro = np.exp(1j * 2.0 * np.pi * np.outer(ordens, k) / n)
     x = (2.0 / n) * (giro @ janela)
     return np.abs(x) / math.sqrt(2.0)
