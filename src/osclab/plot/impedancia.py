@@ -118,11 +118,15 @@ class Zona:
     usa_mho: bool | None = None
     usa_quad: bool | None = None
 
-    def para_json(self, zl_modulo: float, angulo: float = 80.0) -> dict:
+    def para_json(self, zl_modulo: float, angulo: float = 80.0,
+                  direcional: float | None = None) -> dict:
         pct = (self.alcance.valor / zl_modulo * 100.0) if zl_modulo > 0 else None
         mho = geometria_mho(self.alcance.valor, angulo, self.direcao)
-        quad = (geometria_quad(self.x.valor, self.r.valor, angulo, self.direcao)
+        quad = (geometria_quad(self.x.valor, self.r.valor, angulo, self.direcao,
+                               direcional)
                 if self.x is not None and self.r is not None else None)
+        if quad is not None and len(quad) < 3:
+            quad = None     # um direcional digitado que corta a zona inteira
         return {
             "nome": self.nome,
             "alcance": self.alcance.valor,
@@ -163,18 +167,58 @@ def geometria_mho(alcance: float, angulo: float, direcao: str = "F") -> dict:
             "raio": alcance / 2.0}
 
 
+def direcional_padrao(angulo: float) -> float:
+    """A reta do direcional quando nada diz outra coisa: PERPENDICULAR ao
+    ângulo da linha, passando pela origem — `Z1ANG − 90°`. É como o OnLiner
+    desenha a SEL (ângulo de 72° → reta a −18°), e é a fronteira de meio
+    plano que deixa a mho auto-polarizada tangente a ela na origem."""
+    return angulo - 90.0
+
+
+def _cortar_no_semiplano(pontos: list[list[float]], normal: tuple[float, float]
+                         ) -> list[list[float]]:
+    """Sutherland–Hodgman contra UM semiplano: fica o que tem
+    `r·nr + x·nx ≥ 0`. A reta de corte passa pela origem."""
+    nr, nx = normal
+    lado = [p[0] * nr + p[1] * nx for p in pontos]
+    saida: list[list[float]] = []
+    for i, p in enumerate(pontos):
+        q, dp, dq = pontos[i - 1], lado[i], lado[i - 1]
+        if (dp >= 0) != (dq >= 0):
+            t = dq / (dq - dp)
+            saida.append([q[0] + t * (p[0] - q[0]), q[1] + t * (p[1] - q[1])])
+        if dp >= 0:
+            saida.append(list(p))
+    return saida
+
+
 def geometria_quad(x_alcance: float, r_alcance: float, angulo: float,
-                   direcao: str = "F") -> list[list[float]]:
-    """A quadrilateral, SIMPLIFICADA: reta de reatância em `X`, os dois
-    limites resistivos em `±R` inclinados no ângulo da linha, e o eixo R como
-    fundo. O relé de verdade inclina a reta de cima (correção de carga, `TANG`)
-    e põe o fundo no elemento direcional — aqui não, e a tela diz isso.
+                   direcao: str = "F",
+                   direcional: float | None = None) -> list[list[float]]:
+    """A quadrilateral: reta de reatância em `X`, os dois limites resistivos
+    em `±R` inclinados no ângulo da linha, e o FUNDO NO ELEMENTO DIRECIONAL —
+    uma reta pela origem no ângulo `direcional` (padrão: perpendicular à
+    linha). Por isso o lado resistivo da direita desce abaixo do eixo R e o
+    da esquerda é aparado acima dele, como o OnLiner desenha. Até 03/11/2026 o
+    fundo era o próprio eixo R, e uma falta resistiva perto do relé caía fora
+    de uma Z1 em que o relé a via.
+
+    Continua sem a inclinação da reta de cima (correção de carga, `TANG`).
     Reversa, a mesma figura espelhada na origem."""
-    passo = x_alcance / math.tan(math.radians(angulo)) if angulo else 0.0
-    pontos = [[-r_alcance, 0.0], [r_alcance, 0.0],
+    if direcional is None:
+        direcional = direcional_padrao(angulo)
+    a = math.radians(angulo)
+    passo = x_alcance / math.tan(a) if angulo else 0.0
+    # O paralelogramo com o fundo bem abaixo de onde o direcional vai cortar;
+    # quem decide o fundo é o corte, não este número.
+    fundo = -10.0 * (x_alcance + r_alcance)
+    passo_fundo = fundo / math.tan(a) if angulo else 0.0
+    pontos = [[-r_alcance + passo_fundo, fundo], [r_alcance + passo_fundo, fundo],
               [r_alcance + passo, x_alcance], [-r_alcance + passo, x_alcance]]
+    d = math.radians(direcional + 90.0)
+    pontos = _cortar_no_semiplano(pontos, (math.cos(d), math.sin(d)))
     if direcao == "R":
-        pontos = [[-a, -b] for a, b in pontos]
+        pontos = [[-r, -x] for r, x in pontos]
     return pontos
 
 
@@ -494,6 +538,8 @@ def em_secundario(manuais: dict, relacao: float | None) -> dict:
                         item[campo] = item[campo] / relacao
             novas[nome] = item
         saida["zonas"] = novas
+    if "direcional" in manuais:
+        saida["direcional"] = manuais["direcional"]   # ângulo: não tem base
     return saida
 
 
@@ -521,6 +567,13 @@ def manuais_de(cru) -> dict:
         if limpo:
             limpo["base"] = _base(zl.get("base"))
             saida["zl"] = limpo
+
+    # O ângulo da reta do direcional, quando o usuário digitou. Fica entre
+    # −90° e +90°, como o da linha: fora disso a reta é a mesma (uma reta não
+    # tem sentido) e o lado «à frente» trocaria sem ninguém pedir.
+    direcional = _angulo_valido(cru.get("direcional"))
+    if direcional is not None:
+        saida["direcional"] = direcional
 
     zonas = cru.get("zonas")
     if isinstance(zonas, dict):
@@ -758,7 +811,8 @@ def dentro_da_zona(r: float, x: float, alcance: float, angulo: float) -> bool:
 
 def entrada_nas_zonas(indices: np.ndarray, r: np.ndarray, x: np.ndarray,
                       zonas: list[Zona], angulo: float,
-                      forma: str = "mho") -> dict[str, int | None]:
+                      forma: str = "mho",
+                      direcional: float | None = None) -> dict[str, int | None]:
     """O primeiro instante em que a trajetória entra em cada zona.
 
     É o número que interessa: «entrou na Z1 no ciclo 2» responde, sozinho, se a
@@ -770,7 +824,8 @@ def entrada_nas_zonas(indices: np.ndarray, r: np.ndarray, x: np.ndarray,
     """
     saida: dict[str, int | None] = {}
     for zona in zonas:
-        poligono = (geometria_quad(zona.x.valor, zona.r.valor, angulo, "F")
+        poligono = (geometria_quad(zona.x.valor, zona.r.valor, angulo, "F",
+                                   direcional)
                     if zona.x is not None and zona.r is not None else None)
         usar_mho = forma in ("mho", "ambas") and zona.alcance.valor > 0
         usar_quad = forma in ("quad", "ambas") and poligono is not None
@@ -1176,6 +1231,19 @@ def montar(registro: Record, painel, ajustes_do_registro: dict,
         zonas_de(ajustes, parametros, laco, registro.line_frequency or 60.0),
         manuais.get("zonas"))
     angulo = parametros.angulo.valor if parametros else 80.0
+    # A reta do direcional, fundo da quadrilateral. Digitada vence; sem ela,
+    # perpendicular ao ângulo da linha — que é o que a SEL faz e o OnLiner
+    # desenha. Nenhum relé do parque escreve esse ângulo como ajuste próprio
+    # que o arquivo traga; quem usa duas retas (ABB `ArgDir`/`ArgNegRes`)
+    # digita a de baixo aqui.
+    if manuais.get("direcional") is not None:
+        direcional = {"angulo": manuais["direcional"], "origem": "digitado",
+                      "como": "digitado"}
+    else:
+        direcional = {"angulo": direcional_padrao(angulo),
+                      "origem": "calculado" if parametros else "sugerido",
+                      "como": "perpendicular ao ângulo da linha (Z1ANG − 90°)"}
+    ang_dir = direcional["angulo"]
     forma_lida = caracteristica_de(ajustes, laco)
     escolha = str(getattr(painel, "caracteristica", "") or "").lower()
     if escolha not in ("mho", "quad", "ambas"):
@@ -1228,18 +1296,19 @@ def montar(registro: Record, painel, ajustes_do_registro: dict,
                           else "secundario")
     para_o_formulario = {
         "zl": parametros.para_json() if parametros else None,
-        "zonas": [z.para_json(parametros.modulo.valor if parametros else 0.0, angulo)
+        "zonas": [z.para_json(parametros.modulo.valor if parametros else 0.0, angulo, ang_dir)
                   for z in zonas],
         "base": base_do_formulario,
         "relacao": relacao,
         "relacao_lida": relacao_lida,
         "relacao_digitada": bool(pedidos.get("relacao")),
+        "direcional": direcional,
     }
 
     if not zonas:
         entradas: dict[str, int | None] = {}
     elif comparavel:
-        entradas = entrada_nas_zonas(indices, r, x, zonas, angulo, escolha)
+        entradas = entrada_nas_zonas(indices, r, x, zonas, angulo, escolha, ang_dir)
     else:
         entradas = {z.nome: None for z in zonas}
 
@@ -1274,9 +1343,10 @@ def montar(registro: Record, painel, ajustes_do_registro: dict,
     return {
         **cabecalho,
         "pontos": pontos,
-        "zonas": [z.para_json(parametros.modulo.valor if parametros else 0.0, angulo)
+        "zonas": [z.para_json(parametros.modulo.valor if parametros else 0.0, angulo, ang_dir)
                   for z in zonas],
         "parametros": parametros.para_json() if parametros else None,
+        "direcional": direcional,
         "caracteristica": {**forma_lida, "escolhida": escolha},
         "k0": None if compensacao is None else {
             "re": k0.real, "im": k0.imag,

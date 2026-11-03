@@ -10023,6 +10023,29 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       criar("span", "unidade-do-campo", "°"),
       origemChip(zlBase.origem, zlBase.variavel));
     blocoLinha.append(linhaZ1);
+    // O DIRECIONAL: a reta que serve de fundo à quadrilateral. Sem nada
+    // digitado é perpendicular ao ângulo da linha; campo vazio volta a isso.
+    const dirBase = base.direcional || painel.direcional;
+    if (dirBase) {
+      const linhaDir = criar("div", "linha-de-parametros");
+      linhaDir.append(
+        criar("span", "titulo-do-bloco", "direcional"),
+        campoDoAjuste(formatar(dirBase.angulo, 1),
+          (v) => {
+            if (String(v).trim() === "") delete rascunho.direcional;
+            else {
+              const n = numeroDigitado(v);
+              if (n === null || n < -90 || n > 90) return;
+              rascunho.direcional = n;
+            }
+            mudou();
+          },
+          "Ângulo da reta do elemento direcional, que corta o fundo da "
+          + "quadrilateral. Padrão: ângulo da linha − 90°. Apague para voltar a ele."),
+        criar("span", "unidade-do-campo", "°"),
+        origemChip(dirBase.origem, dirBase.origem === "digitado" ? "" : dirBase.como));
+      blocoLinha.append(linhaDir);
+    }
     // Z0 e k0: só leitura aqui — o k0 é o que corrige o laço de terra.
     const k0 = painel.k0;
     blocoLinha.append(criar("p", "nota-da-linha", k0
@@ -10185,9 +10208,9 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     caixa.append(pe);
     if (formaEmVista() !== "mho") {
       caixa.append(criar("p", "nota-do-menu",
-        "A quadrilateral é desenhada SIMPLIFICADA: reta de reatância em X e os "
-        + "limites resistivos em ±R inclinados no ângulo da linha. O relé "
-        + "inclina a reta de cima e põe o fundo no direcional."));
+        "Quadrilateral: reta de reatância em X, limites resistivos em ±R "
+        + "inclinados no ângulo da linha e o fundo na reta do direcional. A reta "
+        + "de cima fica horizontal — o relé a inclina (correção de carga)."));
     }
 
     // --- pendurar no corpo, e não no painel ------------------------------
@@ -10663,6 +10686,38 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
              (Math.max(...z.quad.map((q) => q[1])) + Math.min(...z.quad.map((q) => q[1]))) / 2];
         ctx.fillText(rotulo, X(dirR) + 6, Y(altX));
       }
+      ctx.restore();
+    }
+
+    // --- a reta do direcional -------------------------------------------
+    // O fundo da quadrilateral: a zona à frente só existe do lado de cima
+    // dela, a reversa só do de baixo. Desenhada inteira, tracejada e fina,
+    // como no OnLiner — sem ela o corte das zonas parece defeito do desenho.
+    const dir = painel.direcional;
+    if (dir && Number.isFinite(dir.angulo) && modoZonas !== "nenhuma"
+        && (forma === "quad" || forma === "ambas")) {
+      const d = dir.angulo * Math.PI / 180;
+      const longe = 4 * ((rMax - rMin) + (xMax - xMin));
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(esqDoQuadro, m.topo, util.l, util.a);
+      ctx.clip();
+      ctx.strokeStyle = suave;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(X(-longe * Math.cos(d)), Y(-longe * Math.sin(d)));
+      ctx.lineTo(X(longe * Math.cos(d)), Y(longe * Math.sin(d)));
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // O rótulo vai no 4º quadrante, onde a reta desce para a direita e
+      // nenhuma zona à frente mora.
+      const rr = Math.min(rMax * 0.85, (xMin * 0.85) / Math.tan(d) || rMax * 0.85);
+      ctx.fillStyle = suave;
+      ctx.font = "9.5px var(--mono), monospace";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "top";
+      ctx.fillText(`direcional ${formatar(dir.angulo, 0)}°`, X(rr), Y(rr * Math.tan(d)) + 4);
       ctx.restore();
     }
 

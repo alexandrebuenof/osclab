@@ -969,3 +969,49 @@ def test_o_rele_dentro_da_nossa_entrada_de_falta_e_possivel_medida_no_transitori
     # Fora da entrada, continua divergindo; e o defeito firme não se esconde aqui.
     assert c.julgar_distancia(58.2, 47.0, 0.9, "", (38.8, 50.0)).veredito == c.DIVERGE
     assert c.julgar_distancia(40.0, 68.0, 1.5, "", None).veredito == c.DIVERGE
+
+
+# ---------------------------------------------------------------------------
+# O fundo da quadrilateral é o DIRECIONAL (03/11/2026)
+# ---------------------------------------------------------------------------
+
+def test_o_fundo_da_quadrilateral_e_a_reta_perpendicular_a_linha():
+    """Como o OnLiner desenha a SEL: a 72° a reta do direcional fica a −18°,
+    o lado resistivo da direita desce abaixo do eixo R e o da esquerda é
+    aparado acima dele. Todo vértice fica do lado «à frente» da reta."""
+    a = math.radians(72.0)
+    q = impedancia.geometria_quad(10.0, 5.0, 72.0)
+    assert min(x for _, x in q) < 0           # desce abaixo do eixo R
+    for r, x in q:
+        assert r * math.cos(a) + x * math.sin(a) >= -1e-9
+    # O vértice de baixo à direita está NA reta: r·cos a + x·sen a = 0.
+    direita = max(q, key=lambda p: p[0] - p[1])
+    assert abs(direita[0] * math.cos(a) + direita[1] * math.sin(a)) < 1e-9
+    # A reta de cima continua em X = 10.
+    assert max(x for _, x in q) == 10.0
+
+
+def test_a_quadrilateral_reversa_e_a_mesma_figura_espelhada():
+    f = impedancia.geometria_quad(10.0, 5.0, 72.0, "F")
+    r = impedancia.geometria_quad(10.0, 5.0, 72.0, "R")
+    assert r == [[-a, -b] for a, b in f]
+
+
+def test_o_direcional_digitado_vale_e_fora_da_faixa_e_recusado():
+    assert impedancia.manuais_de({"direcional": "-22"})["direcional"] == -22.0
+    assert "direcional" not in impedancia.manuais_de({"direcional": "120"})
+    q = impedancia.geometria_quad(10.0, 5.0, 72.0, direcional=-30.0)
+    n = math.radians(60.0)
+    for r, x in q:
+        assert r * math.cos(n) + x * math.sin(n) >= -1e-9
+
+
+def test_falta_resistiva_logo_abaixo_do_eixo_R_entra_na_Z1_quadrilateral():
+    """Era o defeito: com o eixo R de fundo, um ponto em (4, −0,5) ficava
+    fora — e o direcional da SEL o vê à frente, dentro da Z1."""
+    zona = impedancia.Zona("Z1", impedancia.Numero(8.0, "lido"), "inst.",
+                           x=impedancia.Numero(8.0, "lido"),
+                           r=impedancia.Numero(5.0, "lido"))
+    e = impedancia.entrada_nas_zonas(np.array([7]), np.array([4.0]),
+                                     np.array([-0.5]), [zona], 72.0, "quad")
+    assert e["Z1"] == 7
