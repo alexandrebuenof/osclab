@@ -12093,7 +12093,10 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
                           : (p.fonte === "manual" ? "digitada" : "lida do relé");
       s.append(criar("b", null, nome || "—"),
                document.createTextNode(` · ${numLoc(p.linha.km, 1)} km · ${origem}`));
-      const trecho = base && base.terminais ? `\nTrecho: ${base.terminais.join(" ↔ ")}` : "";
+      const trecho = base && base.terminais ? `\nDe A a B: ${base.terminais.join(" ↔ ")}` : "";
+      // A derivação fica dita ao lado do nome: a conta é A–B, e o TAP muda o
+      // que ela significa.
+      if (base && base.tap) s.append(criar("span", "marca-3t tap", `TAP: ${base.tap.nome}`));
       s.title = `Linha em uso: ${nome}\nZ1 = ${numLoc(p.linha.r, 3)} + j${numLoc(p.linha.x, 3)} Ω`
         + (p.linha.r0 != null ? ` · Z0 = ${numLoc(p.linha.r0, 3)} + j${numLoc(p.linha.x0, 3)} Ω`
                               : " · sem Z0")
@@ -12176,17 +12179,170 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       const campo = document.createElement("input");
       campo.type = "search";
       campo.placeholder = "procurar pelo nome da linha ou de uma subestação…";
-      fila.append(campo);
+      // Só as linhas com derivação: é onde há o que conferir e marcar.
+      const soDerivacao = criar("button", "chave", "só com derivação");
+      soDerivacao.type = "button";
+      soDerivacao.title = "Mostra só as linhas de três terminais e as linhas em trechos "
+                        + "sem TAP confirmado.";
+      fila.append(campo, soDerivacao);
       const resumo = criar("p", "resumo-das-linhas", "");
+      const aviso3t = criar("p", "aviso-3t", "");
       const tabela = criar("div", "tabela-de-linhas");
-      corpo.replaceChildren(fila, resumo, tabela);
-      let porKm = false, vez = 0, primeira = null;
+      corpo.replaceChildren(fila, resumo, aviso3t, tabela);
+      let porKm = false, vez = 0, primeira = null, filtro = false;
+      const abertas = new Set();
       const daBase = p && p.fonte === "base" ? ((p.fontes || {}).base || {}) : {};
       // O mesmo nome pode ser dois trechos de uma derivação: compara-se
       // nome E terminais.
       const chaveDe = (nome, s, r) => `${nome}|${s}|${r}`;
       const emUsoChave = daBase.como
         ? chaveDe(daBase.como, ...(daBase.terminais || ["", ""])) : null;
+      soDerivacao.addEventListener("click", () => {
+        filtro = !filtro;
+        soDerivacao.classList.toggle("escolhido", filtro);
+        listar();
+      });
+      const escolher = (x, tipo) => usar(() => {
+        estadoLoc.linha_base = { nome: x.nome, tipo, terminal_s: x.terminal_s,
+                                 terminal_r: x.terminal_r };
+        estadoLoc.fonte = "base";
+      });
+      async function gravar3t(corpoDoPedido) {
+        try {
+          const r = await fetch("/api/base/linhas-3t", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(corpoDoPedido),
+          });
+          const d = await r.json();
+          if (!r.ok) { aviso3t.textContent = `não gravou: ${d.erro || "erro"}`; return false; }
+        } catch (_e) {
+          aviso3t.textContent = "não gravou: o servidor não respondeu";
+          return false;
+        }
+        listar();
+        recalcularLoc();
+        return true;
+      }
+
+      // Uma linha da tabela. `sub` = linha de dentro (perna ou trecho).
+      function linhaDaTabela(x, { sub = false, marcas = [] } = {}) {
+        const linha = criar("div", "linha-da-lt" + (sub ? " de-dentro" : "")
+          + (x.sugerida ? " sugerida" : "")
+          + (chaveDe(x.nome, x.terminal_s, x.terminal_r) === emUsoChave ? " em-uso" : ""));
+        const nome = criar("span", "col-nome");
+        nome.append(criar("span", "nome-da-linha", sub ? `${x.terminal_s} ↔ ${x.terminal_r}` : x.nome));
+        for (const [classe, texto, dica] of marcas) {
+          const m = criar("span", `marca-3t ${classe}`, texto);
+          if (dica) m.title = dica;
+          nome.append(m);
+        }
+        linha.append(criar("span", "col-sug", x.sugerida ? "★" : ""), nome,
+                     criar("span", "col-term", sub ? "" : `${x.terminal_s} ↔ ${x.terminal_r}`),
+                     criar("span", "col-km", numLoc(x.comprimento_km, 1)),
+                     criar("span", "col-z1", x.z1_mod == null ? "—"
+                           : `${numLoc(x.z1_mod, 2)} ∠ ${numLoc(x.z1_ang, 1)}°`),
+                     criar("span", "col-z0" + (x.r0_ohm == null ? " falta" : ""),
+                           x.r0_ohm == null ? "sem" : "sim"),
+                     criar("span", "col-b1", x.b1_us ? numLoc(x.b1_us, 0) : "—"));
+        return linha;
+      }
+
+      // O botão de abrir (▸) de uma entrada que tem coisa dentro.
+      function abridor(x, linha) {
+        const b = criar("button", "abrir-3t", abertas.has(x.nome) ? "▾" : "▸");
+        b.type = "button";
+        b.title = "mostrar as pernas e os trechos desta linha";
+        b.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          if (abertas.has(x.nome)) abertas.delete(x.nome); else abertas.add(x.nome);
+          listar();
+        });
+        linha.querySelector(".col-sug").replaceWith(b);
+        if (x.sugerida) b.textContent += "★";
+      }
+
+      // As três pernas de um circuito de três terminais, com o papel de cada
+      // uma — a dedução vem escrita; trocar grava «marcado».
+      function pernasDe(x) {
+        const caixa = criar("div", "dentro-3t");
+        const origem = x.papeis === "marcado" ? "papéis marcados por você"
+                     : "papéis DEDUZIDOS: A e B pelo nome da linha, TAP a terceira ponta";
+        caixa.append(criar("p", "resumo-das-linhas",
+          `ponto de junção ${x.ponto} · ${origem}` + (x.nota ? ` · ${x.nota}` : "")));
+        const escolhas = [];
+        for (const perna of x.pernas) {
+          const fila3 = criar("div", "linha-da-lt de-dentro perna-3t");
+          const sel = document.createElement("select");
+          for (const papel of ["A", "B", "TAP"]) {
+            const o = criar("option", null, papel);
+            o.value = papel;
+            o.selected = perna.papel === papel;
+            sel.append(o);
+          }
+          escolhas.push(sel);
+          const z1 = perna.r1 == null || perna.x1 == null ? "—"
+            : `${numLoc(Math.hypot(perna.r1, perna.x1), 2)} ∠ ${numLoc(Math.atan2(perna.x1, perna.r1) * 180 / Math.PI, 1)}°`;
+          const nome = criar("span", "col-nome", perna.nome || "?");
+          if (perna.barra && perna.barra !== perna.nome) {
+            nome.append(criar("span", "barra-3t", ` barra ${perna.barra}`));
+          }
+          fila3.append(criar("span", "col-sug", ""), nome, criar("span", "col-term", ""),
+                       criar("span", "col-km", numLoc(perna.km, 1)), criar("span", "col-z1", z1),
+                       criar("span", "col-z0" + (perna.r0 == null ? " falta" : ""),
+                             perna.r0 == null ? "sem" : "sim"),
+                       criar("span", "col-b1", ""));
+          fila3.prepend(sel);
+          caixa.append(fila3);
+        }
+        const acoes = criar("div", "fila-loc");
+        const gravar = criar("button", "chave", "gravar os papéis");
+        gravar.type = "button";
+        gravar.addEventListener("click", () => gravar3t({
+          acao: "papeis", nome: x.nome, papeis: escolhas.map((s) => s.value) }));
+        acoes.append(gravar);
+        if (x.origem === "manual") {
+          const tirar = criar("button", "chave", "tirar o cadastro à mão");
+          tirar.type = "button";
+          tirar.title = "Volta a linha a «trechos sem TAP confirmado». Os trechos da base não mudam.";
+          tirar.addEventListener("click", () => gravar3t({ acao: "remover", nome: x.nome }));
+          acoes.append(tirar);
+        }
+        caixa.append(acoes);
+        return caixa;
+      }
+
+      // Os trechos de uma linha (escolhíveis um a um, como sempre) e, se o
+      // TAP não foi confirmado, o cadastro à mão.
+      function trechosDe(x) {
+        const caixa = criar("div", "dentro-3t");
+        for (const t of x.trechos) {
+          const l = linhaDaTabela({ ...t, sugerida: false }, { sub: true });
+          l.title = "Clique para usar SÓ este trecho.";
+          l.addEventListener("click", () => escolher(t, "linha"));
+          caixa.append(l);
+        }
+        if (x.tipo !== "trechos") return caixa;
+        const marcar = criar("div", "fila-loc cadastro-3t");
+        const ponto = document.createElement("select");
+        x.pontos.forEach((nomeDoPonto, i) => {
+          const o = criar("option", null, nomeDoPonto);
+          o.value = String(i);
+          ponto.append(o);
+        });
+        const tap = document.createElement("input");
+        tap.placeholder = "nome do TAP (a SE da derivação)";
+        const km = document.createElement("input");
+        km.className = "num-loc";
+        km.placeholder = "km (opcional)";
+        const gravar = criar("button", "chave", "marcar como três terminais");
+        gravar.type = "button";
+        gravar.addEventListener("click", () => gravar3t({
+          acao: "cadastrar", nome: x.nome, ponto: Number(ponto.value),
+          tap: tap.value, tap_km: km.value.replace(",", ".") }));
+        marcar.append(criar("label", null, "TAP no ponto"), ponto, tap, km, gravar);
+        caixa.append(marcar);
+        return caixa;
+      }
 
       async function listar() {
         const minha = ++vez;
@@ -12202,6 +12358,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         primeira = null;
         if (!d.base) {
           resumo.textContent = "Sem base de dados ativa: digite os parâmetros na aba «Digitar».";
+          aviso3t.textContent = "";
           return;
         }
         const sug = d.linhas.filter((x) => x.sugerida).length;
@@ -12209,40 +12366,56 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
           + (sug ? ` · ${sug} sugerida${sug > 1 ? "s" : ""} pelo nome do registro`
                  : (d.estacao ? ` · nenhuma tem «${d.estacao}» num terminal`
                               : " · o registro não diz a estação: procure pelo nome"));
-        const titulos = criar("div", "linha-da-base cabeca-das-linhas");
+        // O AVISO das derivações: quantas o OnLiner deixou reconhecer, quantas
+        // pedem conferência e quantas ficaram em trechos sem TAP confirmado.
+        const r3 = d.resumo_3t || {};
+        aviso3t.textContent = (r3.tres_terminais || r3.trechos_sem_tap)
+          ? `Derivações: ${r3.tres_terminais || 0} linha(s) de três terminais`
+            + (r3.conferir ? ` (${r3.conferir} a conferir)` : "")
+            + (r3.trechos_sem_tap ? ` · ${r3.trechos_sem_tap} em trechos sem TAP confirmado`
+                                   + " — confira e marque A, B e TAP" : "")
+          : "";
+        const titulos = criar("div", "linha-da-lt cabeca-das-linhas");
         const colKm = criar("span", "col-km", porKm ? "km ▴" : "km");
         colKm.title = "ordenar pelo comprimento";
         colKm.addEventListener("click", () => { porKm = !porKm; listar(); });
         titulos.append(criar("span", "col-sug", ""), criar("span", "col-nome", "linha"),
-                       criar("span", "col-term", "terminais"), colKm,
+                       criar("span", "col-term", "terminais (A ↔ B)"), colKm,
                        criar("span", "col-z1", "Z1 (Ω)"), criar("span", "col-z0", "Z0"),
                        criar("span", "col-b1", "B1 (µS)"));
         tabela.append(titulos);
-        const itens = porKm ? [...d.linhas].sort((a, b) => a.comprimento_km - b.comprimento_km)
-                            : d.linhas;
+        let itens = filtro ? d.linhas.filter((x) => x.tipo !== "linha") : d.linhas;
+        if (porKm) itens = [...itens].sort((a, b) => (a.comprimento_km || 0) - (b.comprimento_km || 0));
         if (!itens.length) tabela.append(criar("p", "resumo-das-linhas", "nenhuma linha com esse texto"));
         for (const x of itens) {
-          const linha = criar("div", "linha-da-base"
-            + (x.sugerida ? " sugerida" : "")
-            + (chaveDe(x.nome, x.terminal_s, x.terminal_r) === emUsoChave ? " em-uso" : ""));
-          linha.append(criar("span", "col-sug", x.sugerida ? "★" : ""),
-                       criar("span", "col-nome", x.nome),
-                       criar("span", "col-term", `${x.terminal_s} ↔ ${x.terminal_r}`),
-                       criar("span", "col-km", numLoc(x.comprimento_km, 1)),
-                       criar("span", "col-z1", `${numLoc(x.z1_mod, 2)} ∠ ${numLoc(x.z1_ang, 1)}°`),
-                       criar("span", "col-z0" + (x.r0_ohm == null ? " falta" : ""),
-                             x.r0_ohm == null ? "sem" : "sim"),
-                       criar("span", "col-b1", x.b1_us ? numLoc(x.b1_us, 0) : "—"));
+          const marcas = [];
+          if (x.tipo === "3t") {
+            marcas.push(["tap", `TAP: ${x.tap || "?"}`,
+                         "Linha de três terminais: a conta usa o caminho A–B, e o TAP é tratado como carga."]);
+            if (x.situacao !== "certo") marcas.push(["conferir", "conferir", x.nota]);
+            if (x.origem === "manual") marcas.push(["manual", "à mão", "TAP cadastrado à mão"]);
+          } else if (x.tipo === "trechos") {
+            marcas.push(["trechos", `${x.trechos.length} trechos · TAP?`,
+                         `Ponto do meio: ${x.pontos.join(", ")}. O OnLiner não deixou confirmar se ali há `
+                         + "uma derivação. Abra (▸) para marcar o TAP, ou use a linha somada."]);
+          }
+          const linha = linhaDaTabela(x, { marcas });
           linha.title = (x.sugerida ? `Sugerida: «${x.casou.join("», «")}» está no nome do registro.\n` : "")
             + (x.r0_ohm == null ? "Sem Z0: o laço da falta à terra não roda com esta linha.\n" : "")
-            + "Clique para usar esta linha.";
-          linha.addEventListener("click", () => usar(() => {
-            estadoLoc.linha_base = { nome: x.nome, terminal_s: x.terminal_s,
-                                     terminal_r: x.terminal_r };
-            estadoLoc.fonte = "base";
-          }));
+            + (x.motivo ? `${x.motivo}\n` : "")
+            + (x.tipo === "linha" ? "Clique para usar esta linha."
+                                  : "Clique para usar a linha de A a B; ▸ mostra as pernas e os trechos.");
+          if (x.tipo !== "linha") abridor(x, linha);
+          linha.addEventListener("click", () => {
+            if (x.motivo) { aviso3t.textContent = x.motivo; return; }
+            escolher(x, x.tipo);
+          });
           if (!primeira) primeira = linha;
           tabela.append(linha);
+          if (abertas.has(x.nome)) {
+            if (x.tipo === "3t") tabela.append(pernasDe(x));
+            tabela.append(trechosDe(x));
+          }
         }
       }
       let espera = null;
@@ -12516,6 +12689,9 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     }
     el.append(legenda);
     if (pacoteLoc && pacoteLoc.aviso) el.append(criar("p", "pl-aviso", pacoteLoc.aviso));
+    // A derivação (TAP) da linha em uso, ou os trechos sem TAP confirmado:
+    // vale enquanto essa linha estiver na conta.
+    if (pacoteLoc && pacoteLoc.aviso_linha) el.append(criar("p", "pl-aviso", pacoteLoc.aviso_linha));
 
     const corpo = criar("div", "grafico-corpo");
     const caixa = criar("div", "tela");
@@ -17611,7 +17787,8 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         + (l.r0 != null ? `Z0 = <b>${numLoc(l.r0, 3)} + j${numLoc(l.x0, 3)} Ω</b>${p.z0_de && p.z0_de !== p.fonte ? ` (de ${NOMES_DAS_FONTES[p.z0_de]})` : ""}` : `<span class="loc-aten">sem Z0</span>`)
         + ` · <b>${numLoc(l.km, 2)} km</b>`
         + (l.b1 != null ? ` · B1 = <b>${numLoc(l.b1, 1)} µS</b>` : "")
-        + ` · primário, linha inteira · de ${NOMES_DAS_FONTES[p.fonte]}${estadoLoc.fonte === "auto" ? " (automático)" : ""}</div>`;
+        + ` · primário, linha inteira · de ${NOMES_DAS_FONTES[p.fonte]}${estadoLoc.fonte === "auto" ? " (automático)" : ""}</div>`
+        + (p.aviso_linha ? `<div class="loc-aviso">${htmlLoc(p.aviso_linha)}</div>` : "");
     } else {
       s += `<div class="loc-aviso">Nenhuma fonte tem o parâmetro da linha: digite abaixo.</div>`;
     }

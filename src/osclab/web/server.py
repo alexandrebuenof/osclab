@@ -80,6 +80,7 @@ from osclab.basedados import digitais as digitais_mod
 from osclab.basedados import linhas as linhas_mod
 from osclab.basedados import navegar as navegar_mod
 from osclab.basedados import pasta as base_mod
+from osclab.basedados import tres_terminais as tres_terminais_mod
 from osclab.dsp import fasor as fasor_mod
 from osclab.faultloc import ldl as ldl_mod
 from osclab.faultloc import rele as rele_mod
@@ -523,23 +524,42 @@ def create_app() -> Flask:
         if isinstance(pedida_base, str):
             pedida_base = {"nome": pedida_base}
         escolhida = str(pedida_base.get("nome") or "").strip()
+
+        def fonte_da_entrada(pedido: dict, escolha: bool) -> dict:
+            """Uma entrada da base (`linhas.entradas`) como fonte da conta: o
+            trecho, o circuito de três terminais (caminho A–B) ou os trechos
+            somados."""
+            nome = str(pedido.get("nome") or "").strip()
+            tipo = pedido.get("tipo") or "linha"
+            nao_esta = {"ok": False, "motivo": f"a linha «{nome}» não está na base"}
+            if tipo == "3t":
+                c = tres_terminais_mod.de_nome(base, nome)
+                fonte = tres_terminais_mod.caminho_de_circuito(c) if c else nao_esta
+            elif tipo == "trechos":
+                trechos = tres_terminais_mod.trechos_de(base, nome)
+                fonte = (tres_terminais_mod.caminho_de_trechos(trechos)
+                         if len(trechos) > 1 else nao_esta)
+            else:
+                achada = linhas_mod.escolhida(base, nome, pedido.get("terminal_s"),
+                                              pedido.get("terminal_r"))
+                fonte = (dict(seqneg_mod.linha_da_base(achada),
+                              terminais=[achada.terminal_s, achada.terminal_r])
+                         if achada else nao_esta)
+            if fonte.get("ok"):
+                fonte = dict(fonte, escolhida=escolha)
+            return fonte
+
         if escolhida and tem_base:
-            achada = linhas_mod.escolhida(base, escolhida, pedida_base.get("terminal_s"),
-                                          pedida_base.get("terminal_r"))
-            fontes["base"] = (dict(seqneg_mod.linha_da_base(achada), escolhida=True,
-                                   terminais=[achada.terminal_s, achada.terminal_r])
-                              if achada else
-                              {"ok": False,
-                               "motivo": f"a linha «{escolhida}» não está na base"})
+            fontes["base"] = fonte_da_entrada(pedida_base, True)
         elif tem_base and len(terminais) > 1:
             achadas = linhas_mod.procurar(base, textos(terminais[0]), textos(terminais[1]))
             if len(achadas) == 1:
-                fontes["base"] = seqneg_mod.linha_da_base(achadas[0])
+                fontes["base"] = fonte_da_entrada(achadas[0], False)
             else:
                 fontes["base"] = {"ok": False, "motivo": (
                     "mais de uma linha da base casa com estes terminais"
                     if achadas else "nenhuma linha da base casa com estes terminais"),
-                    "candidatas": [x.nome for x in achadas]}
+                    "candidatas": [x["nome"] for x in achadas]}
         elif tem_base:
             fontes["base"] = {"ok": False, "motivo": (
                 "com um terminal só, a base não casa a linha sozinha — escolha-a "
@@ -590,7 +610,10 @@ def create_app() -> Flask:
                                     linha, t, colunas, chave, colunas_ondas)
         pacote.update(fontes=fontes, fonte=usada, pedida=pedida, z0_de=z0_de,
                       linha=linha, nomes={x["letra"]: x["nome"] for x in terminais},
-                      alinhamento=b["alinhamento"] if b else None)
+                      alinhamento=b["alinhamento"] if b else None,
+                      # O aviso da derivação (TAP) ou dos trechos sem TAP
+                      # confirmado: a tela o mostra enquanto essa linha vale.
+                      aviso_linha=(fontes.get(usada) or {}).get("aviso", "") if usada else "")
         if corpo.get("painel"):
             # O painel «localizador de faltas» lê os DOIS cursores e o número
             # do relé. O cursor 2 é a mesma conta guardada, lida noutro
@@ -625,8 +648,9 @@ def create_app() -> Flask:
         textos = [registro.station, registro.device_id, acervo.apelido(sha),
                   item.nome if item else ""]
         return jsonify(base=True, nome_da_base=base.nome,
-                       total=len(linhas_mod.listar(base)), estacao=registro.station,
-                       linhas=linhas_mod.buscar(base, request.args.get("q") or "", textos))
+                       total=len(linhas_mod.entradas(base)), estacao=registro.station,
+                       linhas=linhas_mod.buscar(base, request.args.get("q") or "", textos),
+                       resumo_3t=tres_terminais_mod.resumo(base))
 
     @app.post("/api/base/linhas")
     def guardar_linha():
@@ -657,6 +681,38 @@ def create_app() -> Flask:
             return jsonify(erro="dê um nome à linha"), 400
         linhas_mod.gravar(base, linha)
         return jsonify(linha=linha.como_dicionario())
+
+    @app.post("/api/base/linhas-3t")
+    def linhas_de_tres_terminais():
+        """O que se edita das linhas de três terminais, na janela «parâmetros».
+
+        `{acao: "papeis", nome, papeis: [p1, p2, p3]}` grava qual perna é A, B
+        e TAP; `{acao: "cadastrar", nome, ponto, tap, tap_km}` marca à mão o
+        TAP que o OnLiner não deixou reconhecer; `{acao: "remover", nome}` tira
+        um cadastro feito à mão. Tudo vai para o `linhas-3t.csv`; o `linhas.csv`
+        não é tocado.
+        """
+        base = base_mod.ativa()
+        if base is None or not base.existe:
+            return jsonify(erro="Não há base de dados ativa."), 400
+        corpo = request.get_json(silent=True) or {}
+        nome, acao = str(corpo.get("nome") or ""), corpo.get("acao")
+        try:
+            if acao == "papeis":
+                tres_terminais_mod.marcar(base, nome, list(corpo.get("papeis") or []))
+            elif acao == "cadastrar":
+                bruto = corpo.get("tap_km")
+                km = _numero(str(bruto)) if bruto not in (None, "") else None
+                tres_terminais_mod.cadastrar(base, nome, int(corpo.get("ponto") or 0),
+                                             str(corpo.get("tap") or ""), km)
+            elif acao == "remover":
+                if not tres_terminais_mod.remover_manual(base, nome):
+                    return jsonify(erro="só se remove o que foi cadastrado à mão"), 400
+            else:
+                return jsonify(erro="ação desconhecida"), 400
+        except (TypeError, ValueError) as exc:
+            return jsonify(erro=str(exc)), 400
+        return jsonify(ok=True, resumo=tres_terminais_mod.resumo(base))
 
     @app.delete("/api/aguardando")
     def esquecer_aguardando():

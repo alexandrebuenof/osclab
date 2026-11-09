@@ -99,7 +99,7 @@ def test_base_de_linhas_grava_le_e_casa_os_terminais(tmp_path):
     assert lidas[0].x1_ohm == pytest.approx(3.759)
     # Em qualquer ordem dos terminais, por trecho do texto do registro.
     achadas = linhas.procurar(base, ["UPC1 BARRO DURO SEL-451"], ["LT COXIPO I UPC1"])
-    assert [x.nome for x in achadas] == ["LT COXIPO - BDURO"]
+    assert [x["nome"] for x in achadas] == ["LT COXIPO - BDURO"]
     assert linhas.procurar(base, ["SE ALFA"], ["SE BETA"]) == []
 
 

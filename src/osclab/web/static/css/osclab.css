@@ -6000,7 +6000,7 @@ table.verbetes tr.pendente td:first-child { box-shadow: inset 3px 0 0 var(--dest
    desenho das abas de IED, corpo de ALTURA FIXA — trocar de aba ou digitar
    na busca não pode fazer o «aplicar» fugir de debaixo do mouse — e o pé.
    ---------------------------------------------------------------------- */
-.busca.parametros-loc { width: min(860px, 94vw); }
+.busca.parametros-loc { width: min(1180px, 96vw); }
 .busca.parametros-loc[open] { display: flex; flex-direction: column; }
 .parametros-loc .cabeca .pl-linha-em-uso { min-width: 0; }
 /* Rola só a TABELA: com a janela inteira rolando, o campo de busca subia e
@@ -6014,14 +6014,14 @@ table.verbetes tr.pendente td:first-child { box-shadow: inset 3px 0 0 var(--dest
 .parametros-loc .tabela-de-linhas { flex: 1; min-height: 0; overflow-y: auto; }
 .parametros-loc .resumo-das-linhas { margin: 2px 0 6px; color: var(--suave); font-size: 11px; }
 .parametros-loc .tabela-de-linhas { font-family: var(--mono); font-size: 12px; }
-.parametros-loc .linha-da-base {
+.parametros-loc .linha-da-lt {
   display: flex; align-items: center; gap: 10px; padding: 3px 4px;
   border-radius: 4px; cursor: pointer; color: var(--suave);
 }
-.parametros-loc .linha-da-base:hover { background: var(--fundo); color: var(--tinta); }
-.parametros-loc .linha-da-base.sugerida { color: var(--tinta); }
+.parametros-loc .linha-da-lt:hover { background: var(--fundo); color: var(--tinta); }
+.parametros-loc .linha-da-lt.sugerida { color: var(--tinta); }
 /* A linha que está valendo: contorno, não fundo — o fundo é do hover. */
-.parametros-loc .linha-da-base.em-uso { box-shadow: inset 0 0 0 1px var(--destaque); }
+.parametros-loc .linha-da-lt.em-uso { box-shadow: inset 0 0 0 1px var(--destaque); }
 .parametros-loc .cabeca-das-linhas {
   position: sticky; top: 0; z-index: 1; cursor: default;
   background: var(--superficie); color: var(--suave);
@@ -6046,7 +6046,44 @@ table.verbetes tr.pendente td:first-child { box-shadow: inset 3px 0 0 var(--dest
 /* Ao lado do botão «parâmetros»: qual linha está valendo. */
 .pl-linha-em-uso {
   font-family: var(--mono); font-size: 12px; color: var(--suave);
-  max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 560px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .pl-linha-em-uso b { color: var(--tinta); font-weight: 600; }
 .pl-linha-em-uso.sem { color: var(--atencao); }
+
+/* As linhas com derivação na janela «parâmetros»: a marca do TAP ao lado do
+   nome, o aviso de quantas o OnLiner deixou reconhecer, e o que fica DENTRO
+   de uma entrada (as três pernas, os trechos, o cadastro à mão). */
+.parametros-loc .aviso-3t { margin: 0 0 6px; color: var(--atencao); font-size: 11px; flex: none; }
+.parametros-loc .aviso-3t:empty { display: none; }
+.marca-3t {
+  display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 4px;
+  font-family: var(--sans); font-size: 10.5px; border: 1px solid var(--linha); color: var(--suave);
+}
+.marca-3t.tap { border-color: var(--destaque); color: var(--destaque); }
+.marca-3t.conferir, .marca-3t.trechos { border-color: var(--atencao); color: var(--atencao); }
+.parametros-loc .col-nome .nome-da-linha {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 0 1 auto;
+}
+.parametros-loc .col-nome .marca-3t { flex: none; }
+.parametros-loc .col-nome { display: flex; align-items: center; }
+.parametros-loc .abrir-3t {
+  width: 12px; flex: none; border: 0; padding: 0; background: none; cursor: pointer;
+  color: var(--destaque); font: inherit;
+}
+.parametros-loc .dentro-3t { margin: 0 0 6px 22px; padding-left: 8px; border-left: 1px solid var(--linha); }
+.parametros-loc .linha-da-lt.de-dentro { font-size: 11.5px; }
+.parametros-loc .perna-3t select {
+  flex: none; width: 58px; background: var(--fundo); color: var(--tinta);
+  border: 1px solid var(--linha); border-radius: 4px; font: inherit;
+}
+.parametros-loc .barra-3t { color: var(--suave); font-size: 10.5px; margin-left: 4px; }
+.parametros-loc .cadastro-3t input {
+  background: var(--fundo); color: var(--tinta); border: 1px solid var(--linha);
+  border-radius: 4px; padding: 2px 6px; font: inherit;
+}
+.parametros-loc .cadastro-3t select {
+  background: var(--fundo); color: var(--tinta); border: 1px solid var(--linha);
+  border-radius: 4px; font: inherit;
+}
+.pl-linha-em-uso .marca-3t { margin-left: 6px; }

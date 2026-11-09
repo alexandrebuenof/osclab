@@ -295,3 +295,34 @@ def test_a_linha_escolhida_pelo_nome_vale_com_um_terminal_so(tmp_path, monkeypat
     assert errada["fontes"]["base"]["ok"] is False and errada["linha"] is None
     lista = cliente.get(f"/api/onda/{sha}/linhas-da-base?q=alfa").get_json()
     assert lista["base"] is True and [x["nome"] for x in lista["linhas"]] == ["LT ALFA - BETA"]
+
+
+def test_a_linha_de_tres_terminais_entra_pelo_caminho_A_B_com_o_aviso(tmp_path, monkeypatch,
+                                                                      cliente):
+    from osclab.basedados import linhas as linhas_mod
+    from tests.test_tres_terminais import CABECALHO, LINHAS, TRES_T
+    base = _base_com(tmp_path, monkeypatch)
+    pasta_linhas = base.gaveta(linhas_mod.PASTA)
+    (pasta_linhas / "linhas.csv").write_text(CABECALHO + "\n".join(LINHAS) + "\n",
+                                            encoding="utf-8")
+    (pasta_linhas / "linhas-3t.csv").write_text(TRES_T, encoding="utf-8")
+    monkeypatch.setattr(paths, "LIBRARY_DIR", tmp_path / "acervo")
+    caminho = escrever_cev(tmp_path / "origem", nome="VG")
+    sha = acervo.guardar([(caminho.name, caminho.read_bytes())]).aceitos[0].sha
+    pedido = {"fonte": "base", "linha_base": {"nome": "LD VG - POCONE", "tipo": "3t"}}
+    p = cliente.post(f"/api/onda/{sha}/localizar", json=pedido).get_json()
+    assert p["fonte"] == "base" and p["linha"]["km"] == 80
+    assert p["linha"]["perfil"][1][0] == 20                 # o perfil chega à conta
+    assert "CANGAS" in p["aviso_linha"] and p["fontes"]["base"]["tap"]["nome"] == "CANGAS"
+    lista = cliente.get(f"/api/onda/{sha}/linhas-da-base").get_json()
+    assert lista["resumo_3t"]["tres_terminais"] == 1
+    assert {x["nome"]: x["tipo"] for x in lista["linhas"]}["LD CV - BF"] == "trechos"
+    r = cliente.post("/api/base/linhas-3t", json={"acao": "papeis", "nome": "LD VG - POCONE",
+                                                  "papeis": ["A", "TAP", "B"]})
+    assert r.status_code == 200
+    p = cliente.post(f"/api/onda/{sha}/localizar", json=pedido).get_json()
+    assert p["linha"]["km"] == pytest.approx(23.3) and "POCONE" in p["aviso_linha"]
+    errado = cliente.post("/api/base/linhas-3t",
+                          json={"acao": "papeis", "nome": "LD VG - POCONE",
+                                "papeis": ["A", "A", "B"]})
+    assert errado.status_code == 400

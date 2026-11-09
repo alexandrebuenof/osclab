@@ -797,6 +797,7 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
         z0 = (complex(linha["r0"], linha["x0"])
               if linha.get("r0") is not None and linha.get("x0") is not None else None)
         km = float(linha["km"])
+        perfil = linha.get("perfil")
         trifasica = set("ABC") <= set(pacote.get("tipo") or "")
         razao_i2 = _razao_i2(term_a, i2a, plato_a, t_a)
         if not tem_b:
@@ -817,7 +818,7 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
                 modelo_sn = "distribuída"
             else:
                 modelo_sn = "concentrada"
-            series["seqneg"] = m_sn * km
+            series["seqneg"] = km_pelo_perfil(m_sn, perfil, km)
         if not laco:
             motivos["laco"] = "o classificador não achou o laço da falta"
         else:
@@ -825,7 +826,7 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
             if m_laco is None:
                 motivos["laco"] = "falta o Z0 da linha (para o k0 do laço de terra)"
             else:
-                series["laco"] = m_laco * km
+                series["laco"] = km_pelo_perfil(m_laco, perfil, km)
         if not laco:
             motivos["takagi"] = motivos["laco"]
         else:
@@ -838,7 +839,7 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
                                      if n_pre is not None else
                                      "o registro não tem um ciclo de pré-falta")
             else:
-                series["takagi"] = m_tk * km
+                series["takagi"] = km_pelo_perfil(m_tk, perfil, km)
         if not laco:
             motivos["takagi_i2"] = motivos["laco"]
         elif trifasica or (razao_i2 is not None and razao_i2 < MINIMO_I2_SOBRE_I1):
@@ -852,7 +853,7 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
             if m_i2 is None:
                 motivos["takagi_i2"] = "falta o Z0 da linha (para o k0 do laço de terra)"
             else:
-                series["takagi_i2"] = m_i2 * km
+                series["takagi_i2"] = km_pelo_perfil(m_i2, perfil, km)
         pacote["km_linha"] = km
 
     # A LDL só existe DURANTE a falta: antes dela o laço mede a carga e dá um
@@ -1011,5 +1012,27 @@ def linha_com_z0(fonte: dict | None) -> dict | None:
     """A linha que entra na conta, ou `None` quando a fonte não tem Z1."""
     if not fonte or not fonte.get("ok"):
         return None
-    return {k: fonte.get(k) for k in ("r", "x", "km", "r0", "x0", "b1", "b0")}
+    # O `perfil` é de linha em trechos (`basedados/tres_terminais`): sem ele
+    # a fração de impedância vira km como se a linha fosse uniforme.
+    return {k: fonte.get(k) for k in ("r", "x", "km", "r0", "x0", "b1", "b0", "perfil")}
+
+
+def km_pelo_perfil(m, perfil, km_total):
+    """A fração `m` da impedância A–B em km, seguindo o perfil.
+
+    Dentro da linha, interpolação trecho a trecho; fora dela, a inclinação do
+    trecho da ponta (o número fora da linha precisa continuar saindo, para a
+    tela dizer «fora da linha»). Sem perfil, a linha é uniforme: `m × km`.
+    """
+    m = np.asarray(m, dtype=float)
+    if not perfil or len(perfil) < 2:
+        return m * km_total
+    kms = np.array([p[0] for p in perfil])
+    fr = np.array([p[1] for p in perfil])
+    dentro = np.interp(m, fr, kms)
+    antes = kms[0] + (m - fr[0]) * (kms[1] - kms[0]) / ((fr[1] - fr[0]) or math.inf)
+    depois = kms[-1] + (m - fr[-1]) * (kms[-1] - kms[-2]) / ((fr[-1] - fr[-2]) or math.inf)
+    return np.where(m < fr[0], antes, np.where(m > fr[-1], depois, dentro))
+
+
 
