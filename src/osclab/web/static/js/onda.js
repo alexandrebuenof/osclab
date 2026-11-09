@@ -14695,14 +14695,6 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const corTinta = token("--tinta");
     const corDestaque = token("--destaque");
 
-    ctx.font = "11px ui-monospace, Consolas, monospace";
-    ctx.textBaseline = "middle";
-
-    // --- grade horizontal e rótulos do eixo vertical ---------------------
-    ctx.strokeStyle = corLinha;
-    ctx.fillStyle = corSuave;
-    ctx.lineWidth = 1;
-    ctx.textAlign = "right";
     // As PISTAS: uma por sinal no empilhado, uma só no agrupado.
     const pistas = pistasDoPainel(painel, y0, y1);
     const empilhado = pistas.length > 1;
@@ -14711,6 +14703,82 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const naPista = (pista) => (v) =>
       pista.y1 - ((v - painel.minimo) / (painel.maximo - painel.minimo || 1))
                * (pista.y1 - pista.y0);
+    const haEscolha = selecionados.some((x) => x.painel === painel.id);
+    // Os pontinhos de amostra, quando ligados E quando há espaço para eles.
+    // Ver `botaoDasAmostras`.
+    const pontosDeAmostra = cabemAsAmostras(painel, x1 - x0);
+
+    // --- o FUNDO: grade, eixos, disparo e as ondas ---------------------------
+    //
+    // Fica guardado numa imagem e só é refeito quando muda algo que ele
+    // desenha. Arrastar o cursor muda só a linha do cursor, e redesenhar as
+    // ondas a cada passo era o travamento (medido em 09/11/2026 num `.CEV` de
+    // 4 amostras por ciclo, com as curvas suavizadas: ~260 ms por movimento
+    // quando o navegador desenha o canvas sem a placa de vídeo, e 98 % disso
+    // era pintar as ondas). A chave lista TUDO que o fundo lê; o painel e o
+    // pacote entram por identidade — chegam novos a cada resposta do servidor.
+    //
+    // O arrasto da oscilografia (`arrastoPx`) NÃO entra: o fundo é pintado
+    // sem ele e só a parte de dentro da moldura é colada deslocada. A régua
+    // da esquerda e a da direita ficam paradas, como sempre ficaram.
+    const chaveDoFundo = [
+      canvas.width, canvas.height, dpr, x0, x1, y0, y1,
+      corLinha, corSuave, corDestaque, empilhado, haEscolha, pontosDeAmostra,
+      ...pistas.map((p) => `${p.y0}|${p.y1}|` + p.sinais.map((s) =>
+        `${s.id}:${s.eixo}:${corDoSinal(s, painel)}:${estaSelecionado(painel, "sinal", s.id)}`).join(",")),
+    ].join("¦");
+    let fundo = canvas._fundo;
+    if (!fundo || fundo._chave !== chaveDoFundo || fundo._painel !== painel || fundo._dados !== dados) {
+      if (!fundo) { fundo = document.createElement("canvas"); canvas._fundo = fundo; }
+      if (fundo.width !== canvas.width || fundo.height !== canvas.height) {
+        fundo.width = canvas.width;
+        fundo.height = canvas.height;
+      }
+      // `willReadFrequently` deixa o fundo em PIXELS na memória. Sem ele o
+      // navegador guarda o canvas como a lista de comandos que o desenhou e a
+      // REEXECUTA a cada `drawImage` — as ondas seriam pintadas de novo a cada
+      // movimento do cursor, que é justamente o que o fundo existe para evitar
+      // (medido: 8,6 s de `drawImage` em 30 movimentos, sem ele).
+      const fctx = fundo.getContext("2d", { willReadFrequently: true });
+      fctx.setTransform(1, 0, 0, 1, 0, 0);
+      fctx.clearRect(0, 0, fundo.width, fundo.height);
+      fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      pintarFundo(fctx);
+      fundo._chave = chaveDoFundo;
+      fundo._painel = painel;
+      fundo._dados = dados;
+    }
+    // Fora da moldura (as réguas), o fundo como está; dentro, deslocado pelo
+    // arrasto. Sem arrasto as duas colagens dão a mesma imagem.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, cssLargura, cssAltura);
+    ctx.rect(x0, y0, x1 - x0, y1 - y0);
+    ctx.clip("evenodd");
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(fundo, 0, 0);
+    ctx.restore();
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x0, y0, x1 - x0, y1 - y0);
+    ctx.clip();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(fundo, Math.round(arrastoPx * dpr), 0);
+    ctx.restore();
+    ctx.font = "11px ui-monospace, Consolas, monospace";
+    ctx.textBaseline = "middle";
+
+    function pintarFundo(ctx) {
+    // O fundo é sempre pintado SEM o arrasto: ver `chaveDoFundo`.
+    const emX = (t) => x0 + ((t - tMin) / (tMax - tMin || 1)) * (x1 - x0);
+    ctx.font = "11px ui-monospace, Consolas, monospace";
+    ctx.textBaseline = "middle";
+
+    // --- grade horizontal e rótulos do eixo vertical ---------------------
+    ctx.strokeStyle = corLinha;
+    ctx.fillStyle = corSuave;
+    ctx.lineWidth = 1;
+    ctx.textAlign = "right";
 
     // A grade estava em 40 % de opacidade sobre um cinza já escuro: na prática
     // não se lia valor nenhum fora do cursor, e grade que não se lê é tinta
@@ -14833,10 +14901,6 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     // gastava a única variação de traço que sobrava — que vale mais guardada
     // para algo que ainda não existe. Quem está no segundo eixo continua
     // dizendo isso na legenda (`→ kV`), na tabelinha e no próprio eixo.
-    const haEscolha = selecionados.some((x) => x.painel === painel.id);
-    // Os pontinhos de amostra, quando ligados E quando há espaço para eles.
-    // Ver `botaoDasAmostras`.
-    const pontosDeAmostra = cabemAsAmostras(painel, x1 - x0);
     ctx.lineJoin = "round";
     for (const pista of pistas) {
       const emYp = naPista(pista);
@@ -14867,6 +14931,14 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       }
     }
     ctx.globalAlpha = 1;
+    ctx.restore();                       // fim do recorte do FUNDO
+    }
+
+    // --- a FRENTE: o que muda com o cursor, por cima do fundo guardado ------
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x0, y0, x1 - x0, y1 - y0);
+    ctx.clip();
 
     // --- os cursores de medição: a linha ----------------------------------
     // A etiqueta numerada vem depois, fora do recorte e fora do gráfico.

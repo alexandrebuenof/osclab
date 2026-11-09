@@ -151,6 +151,33 @@
     }
   }
 
+  // As teclas do gráfico (1 e 2 põem o cursor, setas, Esc, Delete, Ctrl+Z)
+  // moram DENTRO do quadro da aba, e o navegador só entrega a tecla ao quadro
+  // quando ele tem o foco. Ao abrir uma aba, ou depois de clicar na barra, o
+  // foco fica AQUI fora: apertar `1` não fazia nada até alguém clicar no
+  // gráfico — tecla que às vezes funciona parece defeito (09/11/2026). Daqui
+  // a tecla é repassada ao quadro visível, e se ele a usar, ela para aqui.
+  document.addEventListener("keydown", (e) => {
+    if (e.defaultPrevented || fecharMenu) return;
+    const alvo = e.target;
+    if (alvo && (alvo.tagName === "INPUT" || alvo.tagName === "TEXTAREA"
+                 || alvo.isContentEditable)) return;
+    // Enter e espaço numa aba da barra são para trocar de aba, e Tab é a
+    // navegação do teclado pela barra.
+    if (e.key === "Tab") return;
+    if (alvo && alvo.closest && alvo.closest("#barra-de-abas")
+        && (e.key === "Enter" || e.key === " ")) return;
+    const quadro = estado.ativa && document.getElementById(`quadro-${estado.ativa}`);
+    const doc = quadro && !quadro.hidden && quadro.contentDocument;
+    if (!doc) return;
+    const copia = new KeyboardEvent("keydown", {
+      key: e.key, code: e.code, repeat: e.repeat, bubbles: true, cancelable: true,
+      shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, altKey: e.altKey, metaKey: e.metaKey,
+    });
+    doc.dispatchEvent(copia);
+    if (copia.defaultPrevented) e.preventDefault();
+  });
+
   (async () => {
     await lerAcervo();
     const pedido = new URLSearchParams(location.search).get("abrir");
