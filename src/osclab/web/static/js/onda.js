@@ -1525,7 +1525,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
                    // Só no localizador: a unidade do eixo, os métodos
                    // escondidos e a distância do relé digitada (vazio =
                    // a que o arquivo traz).
-                   unidade_loc: "km", ocultos_loc: [], rele_manual: null });
+                   unidade_loc: "km", destaque_loc: [], rele_manual: null });
     carregar();
   }
 
@@ -12089,7 +12089,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const terminais = m === "seqneg" ? "Usa os DOIS terminais." : "Usa UM terminal.";
     return `${info.nome || m}\n\nComo calcula: ${info.como || "—"}\n\n${terminais} `
          + `${info.quando || ""}${info.motivo ? `\n\n${info.motivo}` : ""}`
-         + "\n\nClique para esconder ou mostrar a curva.";
+         + "\n\nClique para destacar; Ctrl+clique junta outro; Esc limpa.";
   }
 
   function dicaDoReleLoc(r) {
@@ -12160,12 +12160,56 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     return pe;
   }
 
+  /** O que dizer quando se clica num método que não tem número aqui. */
+  function textoIndisponivelLoc(m, info) {
+    if (m === "seqneg" && /outro terminal/.test(info.motivo || "")) {
+      return "A sequência negativa usa os DOIS terminais: traga o registro do outro lado "
+           + "em «+ adicionar oscilografia».";
+    }
+    if (/linha/.test(info.motivo || "")) {
+      return "Sem o parâmetro da linha nenhum método tem km: escolha ou digite a linha na "
+           + "tela «localizar falta».";
+    }
+    return `${info.curto || m}: ${info.motivo || "sem resposta neste registro"}.`;
+  }
+
+  /** O método indisponível fica só em cinza, sem texto na legenda. O porquê
+   *  aparece quando alguém tenta ligá-lo: o nome treme e um balão curto diz o
+   *  que falta, e some sozinho. Texto fixo na legenda ocupava a linha toda
+   *  para responder uma pergunta que quase ninguém fazia. */
+  function avisarIndisponivelLoc(item, m, info) {
+    item.classList.remove("pl-treme");
+    void item.offsetWidth;            // reinicia a animação num segundo clique
+    item.classList.add("pl-treme");
+    document.querySelectorAll(".pl-balao-curto").forEach((x) => x.remove());
+    const r = item.getBoundingClientRect();
+    const balao = criar("div", "pl-balao-curto", textoIndisponivelLoc(m, info));
+    balao.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 360))}px`;
+    balao.style.top = `${r.bottom + 6}px`;
+    document.body.append(balao);
+    setTimeout(() => balao.remove(), 3800);
+  }
+
+  /** Esc limpa o destaque antes de tirar os cursores, como a seleção dos
+   *  analógicos. Devolve se havia algo para limpar. */
+  function limparDestaqueLoc() {
+    let havia = false;
+    for (const x of paineis) {
+      if (x.tipo === "localizador" && (x.destaque_loc || []).length) {
+        x.destaque_loc = [];
+        havia = true;
+      }
+    }
+    if (havia) desenharTudo();
+    return havia;
+  }
+
   function blocoLocalizador(painel, ultimo) {
     const meu = painelLocDe(painel.id);
     const p = (pacoteLoc && pacoteLoc.painel) || null;
     const temLinha = !!(p && p.linha_km);
     const pct = meu.unidade_loc === "%" && temLinha;
-    const ocultos = new Set(meu.ocultos_loc || []);
+    const destaque = new Set(meu.destaque_loc || []);
     const el = criar("section", "grafico grafico-localizador");
 
     const chave = criar("span", "pl-pilula");
@@ -12197,21 +12241,32 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         li.append(marca, criar("span", "nome", info.curto || m));
         li.title = dicaDoMetodoLoc(info, m);
         if (info.km === null || info.km === undefined) {
-          li.classList.add("pl-sem");
-          li.append(criar("span", "lado", info.motivo || "sem resposta"));
+          li.classList.add("pl-indisponivel");
+          li.style.cursor = "pointer";
+          li.addEventListener("click", () => avisarIndisponivelLoc(li, m, info));
         } else {
           const par = (p && p.metodos[m]) || { km: info.km, pct: null };
           const valor = criar("span", "pl-valor", valorLocUnid(par, pct));
           valor.style.color = CORES_LOC[m];
           li.append(valor);
           if (info.fora) li.append(criar("span", "lado sem-relacao", "fora da linha"));
-          if (ocultos.has(m)) li.classList.add("pl-oculto");
+          // Destacar, como nos analógicos: clique escolhe (e desfaz, se era
+          // o único), Ctrl+clique junta outro, Esc limpa. Os outros apagam,
+          // não somem — a comparação é o motivo de alguém clicar ali.
+          if (destaque.has(m)) li.classList.add("pl-escolhido");
+          else if (destaque.size) li.classList.add("pl-apagado");
           li.style.cursor = "pointer";
-          li.addEventListener("click", () => {
-            guardarParaDesfazer();
-            const lista = new Set(meu.ocultos_loc || []);
-            if (lista.has(m)) lista.delete(m); else lista.add(m);
-            meu.ocultos_loc = [...lista];
+          li.addEventListener("click", (e) => {
+            const atual = new Set(meu.destaque_loc || []);
+            if (e.ctrlKey || e.metaKey) {
+              if (atual.has(m)) atual.delete(m); else atual.add(m);
+            } else if (atual.has(m) && atual.size === 1) {
+              atual.clear();
+            } else {
+              atual.clear();
+              atual.add(m);
+            }
+            meu.destaque_loc = [...atual];
             desenharTudo();
           });
         }
@@ -12361,18 +12416,22 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       ctx.restore();
     }
 
-    const ocultos = new Set(meu.ocultos_loc || []);
+    const destaque = new Set(meu.destaque_loc || []);
     const res = p.resultado;
-    for (const m of [...ORDEM_LOC].reverse()) {
+    // O destacado vai por cima de todos; os outros apagam.
+    const ordem = [...ORDEM_LOC].reverse()
+      .sort((u, w) => Number(destaque.has(u)) - Number(destaque.has(w)));
+    for (const m of ordem) {
       const curva = (pacoteLoc.ldl || {})[m];
-      if (!curva || ocultos.has(m)) continue;
+      if (!curva) continue;
       const valores = (curva.v || [])[0] || [];
       ctx.save();
+      ctx.globalAlpha = destaque.size && !destaque.has(m) ? 0.22 : 1;
       // `CORES_LOC` guarda `var(--x)`, que vale em HTML e SVG mas NÃO no
       // canvas: o canvas ignora a cor e o traço sai na anterior — todas as
       // curvas saíam cinzas. Aqui o token é resolvido.
       ctx.strokeStyle = token(CORES_LOC[m].slice(4, -1));
-      ctx.lineWidth = res && res.metodo === m ? 2.4 : 1.5;
+      ctx.lineWidth = destaque.has(m) ? 3 : res && res.metodo === m ? 2.4 : 1.5;
       ctx.lineJoin = "round";
       ctx.beginPath();
       let aberto = false;
@@ -12404,7 +12463,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
     pintarEtiquetas(ctx, emX, x0, x1, y0);
     pintarRodapeDoTempo(ctx, emX, x0, x1, y1, ultimo);
-    if (b._ladoLoc) pintarTabelaLoc(b._ladoLoc, p, pct, ocultos);
+    if (b._ladoLoc) pintarTabelaLoc(b._ladoLoc, p, pct, new Set());
   }
 
   /** A tabelinha ao lado: o km de cada método nos cursores, como nos analógicos. */
@@ -16889,6 +16948,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       // O Esc tira primeiro a seleção; só depois os cursores. Desfazer uma
       // coisa por vez é o que se espera de uma tecla de desistir.
       if (selecionados.length) { marcarSelecao([]); return; }
+      if (limparDestaqueLoc()) return;
       cursores[0] = cursores[1] = null;
       presos[0] = presos[1] = null;
       terminouDeMoverCursor();
