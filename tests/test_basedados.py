@@ -573,18 +573,36 @@ def test_a_rota_das_pastas_responde_com_atalhos_e_subpastas():
         assert dados["atual"] == str(tmp.resolve())
 
 
-def test_quando_a_janela_do_SISTEMA_nao_abre_a_resposta_diz_isso():
+def _janela_simulada(monkeypatch, codigo: int, escolhida: str = "") -> None:
+    """Troca a janela do sistema por uma resposta pronta.
+
+    Sem isto, numa máquina com tela, o teste ABRIA o «Escolher a pasta» de
+    verdade no meio da suíte e ficava esperando alguém fechar (09/11/2026).
+    """
+    import subprocess
+
+    def falso(*_a, **_k):
+        return subprocess.CompletedProcess([], codigo, escolhida.encode("utf-8"), b"")
+    monkeypatch.setattr(subprocess, "run", falso)
+
+
+def test_quando_a_janela_do_SISTEMA_nao_abre_a_resposta_diz_isso(monkeypatch):
     """`disponivel: false` é o que faz a tela cair no navegador desenhado na
     página. Sem esse campo, o «…» não faria nada numa máquina sem tkinter —
     que é o pior defeito possível num botão: o que não reage."""
     from osclab.basedados import navegar
-    r = navegar.nativo("/tmp")
-    assert set(r) == {"disponivel", "caminho", "cancelado"}
-    if not r["disponivel"]:
-        assert r["caminho"] == ""
+    _janela_simulada(monkeypatch, 1)               # sem tkinter
+    assert navegar.nativo("/tmp") == {"disponivel": False, "caminho": "",
+                                      "cancelado": False}
+    _janela_simulada(monkeypatch, 0, "C:/Bases/Nova")
+    assert navegar.nativo("/tmp") == {"disponivel": True, "caminho": "C:/Bases/Nova",
+                                      "cancelado": False}
+    _janela_simulada(monkeypatch, 0, "")           # fechou sem escolher
+    assert navegar.nativo("/tmp")["cancelado"] is True
 
 
-def test_a_rota_da_janela_do_sistema_responde_sem_derrubar_o_servidor():
+def test_a_rota_da_janela_do_sistema_responde_sem_derrubar_o_servidor(monkeypatch):
+    _janela_simulada(monkeypatch, 1)
     with _area():
         r = _cliente().post("/api/base/pasta-nativa", json={"inicial": "/tmp"})
         assert r.status_code == 200
