@@ -12368,7 +12368,10 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       if (!curva || ocultos.has(m)) continue;
       const valores = (curva.v || [])[0] || [];
       ctx.save();
-      ctx.strokeStyle = CORES_LOC[m];
+      // `CORES_LOC` guarda `var(--x)`, que vale em HTML e SVG mas NÃO no
+      // canvas: o canvas ignora a cor e o traço sai na anterior — todas as
+      // curvas saíam cinzas. Aqui o token é resolvido.
+      ctx.strokeStyle = token(CORES_LOC[m].slice(4, -1));
       ctx.lineWidth = res && res.metodo === m ? 2.4 : 1.5;
       ctx.lineJoin = "round";
       ctx.beginPath();
