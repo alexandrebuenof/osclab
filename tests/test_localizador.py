@@ -215,3 +215,83 @@ def test_a_rota_manda_o_bloco_do_painel_com_o_rele(tmp_path, monkeypatch, client
     assert r.get_json()["painel"]["rele"]["origem"] == "digitado"
     # Sem o pedido do painel, o pacote é o de sempre da tela de localizar.
     assert "painel" not in cliente.post(f"/api/onda/{sha}/localizar", json={}).get_json()
+
+
+# ---------------------------------------------------------------------------
+# A janela «parâmetros»: escolher a linha na base pelo nome
+# ---------------------------------------------------------------------------
+
+def _base_com(tmp_path, monkeypatch, *linhas_):
+    from osclab.basedados import linhas as linhas_mod
+    from osclab.basedados import pasta as pasta_mod
+    monkeypatch.setattr(paths, "BASES_FILE", tmp_path / "bases.json")
+    base = pasta_mod.criar("base-de-teste", tmp_path)
+    for x in linhas_:
+        linhas_mod.gravar(base, x)
+    return base
+
+
+def _lt(nome, s, r, km=60.0, z0=True):
+    from osclab.basedados.linhas import Linha
+    return Linha(nome, s, r, 0.08 * km, 0.4 * km, km,
+                 0.3 * km if z0 else None, 1.2 * km if z0 else None)
+
+
+def test_a_busca_sugere_por_PALAVRA_INTEIRA_e_poe_as_sugeridas_primeiro(tmp_path, monkeypatch):
+    """Por trecho de texto, o terminal «MI» casava com o «TERMINAL» do nome do
+    arquivo e toda linha de nome curto virava sugerida (maquete, 09/11/2026)."""
+    from osclab.basedados import linhas as linhas_mod
+    base = _base_com(tmp_path, monkeypatch,
+                     _lt("LT MI - NI", "MI", "NI"), _lt("LT SIGMA - OMEGA", "SIGMA", "OMEGA"),
+                     _lt("LT ÁGUA BOA - SIGMA", "ÁGUA BOA", "SIGMA", z0=False))
+    achadas = linhas_mod.buscar(base, "", ["SE SIGMA", "MAQ_3_SIGMA_um_terminal"])
+    assert [x["nome"] for x in achadas] == ["LT ÁGUA BOA - SIGMA", "LT SIGMA - OMEGA",
+                                            "LT MI - NI"]
+    assert [x["sugerida"] for x in achadas] == [True, True, False]
+    assert achadas[0]["casou"] == ["SIGMA"]
+    # Cada palavra digitada filtra, sem acento e como pedaço de palavra.
+    assert [x["nome"] for x in linhas_mod.buscar(base, "agua", [])] == ["LT ÁGUA BOA - SIGMA"]
+    assert [x["nome"] for x in linhas_mod.buscar(base, "sig ome", [])] == ["LT SIGMA - OMEGA"]
+    assert linhas_mod.buscar(base, "nada disso", []) == []
+    assert achadas[0]["r0_ohm"] is None          # a tela avisa «sem Z0»
+    assert linhas_mod.escolhida(base, "lt sigma - omega").comprimento_km == 60.0
+    assert linhas_mod.escolhida(base, "LT INEXISTENTE") is None
+
+
+def test_dois_trechos_de_mesmo_nome_se_distinguem_pelos_terminais(tmp_path, monkeypatch):
+    """A base real repete o nome nos trechos de uma derivação (até o TAP e do
+    TAP em diante). Pelo nome só, «o primeiro» seria trocar de linha calado."""
+    from osclab.basedados import linhas as linhas_mod
+    base = _base_com(tmp_path, monkeypatch, _lt("LD VG - POCONE", "VG", "TAP 70", km=20.2))
+    # O `gravar` troca a de mesmo nome; a base real foi montada por script e
+    # tem os dois trechos — então o segundo entra direto no arquivo.
+    arquivo = linhas_mod._caminho(base)
+    arquivo.write_text(arquivo.read_text(encoding="utf-8")
+                       + "LD VG - POCONE;TAP 70;POCONE;5,3;26,6;66,4;19,9;79,7;;\n",
+                       encoding="utf-8")
+    assert linhas_mod.escolhida(base, "LD VG - POCONE") is None
+    trecho = lambda s, r: linhas_mod.escolhida(base, "LD VG - POCONE", s, r)  # noqa: E731
+    assert trecho("TAP 70", "POCONE").comprimento_km == 66.4
+    assert trecho("VG", "TAP 70").comprimento_km == 20.2
+
+
+def test_a_linha_escolhida_pelo_nome_vale_com_um_terminal_so(tmp_path, monkeypatch, cliente):
+    """Com um registro só a base não casa a linha sozinha (precisa das duas
+    pontas): a escolha pelo nome é o caminho, e vence a dedução."""
+    _base_com(tmp_path, monkeypatch, _lt("LT ALFA - BETA", "ALFA", "BETA", km=37.5))
+    monkeypatch.setattr(paths, "LIBRARY_DIR", tmp_path / "acervo")
+    caminho = escrever_cev(tmp_path / "origem", nome="UM_TERMINAL")
+    sha = acervo.guardar([(caminho.name, caminho.read_bytes())]).aceitos[0].sha
+    sem = cliente.post(f"/api/onda/{sha}/localizar", json={"painel": True}).get_json()
+    assert sem["fontes"]["base"]["ok"] is False
+    assert "parâmetros" in sem["fontes"]["base"]["motivo"]
+    com = cliente.post(f"/api/onda/{sha}/localizar",
+                       json={"painel": True, "fonte": "base",
+                             "linha_base": "LT ALFA - BETA"}).get_json()
+    assert com["fonte"] == "base" and com["fontes"]["base"]["escolhida"] is True
+    assert com["linha"]["km"] == 37.5
+    errada = cliente.post(f"/api/onda/{sha}/localizar",
+                          json={"fonte": "base", "linha_base": "LT GAMA"}).get_json()
+    assert errada["fontes"]["base"]["ok"] is False and errada["linha"] is None
+    lista = cliente.get(f"/api/onda/{sha}/linhas-da-base?q=alfa").get_json()
+    assert lista["base"] is True and [x["nome"] for x in lista["linhas"]] == ["LT ALFA - BETA"]

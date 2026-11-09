@@ -23,24 +23,46 @@ from osclab.basedados import digitais, pasta
 
 
 @contextlib.contextmanager
-def _area():
-    """Uma pasta de dados só para este teste."""
+def _area(dicionario_ligado: bool = True):
+    """Uma pasta de dados só para este teste.
+
+    O dicionário está PAUSADO desde 09/11/2026 (implementação futura), não
+    apagado: os testes dele continuam valendo para o dia em que voltar, e por
+    isso aqui ele vem ligado. `dicionario_ligado=False` testa a pausa.
+    """
+    import dataclasses
     tmp = Path(tempfile.mkdtemp(prefix="osclab-base-"))
     nomes = ("DATA_DIR", "BASE_PADRAO", "BASES_FILE",
              "CONFIG_DIR", "CACHE_DIR", "LIBRARY_DIR")
     antes = {n: getattr(paths, n) for n in nomes}
+    gavetas = pasta.GAVETAS
     paths.DATA_DIR = tmp
     paths.BASE_PADRAO = tmp / "base"
     paths.BASES_FILE = tmp / "bases.json"
     paths.CONFIG_DIR = tmp / "config"
     paths.CACHE_DIR = tmp / "cache"
     paths.LIBRARY_DIR = tmp / "library"
+    if dicionario_ligado:
+        pasta.GAVETAS = tuple(dataclasses.replace(g, futura=False) for g in gavetas)
     try:
         yield tmp
     finally:
         for n, v in antes.items():
             setattr(paths, n, v)
+        pasta.GAVETAS = gavetas
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_o_dicionario_PAUSADO_responde_implementacao_futura_e_nao_apaga_nada():
+    """Pedido dele, 09/11/2026: o botão fica cinza como implementação futura,
+    e nada do dicionário é apagado."""
+    with _area(dicionario_ligado=False):
+        base = pasta.criar("Base")
+        r = _cliente().get("/api/dicionario/qualquer").get_json()
+        assert r["tem"] is False and r["futura"] is True and r["verbetes"] == []
+        assert "futura" in r["motivo"]
+        assert (base.pasta / pasta.PASTA_DO_DICIONARIO).is_dir()
+        assert next(g for g in pasta.estado()["gavetas"] if g["id"] == "dicionario")["futura"]
 
 
 def _cliente():

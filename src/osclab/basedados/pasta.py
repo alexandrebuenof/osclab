@@ -106,6 +106,9 @@ class Gaveta:
     #: Já dá para editar pelo programa? As duas últimas chegam com os módulos
     #: que as usam; a pasta já nasce, para a base não mudar de forma depois.
     editavel: bool = False
+    #: Implementação FUTURA: a gaveta existe, os dados ficam onde estão, e a
+    #: tela mostra os botões dela cinza, dizendo isso. Desligar não apaga nada.
+    futura: bool = False
 
 
 GAVETAS: tuple[Gaveta, ...] = (
@@ -117,6 +120,9 @@ GAVETAS: tuple[Gaveta, ...] = (
         "o nome e o significado de cada sinal digital, por fabricante e modelo",
         "os digitais aparecem com o nome cru do arquivo",
         editavel=True,
+        # Fora de uso desde 09/11/2026, a pedido dele: ainda pensando em que
+        # situações o dicionário ajuda. Nada foi apagado — é virar para False.
+        futura=True,
     ),
     Gaveta(
         "linhas", "Linhas e estruturas",
@@ -128,6 +134,11 @@ GAVETAS: tuple[Gaveta, ...] = (
 )
 
 IDS = tuple(g.id for g in GAVETAS)
+
+
+def da_gaveta(qual: str) -> Gaveta:
+    """A descrição da gaveta `qual` (não a pasta dela: essa é `Base.gaveta`)."""
+    return next(g for g in GAVETAS if g.id == qual)
 
 
 class ErroDaBase(Exception):
@@ -431,6 +442,7 @@ def estado() -> dict:
             "dizer": g.dizer,
             "sem": g.sem,
             "editavel": g.editavel,
+            "futura": g.futura,
             "ligada": marcas[g.id],
             "itens": contagem(base, g.id),
         })

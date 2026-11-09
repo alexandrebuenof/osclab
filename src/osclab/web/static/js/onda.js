@@ -12054,7 +12054,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
           t: cursores[0], t2: cursores[1],
           // A linha é a MESMA escolhida na tela «localizar falta»: o número
           // não pode mudar de uma tela para a outra.
-          fonte: estadoLoc.fonte, manual: estadoLoc.manual,
+          fonte: estadoLoc.fonte, manual: estadoLoc.manual, linha_base: estadoLoc.linha_base,
           estimador: filtroEscolhido !== FILTROS[0][0] ? filtroEscolhido : null,
           colunas: colunasLoc(largura), colunas_ondas: colunasLoc(largura / 2),
           painel: true, rele_manual: meu.rele_manual ?? null,
@@ -12077,6 +12077,217 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     }
     if (deNovoLoc) { deNovoLoc = false; pedirPainelLoc(); }
   }
+
+  /** Qual linha a conta está usando, e de onde ela veio — ao lado do botão
+   *  «parâmetros». Sem linha, diz isso em cor de atenção, com o motivo no
+   *  hover: é o caso do registro de um terminal só, em que a base não casa
+   *  sozinha. */
+  function linhaEmUsoLoc() {
+    const s = criar("span", "pl-linha-em-uso");
+    const p = pacoteLoc;
+    if (!p) return s;
+    if (p.fonte && p.linha) {
+      const base = p.fonte === "base" ? ((p.fontes || {}).base || {}) : null;
+      const nome = base ? base.como : NOMES_DAS_FONTES[p.fonte];
+      const origem = base ? (base.escolhida ? "base" : "base, pelos terminais")
+                          : (p.fonte === "manual" ? "digitada" : "lida do relé");
+      s.append(criar("b", null, nome || "—"),
+               document.createTextNode(` · ${numLoc(p.linha.km, 1)} km · ${origem}`));
+      const trecho = base && base.terminais ? `\nTrecho: ${base.terminais.join(" ↔ ")}` : "";
+      s.title = `Linha em uso: ${nome}\nZ1 = ${numLoc(p.linha.r, 3)} + j${numLoc(p.linha.x, 3)} Ω`
+        + (p.linha.r0 != null ? ` · Z0 = ${numLoc(p.linha.r0, 3)} + j${numLoc(p.linha.x0, 3)} Ω`
+                              : " · sem Z0")
+        + ` · ${numLoc(p.linha.km, 2)} km (primário, linha inteira)${trecho}\nDe onde: ${origem}.`;
+    } else {
+      s.classList.add("sem");
+      s.textContent = "sem linha";
+      s.title = (((p.fontes || {}).base || {}).motivo || "nenhuma fonte tem a linha")
+              + ". Clique em «parâmetros».";
+    }
+    return s;
+  }
+
+  /** Refaz a conta com a linha nova, no painel e na tela «localizar falta» —
+   *  o número não pode mudar de uma tela para a outra. A assinatura não vê a
+   *  troca de FONTE (o km pode até ser o mesmo), então é zerada aqui. */
+  function recalcularLoc() {
+    assinaturaLoc = "";
+    pedirPainelLoc();
+    if (estadoLoc.aberta) pedirLocalizacao();
+  }
+
+  /** A janela «parâmetros» do painel localizador: escolher a linha na base
+   *  ou digitar os números. Mesma moldura das outras janelas (o «+ sinal»,
+   *  os «canais»): cabeça com o ×, abas, corpo de ALTURA FIXA e o pé. */
+  function abrirParametrosLoc() {
+    const p = pacoteLoc;
+    const janelinha = criar("dialog", "busca parametros-loc");
+    const fechar = criar("button", "fechar", "×");
+    fechar.type = "button";
+    fechar.title = "fechar";
+    fechar.setAttribute("aria-label", "fechar");
+    fechar.addEventListener("click", () => janelinha.close());
+    const emUso = linhaEmUsoLoc();
+    const cabeca = criar("div", "cabeca");
+    cabeca.append(criar("h3", null, "Parâmetros da linha"), emUso, fechar);
+
+    const abas = criar("div", "abas-dos-ieds");
+    const corpo = criar("div", "corpo-dos-parametros");
+    const pe = criar("div", "pe-do-catalogo");
+    let aba = estadoLoc.fonte === "manual" ? "digitar" : "base";
+
+    const usar = (mudar) => {
+      mudar();
+      janelinha.close();
+      recalcularLoc();
+    };
+    const automatico = criar("button", "chave", "voltar ao automático");
+    automatico.type = "button";
+    automatico.title = "A escolha do programa: a base pelos terminais (com dois registros), "
+                     + "depois os ajustes lidos do relé.";
+    // `hidden` não basta: o CSS do `.chave` põe `display` e vence o atributo.
+    if (estadoLoc.fonte === "auto") automatico.style.display = "none";
+    automatico.addEventListener("click", () => usar(() => {
+      estadoLoc.fonte = "auto";
+      estadoLoc.linha_base = null;
+    }));
+    const aplicar = criar("button", "aceitar", "aplicar");
+    aplicar.type = "button";
+
+    // A cópia do que se digita: só vira a linha da conta no «aplicar».
+    const m = { ...estadoLoc.manual };
+    // Abrindo «Digitar» com uma linha valendo, os campos já vêm com ela: quem
+    // vai corrigir um número não deveria ter que redigitar os outros.
+    const vazio = ["r", "x", "km"].every((c) => !String(m[c] || "").trim());
+    if (estadoLoc.fonte !== "manual" && vazio && p && p.linha) {
+      const n = (v) => (v == null ? "" : String(+Number(v).toFixed(4)).replace(".", ","));
+      Object.assign(m, { forma: "rx", base: "prim", r: n(p.linha.r), x: n(p.linha.x),
+                         r0: n(p.linha.r0), x0: n(p.linha.x0), km: n(p.linha.km),
+                         b1: n(p.linha.b1) });
+    }
+    aplicar.addEventListener("click", () => usar(() => {
+      estadoLoc.manual = m;
+      estadoLoc.fonte = "manual";
+      estadoLoc.linha_base = null;
+    }));
+
+    function abaBase() {
+      const fila = criar("div", "fila-loc");
+      const campo = document.createElement("input");
+      campo.type = "search";
+      campo.placeholder = "procurar pelo nome da linha ou de uma subestação…";
+      fila.append(campo);
+      const resumo = criar("p", "resumo-das-linhas", "");
+      const tabela = criar("div", "tabela-de-linhas");
+      corpo.replaceChildren(fila, resumo, tabela);
+      let porKm = false, vez = 0, primeira = null;
+      const daBase = p && p.fonte === "base" ? ((p.fontes || {}).base || {}) : {};
+      // O mesmo nome pode ser dois trechos de uma derivação: compara-se
+      // nome E terminais.
+      const chaveDe = (nome, s, r) => `${nome}|${s}|${r}`;
+      const emUsoChave = daBase.como
+        ? chaveDe(daBase.como, ...(daBase.terminais || ["", ""])) : null;
+
+      async function listar() {
+        const minha = ++vez;
+        let d;
+        try {
+          const r = await fetch(`/api/onda/${sha}/linhas-da-base?q=${encodeURIComponent(campo.value)}`);
+          d = await r.json();
+        } catch (_e) {
+          d = { base: false, linhas: [] };
+        }
+        if (minha !== vez) return;
+        tabela.replaceChildren();
+        primeira = null;
+        if (!d.base) {
+          resumo.textContent = "Sem base de dados ativa: digite os parâmetros na aba «Digitar».";
+          return;
+        }
+        const sug = d.linhas.filter((x) => x.sugerida).length;
+        resumo.textContent = `${d.linhas.length} de ${d.total} linhas da base «${d.nome_da_base}»`
+          + (sug ? ` · ${sug} sugerida${sug > 1 ? "s" : ""} pelo nome do registro`
+                 : (d.estacao ? ` · nenhuma tem «${d.estacao}» num terminal`
+                              : " · o registro não diz a estação: procure pelo nome"));
+        const titulos = criar("div", "linha-da-base cabeca-das-linhas");
+        const colKm = criar("span", "col-km", porKm ? "km ▴" : "km");
+        colKm.title = "ordenar pelo comprimento";
+        colKm.addEventListener("click", () => { porKm = !porKm; listar(); });
+        titulos.append(criar("span", "col-sug", ""), criar("span", "col-nome", "linha"),
+                       criar("span", "col-term", "terminais"), colKm,
+                       criar("span", "col-z1", "Z1 (Ω)"), criar("span", "col-z0", "Z0"),
+                       criar("span", "col-b1", "B1 (µS)"));
+        tabela.append(titulos);
+        const itens = porKm ? [...d.linhas].sort((a, b) => a.comprimento_km - b.comprimento_km)
+                            : d.linhas;
+        if (!itens.length) tabela.append(criar("p", "resumo-das-linhas", "nenhuma linha com esse texto"));
+        for (const x of itens) {
+          const linha = criar("div", "linha-da-base"
+            + (x.sugerida ? " sugerida" : "")
+            + (chaveDe(x.nome, x.terminal_s, x.terminal_r) === emUsoChave ? " em-uso" : ""));
+          linha.append(criar("span", "col-sug", x.sugerida ? "★" : ""),
+                       criar("span", "col-nome", x.nome),
+                       criar("span", "col-term", `${x.terminal_s} ↔ ${x.terminal_r}`),
+                       criar("span", "col-km", numLoc(x.comprimento_km, 1)),
+                       criar("span", "col-z1", `${numLoc(x.z1_mod, 2)} ∠ ${numLoc(x.z1_ang, 1)}°`),
+                       criar("span", "col-z0" + (x.r0_ohm == null ? " falta" : ""),
+                             x.r0_ohm == null ? "sem" : "sim"),
+                       criar("span", "col-b1", x.b1_us ? numLoc(x.b1_us, 0) : "—"));
+          linha.title = (x.sugerida ? `Sugerida: «${x.casou.join("», «")}» está no nome do registro.\n` : "")
+            + (x.r0_ohm == null ? "Sem Z0: o laço da falta à terra não roda com esta linha.\n" : "")
+            + "Clique para usar esta linha.";
+          linha.addEventListener("click", () => usar(() => {
+            estadoLoc.linha_base = { nome: x.nome, terminal_s: x.terminal_s,
+                                     terminal_r: x.terminal_r };
+            estadoLoc.fonte = "base";
+          }));
+          if (!primeira) primeira = linha;
+          tabela.append(linha);
+        }
+      }
+      let espera = null;
+      campo.addEventListener("input", () => { clearTimeout(espera); espera = setTimeout(listar, 120); });
+      campo.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" && primeira) { ev.preventDefault(); primeira.click(); }
+      });
+      listar();
+      setTimeout(() => campo.focus(), 0);
+    }
+
+    function abaDigitar() {
+      corpo.innerHTML = formularioLoc(m);
+      corpo.querySelectorAll("[data-forma]").forEach((b) => {
+        b.addEventListener("click", () => { m.forma = b.dataset.forma; abaDigitar(); });
+      });
+      corpo.querySelectorAll("[data-base]").forEach((b) => {
+        b.addEventListener("click", () => { m.base = b.dataset.base; abaDigitar(); });
+      });
+      corpo.querySelectorAll("input[data-c]").forEach((inp) => {
+        inp.addEventListener("input", () => { m[inp.dataset.c] = inp.value; });
+        inp.addEventListener("keydown", (ev) => { if (ev.key === "Enter") aplicar.click(); });
+      });
+    }
+
+    function mostrar() {
+      abas.replaceChildren();
+      for (const [qual, rotulo] of [["base", "Base de dados"], ["digitar", "Digitar"]]) {
+        const b = criar("button", "aba-do-ied" + (qual === aba ? " escolhida" : ""), rotulo);
+        b.type = "button";
+        b.addEventListener("click", () => { if (aba !== qual) { aba = qual; mostrar(); } });
+        abas.append(b);
+      }
+      aplicar.style.display = aba === "digitar" ? "" : "none";
+      if (aba === "base") abaBase(); else abaDigitar();
+    }
+    pe.append(automatico, criar("span", "empurra"), aplicar);
+    janelinha.append(cabeca, abas, corpo, pe);
+    mostrar();
+    janelinha.addEventListener("close", () => janelinha.remove());
+    document.body.append(janelinha);
+    fecharAoClicarFora(janelinha);
+    janelinha.showModal();
+  }
+
 
   /** Um número na unidade escolhida, com a unidade. */
   function valorLocUnid(par, pct, casas = null) {
@@ -12235,7 +12446,15 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       });
       chave.append(b);
     }
-    el.append(cabecalhoDoPainel(painel, [chave]));
+    // «parâmetros»: a linha da conta — escolhida na base ou digitada. Ao lado,
+    // qual linha está valendo e de onde ela veio: o km sai dela, e quem lê o
+    // número precisa saber de que linha ele é.
+    const parametros = criar("button", "medida", "parâmetros");
+    parametros.type = "button";
+    parametros.title = "Os parâmetros da linha (comprimento, Z1, Z0, B1): escolher na "
+                     + "base de dados ou digitar.";
+    parametros.addEventListener("click", abrirParametrosLoc);
+    el.append(cabecalhoDoPainel(painel, [chave, parametros, linhaEmUsoLoc()]));
 
     const legenda = criar("ul", "legenda");
     if (pacoteLoc) {
@@ -17115,6 +17334,9 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     modoI: "seq", modoV: "seq", zoom: "lt", ligados: new Set(["seqneg", "laco", "takagi", "takagi_i2"]),
     manual: { forma: "rx", r: "", x: "", r0: "", x0: "", mod: "", ang: "", mod0: "", ang0: "",
               rkm: "", xkm: "", r0km: "", x0km: "", km: "", b1: "", b1km: "", base: "prim" },
+    //: A linha da base escolhida na janela «parâmetros», `{nome, terminal_s,
+    //: terminal_r}` (vence a dedução pelos terminais). Vale com `fonte: "base"`.
+    linha_base: null,
   };
   const NOMES_DAS_FONTES = { base: "base de dados", A: "ajustes do IED A", B: "ajustes do IED B", manual: "digitada" };
   // Cores de SOBRA da paleta validada: os dois métodos não são fase de nada.
@@ -17141,7 +17363,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           registros: outrosRegistros, alinhar: alinharPor, t: cursores[0],
-          fonte: estadoLoc.fonte, manual: estadoLoc.manual,
+          fonte: estadoLoc.fonte, manual: estadoLoc.manual, linha_base: estadoLoc.linha_base,
           estimador: filtroEscolhido !== FILTROS[0][0] ? filtroEscolhido : null,
           colunas: colunasLoc(larga), colunas_ondas: colunasLoc(larga / 2 - 20),
         }),
@@ -17401,8 +17623,8 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     }
     return s;
   }
-  function formularioLoc() {
-    const m = estadoLoc.manual;
+  // A janela «parâmetros» passa a CÓPIA do que se digita; a tela antiga, o estado.
+  function formularioLoc(m = estadoLoc.manual) {
     const forma = (v, t) => `<button type="button" data-forma="${v}" class="${m.forma === v ? "on" : ""}">${t}</button>`;
     const campo = (c, rot) => `<label>${rot}</label><input class="num-loc" data-c="${c}" value="${htmlLoc(m[c])}">`;
     const base = (v, t) => `<button type="button" data-base="${v}" class="${m.base === v ? "on" : ""}">${t}</button>`;

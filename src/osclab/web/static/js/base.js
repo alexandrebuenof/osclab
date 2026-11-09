@@ -594,11 +594,12 @@
 
     const abrir = criar("button", "chave", "abrir");
     abrir.type = "button";
-    abrir.disabled = !g.ligada || !g.editavel;
-    abrir.title = !g.ligada ? "gaveta desabilitada"
+    abrir.disabled = !g.ligada || !g.editavel || g.futura;
+    abrir.title = g.futura ? "implementação futura"
+                : !g.ligada ? "gaveta desabilitada"
                 : !g.editavel ? "esta gaveta chega com o módulo que a usa"
                 : "abrir a tabela";
-    if (g.editavel) abrir.addEventListener("click", () => abrirDicionario(g));
+    if (g.editavel && !g.futura) abrir.addEventListener("click", () => abrirDicionario(g));
     pilha.append(abrir);
 
     c.append(ic, meio, pilha);

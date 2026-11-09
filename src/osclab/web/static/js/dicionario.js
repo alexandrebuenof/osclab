@@ -37,7 +37,8 @@
     chave.classList.toggle("sem-dicionario", !tem);
     chave.title = tem
       ? "Procurar o significado de um sinal digital deste relé."
-      : "Nenhum dicionário para consultar — clique para saber por quê.";
+      : (estado && estado.futura ? "Dicionário: implementação futura."
+                                 : "Nenhum dicionário para consultar — clique para saber por quê.");
   }
 
   async function carregar() {
@@ -59,9 +60,12 @@
                                  : "Não há o que consultar.") +
         " O leitor continua funcionando igual — os digitais aparecem com o nome " +
         "cru que veio no arquivo."));
-      const ir = criar("a", "chave escolhido", "abrir a base de dados");
-      ir.href = "/base";
-      vazio.append(ir);
+      // Implementação futura: nada a cadastrar ainda, então sem o link.
+      if (!(estado && estado.futura)) {
+        const ir = criar("a", "chave escolhido", "abrir a base de dados");
+        ir.href = "/base";
+        vazio.append(ir);
+      }
       achados.append(vazio);
       return;
     }

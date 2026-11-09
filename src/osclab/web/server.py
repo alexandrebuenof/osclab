@@ -514,14 +514,36 @@ def create_app() -> Flask:
 
         fontes: dict = {}
         base = base_mod.ativa()
-        if base is not None and base.existe and base_mod.usa("linhas") and len(terminais) > 1:
+        tem_base = base is not None and base.existe and base_mod.usa("linhas")
+        # A linha ESCOLHIDA pelo nome (janela «parâmetros») vence a dedução
+        # pelos terminais — e vale com um terminal só, que é justamente o caso
+        # em que a dedução não roda.
+        # Nome E terminais: a base repete o nome nos trechos de uma derivação.
+        pedida_base = corpo.get("linha_base") or {}
+        if isinstance(pedida_base, str):
+            pedida_base = {"nome": pedida_base}
+        escolhida = str(pedida_base.get("nome") or "").strip()
+        if escolhida and tem_base:
+            achada = linhas_mod.escolhida(base, escolhida, pedida_base.get("terminal_s"),
+                                          pedida_base.get("terminal_r"))
+            fontes["base"] = (dict(seqneg_mod.linha_da_base(achada), escolhida=True,
+                                   terminais=[achada.terminal_s, achada.terminal_r])
+                              if achada else
+                              {"ok": False,
+                               "motivo": f"a linha «{escolhida}» não está na base"})
+        elif tem_base and len(terminais) > 1:
             achadas = linhas_mod.procurar(base, textos(terminais[0]), textos(terminais[1]))
             if len(achadas) == 1:
                 fontes["base"] = seqneg_mod.linha_da_base(achadas[0])
             else:
                 fontes["base"] = {"ok": False, "motivo": (
                     "mais de uma linha da base casa com estes terminais"
-                    if achadas else "nenhuma linha da base casa com estes terminais")}
+                    if achadas else "nenhuma linha da base casa com estes terminais"),
+                    "candidatas": [x.nome for x in achadas]}
+        elif tem_base:
+            fontes["base"] = {"ok": False, "motivo": (
+                "com um terminal só, a base não casa a linha sozinha — escolha-a "
+                "em «parâmetros»")}
         else:
             fontes["base"] = {"ok": False, "motivo": "sem base de dados ativa"}
         for term in terminais[:2]:
@@ -588,6 +610,23 @@ def create_app() -> Flask:
                 lido, _numero(str(corpo.get("rele_manual")))
                 if corpo.get("rele_manual") is not None else None)
         return jsonify(pacote)
+
+    @app.get("/api/onda/<sha>/linhas-da-base")
+    def linhas_da_base(sha: str):
+        """A busca da janela «parâmetros» do localizador (`linhas.buscar`)."""
+        base = base_mod.ativa()
+        if base is None or not base.existe or not base_mod.usa("linhas"):
+            return jsonify(base=False, linhas=[], total=0)
+        try:
+            registro = acervo.ler(sha)
+        except FormatError as exc:
+            return jsonify(erro=str(exc)), 404
+        item = acervo.obter(sha)
+        textos = [registro.station, registro.device_id, acervo.apelido(sha),
+                  item.nome if item else ""]
+        return jsonify(base=True, nome_da_base=base.nome,
+                       total=len(linhas_mod.listar(base)), estacao=registro.station,
+                       linhas=linhas_mod.buscar(base, request.args.get("q") or "", textos))
 
     @app.post("/api/base/linhas")
     def guardar_linha():
@@ -846,6 +885,10 @@ def create_app() -> Flask:
         """
         item = acervo.obter(sha)
         equipamento = (item.como_dicionario().get("equipamento") or "") if item else ""
+        if base_mod.da_gaveta(base_mod.PASTA_DO_DICIONARIO).futura:
+            return jsonify(tem=False, futura=True,
+                           motivo="o dicionário é uma implementação futura",
+                           equipamento=equipamento, verbetes=[])
         base = base_mod.ativa()
         ligada = base_mod.usa(base_mod.PASTA_DO_DICIONARIO)
         if base is None or not base.existe or not ligada:

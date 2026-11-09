@@ -27,6 +27,7 @@ from __future__ import annotations
 import csv
 import io
 import math
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -136,3 +137,62 @@ def procurar(base, textos_a: list[str], textos_b: list[str]) -> list[Linha]:
         if (aparece(s, a) and aparece(r, b)) or (aparece(r, a) and aparece(s, b)):
             saida.append(linha)
     return saida
+
+
+def _palavras(texto) -> str:
+    """O texto em maiúsculas, sem acento, com tudo que não é letra ou dígito
+    virando espaço, e com espaço nas pontas — para casar por PALAVRA INTEIRA:
+    `" MI "` está em `" LT MI NI "` e não está em `" TERMINAL "`."""
+    t = unicodedata.normalize("NFD", str(texto or "").upper())
+    t = "".join(c for c in t if unicodedata.category(c) != "Mn")
+    return " " + " ".join("".join(c if c.isalnum() else " " for c in t).split()) + " "
+
+
+def buscar(base, texto: str, textos_do_registro: list[str]) -> list[dict]:
+    """A busca da janela «parâmetros» do localizador.
+
+    Toda linha da base em que cada palavra digitada aparece (no nome ou num
+    terminal, sem acento, como começo de palavra ou dentro dela — quem digita
+    «verd» quer «RIO VERDE»). As SUGERIDAS vêm primeiro: as que têm um
+    terminal escrito, como palavra inteira, no que o registro diz de si.
+
+    Palavra inteira, e não trecho: por trecho, o terminal «MI» casava com o
+    «TERMINAL» do nome do arquivo, e toda linha de nome curto virava sugerida
+    (achado na maquete de 09/11/2026).
+    """
+    digitadas = _palavras(texto).split()
+    registro = [_palavras(t) for t in textos_do_registro if t]
+    saida = []
+    for x in listar(base):
+        alvo = _palavras(f"{x.nome} {x.terminal_s} {x.terminal_r}")
+        if any(p not in alvo for p in digitadas):
+            continue
+        casou = [t for t in (x.terminal_s, x.terminal_r)
+                 if _palavras(t).strip() and any(_palavras(t) in r for r in registro)]
+        z1 = complex(x.r1_ohm, x.x1_ohm)
+        saida.append({**x.como_dicionario(),
+                      "z1_mod": abs(z1), "z1_ang": math.degrees(math.atan2(z1.imag, z1.real)),
+                      "sugerida": bool(casou), "casou": casou})
+    # Ordem alfabética SEM acento: pelo código do caractere, «ÁGUA BOA» ia
+    # para depois de «SIGMA».
+    saida.sort(key=lambda d: (not d["sugerida"], _palavras(d["nome"])))
+    return saida
+
+
+def escolhida(base, nome: str, terminal_s: str = "", terminal_r: str = "") -> Linha | None:
+    """A linha que a tela escolheu, ou `None`.
+
+    O NOME não basta: a base real repete o nome nos trechos de uma derivação
+    («LD VARZEA GRANDE - POCONE» até o TAP e do TAP em diante, 20 km e 66 km).
+    Com os terminais, vale o trecho exato; sem eles, só um nome que não se
+    repete — escolher «o primeiro» de dois seria trocar de linha calado.
+    """
+    alvo = str(nome or "").strip().upper()
+    if not alvo:
+        return None
+    mesmos = [x for x in listar(base) if x.nome.upper() == alvo]
+    s, r = (str(t or "").strip().upper() for t in (terminal_s, terminal_r))
+    if s or r:
+        mesmos = [x for x in mesmos
+                  if (x.terminal_s.upper(), x.terminal_r.upper()) == (s, r)]
+    return mesmos[0] if len(mesmos) == 1 else None
