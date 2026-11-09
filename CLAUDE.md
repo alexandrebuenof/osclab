@@ -46,6 +46,19 @@ tela diz a origem (lido, digitado, sugerido).
    ideia raramente é a melhor, e porque é olhando a quinta ao lado da nona que
    ele decide. Ajuste pequeno e correção de defeito não precisam de maquete.
 
+   **As maquetes rodam DENTRO do programa** *(decidido em 09/11/2026)*.
+   Não é mais uma página HTML solta imitando a tela: é o OscLab de verdade,
+   numa cópia em outro ramo (`git worktree`, pasta `../osclab-maquetes`, ramo
+   `maquete/<assunto>`), na porta **8771**, com um acervo FICTÍCIO à parte
+   (`OSCLAB_DATA_DIR=<cópia>/dados-maquete`, fora do git). A função nova entra
+   ali de forma provisória, com os números fictícios vindos do servidor, e uma
+   barra presa embaixo da tela troca entre as variantes. Tudo o mais — zoom,
+   cursores, arrasto, ímã, os outros gráficos — é o programa real funcionando
+   em volta. Os casos difíceis são REGISTROS fictícios (um por caso), gerados
+   por script, que se abrem pelo acervo como qualquer outro. O ramo da
+   maquete nunca vai para o `main`: escolhida a variante, a implementação
+   de verdade é feita no `main`, com a conta real e testes.
+
 ## Versionamento — decidido pelo Alexandre em 12/10/2026
 
 `X.Y.Z`, e quem decide o dígito é o TAMANHO da mudança:
