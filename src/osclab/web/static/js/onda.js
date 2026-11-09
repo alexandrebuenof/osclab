@@ -416,6 +416,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     paineis = [];
     carregar();
     if (estadoLoc.aberta) pedirLocalizacao();
+    pedirPainelLoc();
   }
 
   /** A tira dos IEDs: uma linha por registro, mais os controles da aba. */
@@ -457,6 +458,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
           carregar();
           // A localização lê B no instante que o alinhamento manda.
           if (estadoLoc.aberta) pedirLocalizacao();
+          pedirPainelLoc();
         });
         barra.append(b);
       }
@@ -1241,6 +1243,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       if (painel.tipo === "triangulo") return blocoTriangulo(painel);
       if (painel.tipo === "impedancia") return blocoImpedancia(painel);
       if (painel.tipo === "complexo") return blocoComplexo(painel);
+      if (painel.tipo === "localizador") return blocoLocalizador(painel, ultimo);
       if (painel.tipo === "alfa") return blocoAlfa(painel);
       if (painel.tipo === "diferencial") return blocoDiferencial(painel);
       return bloco(painel, ultimo);
@@ -1263,6 +1266,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     repintar();
     marcarLegenda();
     marcarPainelEscolhido();
+    if (temPainelLoc() && !pacoteLoc) pedirPainelLoc();
   }
 
   /** Junta os pares de fasoriais numa linha só; o resto fica como está.
@@ -1365,6 +1369,10 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
      + "característica de dois slopes e o bloqueio por 2ª e 5ª harmônica. Os "
      + "ajustes vêm do arquivo quando o relé os grava, e se digitam quando "
      + "não; sem todos eles, o gráfico não é desenhado."],
+    ["localizador", "localizador de faltas",
+     "A distância da falta calculada por cada método, ao longo do registro, no "
+     + "mesmo tempo das ondas, com o número do próprio relé tracejado. Os métodos "
+     + "e a linha são os da tela «localizar falta»."],
     ["alfa", "plano alfa",
      "A razão k = I remoto / I local entre dois terminais, fase por fase, "
      + "com a coroa de restrição do 87L da SEL. Falta externa fica perto de "
@@ -1471,6 +1479,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
                // O laço entra no nome quando o usuário o troca.
                : tipo === "impedancia" ? `Plano de impedância ${quantos}`
                : tipo === "complexo" ? `Plano complexo ${quantos}`
+               : tipo === "localizador" ? `Localizador de faltas ${quantos}`
                : tipo === "alfa" ? `Plano alfa ${quantos}`
                : tipo === "diferencial" ? `Diferencial percentual ${quantos}`
                : `Gráfico analógico ${quantos}`;
@@ -1512,7 +1521,11 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
                    // (ou do típico, quando o arquivo não traz) — o servidor diz.
                    vista: "local", r87: null, ang87: null,
                    // Só no diferencial: o digitado e os suspeitos aceitos.
-                   ajustes87: {} });
+                   ajustes87: {},
+                   // Só no localizador: a unidade do eixo, os métodos
+                   // escondidos e a distância do relé digitada (vazio =
+                   // a que o arquivo traz).
+                   unidade_loc: "km", ocultos_loc: [], rele_manual: null });
     carregar();
   }
 
@@ -5859,6 +5872,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       else if (b._painel.tipo === "triangulo") pintarTriangulo(b._canvas, b._painel);
       else if (b._painel.tipo === "impedancia") pintarImpedancia(b._canvas, b._painel);
       else if (b._painel.tipo === "complexo") pintarComplexo(b);
+      else if (b._painel.tipo === "localizador") pintarLocalizador(b);
       else if (b._painel.tipo === "alfa") pintarAlfa(b);
       else if (b._painel.tipo === "diferencial") pintarDiferencial(b);
       else pintar(b._canvas, b._painel, b._ultimo);
@@ -12003,6 +12017,420 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     return { radial, emLog };
   }
 
+  // --- o painel «localizador de faltas» ---------------------------------------
+  //
+  // As curvas de cada método de localização ao longo do registro, no MESMO
+  // eixo do tempo das ondas, com o número do relé tracejado. Escolhido entre
+  // as maquetes em 09/11/2026 (a 11): o número de cada método na legenda, o
+  // resultado no rodapé, a única chave é km / % da linha, e a explicação de
+  // cada método e a origem do número do relé ficam no passar do mouse.
+  //
+  // Os números são do servidor (`plot/localizador.py`, em cima da mesma conta
+  // da tela «localizar falta»): aqui só se converte valor em pixel. As curvas
+  // vão sempre em km; em % da linha mudam os RÓTULOS do eixo, que o servidor
+  // manda já posicionados no km que valem.
+
+  //: O pacote da localização que alimenta os painéis, e o pedido em voo.
+  let pacoteLoc = null;
+  let lendoLoc = false;
+  let deNovoLoc = false;
+  //: O que, mudando, exige refazer a legenda e o rodapé (e não só repintar).
+  let assinaturaLoc = "";
+  const temPainelLoc = () => paineis.some((x) => x.tipo === "localizador");
+  const painelLocDe = (id) => painelPorId(id) || {};
+
+  async function pedirPainelLoc() {
+    if (!temPainelLoc() || !dados) return;
+    if (lendoLoc) { deNovoLoc = true; return; }
+    lendoLoc = true;
+    const meu = paineis.find((x) => x.tipo === "localizador") || {};
+    const bloco = blocos.find((b) => b._painel && b._painel.tipo === "localizador");
+    const largura = bloco && bloco._canvas ? bloco._canvas.clientWidth : 1200;
+    try {
+      const r = await fetch(`/api/onda/${sha}/localizar`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          registros: outrosRegistros, alinhar: alinharPor,
+          t: cursores[0], t2: cursores[1],
+          // A linha é a MESMA escolhida na tela «localizar falta»: o número
+          // não pode mudar de uma tela para a outra.
+          fonte: estadoLoc.fonte, manual: estadoLoc.manual,
+          estimador: filtroEscolhido !== FILTROS[0][0] ? filtroEscolhido : null,
+          colunas: colunasLoc(largura), colunas_ondas: colunasLoc(largura / 2),
+          painel: true, rele_manual: meu.rele_manual ?? null,
+        }),
+      });
+      const corpo = await r.json();
+      pacoteLoc = r.ok ? corpo : { aviso: corpo.erro || "a localização falhou", metodos: {} };
+    } catch (_e) {
+      pacoteLoc = { aviso: "o servidor não respondeu", metodos: {} };
+    }
+    lendoLoc = false;
+    const p = pacoteLoc.painel || {};
+    const assinatura = JSON.stringify([pacoteLoc.aviso, pacoteLoc.metodos, p.metodos, p.rele,
+                                       p.resultado, p.linha_km]);
+    if (assinatura !== assinaturaLoc) {
+      assinaturaLoc = assinatura;
+      desenharTudo();
+    } else {
+      repintar();
+    }
+    if (deNovoLoc) { deNovoLoc = false; pedirPainelLoc(); }
+  }
+
+  /** Um número na unidade escolhida, com a unidade. */
+  function valorLocUnid(par, pct, casas = null) {
+    const v = par ? (pct ? par.pct : par.km) : null;
+    if (v === null || v === undefined) return "—";
+    return `${formatar(v, casas ?? (pct ? 1 : 2))} ${pct ? "%" : "km"}`;
+  }
+
+  function dicaDoMetodoLoc(info, m) {
+    const terminais = m === "seqneg" ? "Usa os DOIS terminais." : "Usa UM terminal.";
+    return `${info.nome || m}\n\nComo calcula: ${info.como || "—"}\n\n${terminais} `
+         + `${info.quando || ""}${info.motivo ? `\n\n${info.motivo}` : ""}`
+         + "\n\nClique para esconder ou mostrar a curva.";
+  }
+
+  function dicaDoReleLoc(r) {
+    if (!r) {
+      return "O arquivo não traz a distância calculada pelo relé (a GE grava num "
+           + "relatório à parte; SIPROTEC, no DIGSI). Clique para digitar.";
+    }
+    if (r.origem === "digitado") {
+      return `Distância do relé DIGITADA: ${formatar(r.km, 2)} km.\n\n`
+           + "Clique para trocar; apagar o campo volta ao que o arquivo traz.";
+    }
+    const unidade = r.presumido
+      ? "O arquivo não diz a unidade (é a do ajuste LL do relé): o número foi tomado como km."
+      : `Unidade escrita no arquivo: ${r.unidade}.`;
+    return `Distância calculada pelo próprio relé: ${formatar(r.valor, 2)}`
+         + `${r.presumido ? "" : ` ${r.unidade}`}.\n\nDe onde veio: campo ${r.campo}, `
+         + `arquivo ${r.arquivo}.\n\n${unidade}\n\nClique para digitar outro valor.`;
+  }
+
+  /** Troca o nome do relé por um campo: Enter grava, Esc desiste. */
+  function editarReleLoc(item, painel) {
+    const meu = painelLocDe(painel.id);
+    const campo = criar("input", "pl-campo");
+    campo.type = "text";
+    campo.inputMode = "decimal";
+    campo.placeholder = "km";
+    campo.value = meu.rele_manual ?? "";
+    campo.title = "Distância que o relé calculou, em km. Vazio volta ao que o arquivo traz.";
+    let pronto = false;
+    const terminar = (gravar) => {
+      if (pronto) return;
+      pronto = true;
+      if (gravar) {
+        const texto = campo.value.trim().replace(",", ".");
+        const n = Number(texto);
+        guardarParaDesfazer();
+        meu.rele_manual = texto === "" || !Number.isFinite(n) ? null : n;
+      }
+      pedirPainelLoc();
+      desenharTudo();
+    };
+    campo.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") terminar(true);
+      if (e.key === "Escape") terminar(false);
+    });
+    campo.addEventListener("blur", () => terminar(true));
+    item.replaceChildren(criar("span", "marca pl-marca-rele"), criar("span", "nome", "relé"), campo);
+    campo.focus();
+  }
+
+  function rodapeLoc(pct) {
+    const p = (pacoteLoc && pacoteLoc.painel) || {};
+    const res = p.resultado;
+    const pe = criar("p", "rodape-do-painel pl-rodape");
+    if (!res) {
+      pe.textContent = `sem resultado${pacoteLoc && pacoteLoc.aviso ? ` — ${pacoteLoc.aviso}` : ""}`;
+      return pe;
+    }
+    const info = (pacoteLoc.metodos || {})[res.metodo] || {};
+    const faixa = pct ? res.patrulha_pct : res.patrulha_km;
+    const r = p.rele;
+    const delta = r ? (pct ? r.delta_pct : r.delta_km) : null;
+    pe.innerHTML = `resultado <b>${valorLocUnid(res, pct, 1)}</b> de A, por ${info.curto || res.metodo}`
+      + ` · patrulhar <b>${formatar(faixa[0], 1)} a ${formatar(faixa[1], 1)} ${pct ? "%" : "km"}</b>`
+      + (r ? ` · relé ${valorLocUnid(r, pct, 1)}`
+           + (delta === null ? "" : ` (${delta > 0 ? "+" : delta < 0 ? "−" : ""}${formatar(Math.abs(delta), 1)})`)
+           : "");
+    return pe;
+  }
+
+  function blocoLocalizador(painel, ultimo) {
+    const meu = painelLocDe(painel.id);
+    const p = (pacoteLoc && pacoteLoc.painel) || null;
+    const temLinha = !!(p && p.linha_km);
+    const pct = meu.unidade_loc === "%" && temLinha;
+    const ocultos = new Set(meu.ocultos_loc || []);
+    const el = criar("section", "grafico grafico-localizador");
+
+    const chave = criar("span", "pl-pilula");
+    for (const [valor, rotulo] of [["km", "km"], ["%", "% da linha"]]) {
+      const b = criar("button", "medida" + ((pct ? "%" : "km") === valor ? " aceso" : ""), rotulo);
+      b.type = "button";
+      b.disabled = valor === "%" && !temLinha;
+      b.title = valor === "%" ? (temLinha ? "O eixo e os números em % do comprimento da linha."
+                                          : "Sem o comprimento da linha não há %.")
+                              : "O eixo e os números em km a partir de A.";
+      b.addEventListener("click", () => {
+        if (meu.unidade_loc === valor) return;
+        guardarParaDesfazer();
+        meu.unidade_loc = valor;
+        desenharTudo();
+      });
+      chave.append(b);
+    }
+    el.append(cabecalhoDoPainel(painel, [chave]));
+
+    const legenda = criar("ul", "legenda");
+    if (pacoteLoc) {
+      for (const m of ORDEM_LOC) {
+        const info = (pacoteLoc.metodos || {})[m];
+        if (!info) continue;
+        const li = criar("li");
+        const marca = criar("span", "marca");
+        marca.style.background = CORES_LOC[m];
+        li.append(marca, criar("span", "nome", info.curto || m));
+        li.title = dicaDoMetodoLoc(info, m);
+        if (info.km === null || info.km === undefined) {
+          li.classList.add("pl-sem");
+          li.append(criar("span", "lado", info.motivo || "sem resposta"));
+        } else {
+          const par = (p && p.metodos[m]) || { km: info.km, pct: null };
+          const valor = criar("span", "pl-valor", valorLocUnid(par, pct));
+          valor.style.color = CORES_LOC[m];
+          li.append(valor);
+          if (info.fora) li.append(criar("span", "lado sem-relacao", "fora da linha"));
+          if (ocultos.has(m)) li.classList.add("pl-oculto");
+          li.style.cursor = "pointer";
+          li.addEventListener("click", () => {
+            guardarParaDesfazer();
+            const lista = new Set(meu.ocultos_loc || []);
+            if (lista.has(m)) lista.delete(m); else lista.add(m);
+            meu.ocultos_loc = [...lista];
+            desenharTudo();
+          });
+        }
+        legenda.append(li);
+      }
+      const r = p ? p.rele : null;
+      const liR = criar("li");
+      liR.append(criar("span", "marca pl-marca-rele"), criar("span", "nome", "relé"));
+      if (r) {
+        liR.append(criar("span", "pl-valor", valorLocUnid(r, pct) + (r.presumido && !pct ? "*" : "")));
+      } else {
+        liR.classList.add("pl-sem");
+        liR.append(criar("span", "lado", "—"));
+      }
+      liR.title = dicaDoReleLoc(r);
+      liR.style.cursor = "pointer";
+      liR.addEventListener("click", () => editarReleLoc(liR, painel));
+      legenda.append(liR);
+    }
+    el.append(legenda);
+    if (pacoteLoc && pacoteLoc.aviso) el.append(criar("p", "pl-aviso", pacoteLoc.aviso));
+
+    const corpo = criar("div", "grafico-corpo");
+    const caixa = criar("div", "tela");
+    const canvas = document.createElement("canvas");
+    caixa.append(canvas);
+    const lado = criar("div", "pl-lado");
+    corpo.append(caixa, lado);
+    el.append(corpo);
+    if (pacoteLoc) el.append(rodapeLoc(pct));
+
+    el._canvas = canvas;
+    el._painel = painel;
+    el._ultimo = ultimo;
+    el._ladoLoc = lado;
+    return el;
+  }
+
+  function pintarLocalizador(b) {
+    const painel = b._painel, canvas = b._canvas, ultimo = b._ultimo;
+    const meu = painelLocDe(painel.id);
+    const cssLargura = canvas.parentElement.clientWidth;
+    const cssAltura = ALTURA + (ultimo ? MARGEM.baixo : 8);
+    const dpr = window.devicePixelRatio || 1;
+    canvas.style.width = `${cssLargura}px`;
+    canvas.style.height = `${cssAltura}px`;
+    dimensionar(canvas, Math.round(cssLargura * dpr), Math.round(cssAltura * dpr));
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssLargura, cssAltura);
+    const x0 = MARGEM.esq, x1 = cssLargura - MARGEM.dir, y0 = MARGEM.topo, y1 = ALTURA - 4;
+    if (x1 <= x0) return;
+    const emX = (t) => x0 + ((t - dados.de) / (dados.ate - dados.de || 1)) * (x1 - x0) + arrastoPx;
+    const corLinha = token("--linha"), corSuave = token("--suave");
+    const corTinta = token("--tinta"), corDestaque = token("--destaque");
+    ctx.font = "11px ui-monospace, Consolas, monospace";
+    ctx.textBaseline = "middle";
+
+    const p = pacoteLoc && pacoteLoc.painel;
+    if (!p || !p.regua) {
+      ctx.strokeStyle = corLinha;
+      ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
+      ctx.fillStyle = corSuave;
+      ctx.textAlign = "center";
+      ctx.fillText(!pacoteLoc ? "calculando a localização…"
+                   : "sem o comprimento da linha nem o número do relé, não há eixo de km",
+                   (x0 + x1) / 2, (y0 + y1) / 2);
+      pintarEtiquetas(ctx, emX, x0, x1, y0);
+      pintarRodapeDoTempo(ctx, emX, x0, x1, y1, ultimo);
+      if (b._ladoLoc) b._ladoLoc.replaceChildren();
+      return;
+    }
+    const pct = meu.unidade_loc === "%" && !!p.linha_km;
+    const lo = p.regua.min, hi = p.regua.max;
+    const Y = (km) => y1 - ((km - lo) / (hi - lo || 1)) * (y1 - y0);
+
+    // A régua: em km as marcações da conta; em %, as do servidor, cada uma no
+    // km que vale.
+    const marcas = pct ? p.marcas_pct : p.regua.marcas.map((v) => ({ rotulo: v, km: v }));
+    ctx.textAlign = "right";
+    ctx.lineWidth = 1;
+    for (const marca of marcas) {
+      const y = Math.round(Y(marca.km)) + 0.5;
+      if (y < y0 - 0.5 || y > y1 + 0.5) continue;
+      ctx.strokeStyle = corLinha;
+      ctx.globalAlpha = 0.55;
+      ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = corSuave;
+      ctx.textBaseline = y - y0 < 6 ? "top" : y1 - y < 6 ? "bottom" : "middle";
+      ctx.fillText(formatar(marca.rotulo, Number.isInteger(marca.rotulo) ? 0 : 1), x0 - 8, y);
+      ctx.textBaseline = "middle";
+    }
+    escreverUnidade(ctx, pct ? "% da LT" : "km de A", x0 - 8, y0 - MARGEM.topo / 2, "right");
+
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x0, y0, x1 - x0, y1 - y0); ctx.clip();
+    ctx.strokeStyle = corLinha;
+    ctx.globalAlpha = 0.5;
+    for (const marca of (dados.marcacoes_tempo || [])) {
+      const x = Math.round(emX(marca)) + 0.5;
+      ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y1); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    const ev = pacoteLoc.eventos || {};
+    if (ev.plato) {
+      const a = emX(ev.plato[0]), z = emX(ev.plato[1]);
+      ctx.fillStyle = corDestaque;
+      ctx.globalAlpha = 0.09;
+      ctx.fillRect(a, y0, z - a, y1 - y0);
+      ctx.globalAlpha = 1;
+      ctx.textAlign = "left";
+      ctx.fillText("platô", a + 4, y0 + 9);
+    }
+    ctx.save();
+    ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = corSuave;
+    ctx.fillStyle = corSuave;
+    for (const [t, rotulo] of [[ev.inicio, "falta"], [ev.abre_a, "abre"]]) {
+      if (t === null || t === undefined) continue;
+      const x = Math.round(emX(t)) + 0.5;
+      ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y1); ctx.stroke();
+      ctx.textAlign = "left";
+      ctx.fillText(rotulo, x + 3, y1 - 8);
+    }
+    ctx.restore();
+
+    if (p.linha_km) {
+      const y = Math.round(Y(p.linha_km)) + 0.5;
+      if (y >= y0 && y <= y1) {
+        ctx.strokeStyle = corSuave;
+        ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke();
+        ctx.fillStyle = corSuave;
+        ctx.textAlign = "left";
+        ctx.fillText("fim da linha", x0 + 6, y - 7);
+      }
+    }
+
+    if (p.rele) {
+      ctx.save();
+      ctx.strokeStyle = corTinta;
+      ctx.lineWidth = 1.6;
+      ctx.setLineDash([7, 4]);
+      const y = Y(p.rele.km);
+      ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke();
+      ctx.restore();
+    }
+
+    const ocultos = new Set(meu.ocultos_loc || []);
+    const res = p.resultado;
+    for (const m of [...ORDEM_LOC].reverse()) {
+      const curva = (pacoteLoc.ldl || {})[m];
+      if (!curva || ocultos.has(m)) continue;
+      const valores = (curva.v || [])[0] || [];
+      ctx.save();
+      ctx.strokeStyle = CORES_LOC[m];
+      ctx.lineWidth = res && res.metodo === m ? 2.4 : 1.5;
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      let aberto = false;
+      curva.t.forEach((t, i) => {
+        const v = valores[i];
+        if (v === null || v === undefined || t === null) { aberto = false; return; }
+        const x = emX(t), y = Y(v);
+        if (aberto) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+        aberto = true;
+      });
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    cursores.forEach((t, k) => {
+      if (t === null) return;
+      const x = Math.round(emX(t)) + 0.5;
+      if (x < x0 - 1 || x > x1 + 1) return;
+      ctx.save();
+      ctx.strokeStyle = token(k === 0 ? "--cursor-1" : "--cursor-2");
+      ctx.lineWidth = k === ativo ? 2 : 1.2;
+      ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y1); ctx.stroke();
+      ctx.restore();
+    });
+    ctx.restore();
+
+    ctx.strokeStyle = corLinha;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
+    pintarEtiquetas(ctx, emX, x0, x1, y0);
+    pintarRodapeDoTempo(ctx, emX, x0, x1, y1, ultimo);
+    if (b._ladoLoc) pintarTabelaLoc(b._ladoLoc, p, pct, ocultos);
+  }
+
+  /** A tabelinha ao lado: o km de cada método nos cursores, como nos analógicos. */
+  function pintarTabelaLoc(lado, p, pct, ocultos) {
+    const u = pct ? "pct" : "km";
+    const casas = pct ? 1 : 2;
+    const c1 = p.cursor1, c2 = p.cursor2, dif = p.diferenca;
+    const celula = (v) => `<td>${v === null || v === undefined ? "—" : formatar(v, casas)}</td>`;
+    let html = `<table class="pl-mini"><thead><tr><th>${pct ? "% da LT" : "km"}</th>`
+      + `<th><span class="em-1"></span>1</th><th><span class="em-2"></span>2</th><th>2−1</th>`
+      + `</tr></thead><tbody>`;
+    for (const m of ORDEM_LOC) {
+      const info = (pacoteLoc.metodos || {})[m];
+      if (!info || info.km === null || info.km === undefined || ocultos.has(m)) continue;
+      html += `<tr><th><span class="marca" style="background:${CORES_LOC[m]}"></span>${htmlLoc(info.curto)}</th>`
+        + celula(c1 ? c1[u][m] : null) + celula(c2 ? c2[u][m] : null)
+        + celula(dif ? dif[u][m] : null) + `</tr>`;
+    }
+    if (p.rele) {
+      const v = pct ? p.rele.pct : p.rele.km;
+      html += `<tr><th><span class="marca pl-marca-rele"></span>relé</th>`
+        + celula(c1 ? v : null) + celula(c2 ? v : null) + `<td></td></tr>`;
+    }
+    html += `</tbody></table>`;
+    const fora = [c1, c2].some((c) => c && !c.no_plato);
+    if (fora) html += `<p class="pl-nota">cursor fora do platô: o número lido ali não vale</p>`;
+    lado.innerHTML = html;
+  }
+
   function pintarAlfa(bloco) {
     const canvas = bloco._canvas;
     const painel = bloco._painel;
@@ -15784,6 +16212,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         if (!ajustarEspaco()) repintar();
         // A localização segue o cursor 1: cada leitura nova refaz a conta.
         if (estadoLoc.aberta) pedirLocalizacao();
+        pedirPainelLoc();
       }
     } catch { /* leitura é acessório: falhou, o desenho continua de pé */ }
 
@@ -16099,7 +16528,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   function temEixoDeTempo(canvas) {
     if (!canvas || canvas._harmonicos || canvas._fasorial) return false;
     const tipo = (blocos.find((b) => b._canvas === canvas) || {})._painel?.tipo;
-    return tipo === "analogico" || tipo === "digital";
+    return tipo === "analogico" || tipo === "digital" || tipo === "localizador";
   }
 
   area.addEventListener("wheel", (evento) => {

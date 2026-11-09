@@ -66,7 +66,10 @@ ALFA = "alfa"
 #: O diferencial de transformador (87T): Iop × Irt ao longo do registro, com
 #: os ajustes lidos do arquivo ou digitados. Ver `plot/diferencial.py`.
 DIFERENCIAL = "diferencial"
-TIPOS = (ANALOGICO, DIGITAL, FASORIAL, HARMONICOS, TRIANGULO, IMPEDANCIA,
+#: As curvas dos métodos de localização no tempo, com o número do relé. Ver
+#: `plot/localizador.py`.
+LOCALIZADOR = "localizador"
+TIPOS = (ANALOGICO, DIGITAL, FASORIAL, HARMONICOS, TRIANGULO, IMPEDANCIA, LOCALIZADOR,
          COMPLEXO, ALFA, DIFERENCIAL)
 
 

@@ -82,6 +82,7 @@ from osclab.basedados import navegar as navegar_mod
 from osclab.basedados import pasta as base_mod
 from osclab.dsp import fasor as fasor_mod
 from osclab.faultloc import ldl as ldl_mod
+from osclab.faultloc import rele as rele_mod
 from osclab.faultloc import seqneg as seqneg_mod
 from osclab.formats import ajustes as ajustes_mod
 from osclab.formats import eventos as eventos_mod
@@ -93,6 +94,7 @@ from osclab.plot import contas as contas_mod
 from osclab.plot import eventos as eventos_plot
 from osclab.plot import impedancia as impedancia_mod
 from osclab.plot import janela, leitura, navegacao, paineis, unidades
+from osclab.plot import localizador as localizador_mod
 from osclab.plot import varios as varios_mod
 
 #: Teto do envio. Um `.dat` de SEL-487E tem 4,7 MB; alguém vai arrastar a pasta
@@ -567,6 +569,24 @@ def create_app() -> Flask:
         pacote.update(fontes=fontes, fonte=usada, pedida=pedida, z0_de=z0_de,
                       linha=linha, nomes={x["letra"]: x["nome"] for x in terminais},
                       alinhamento=b["alinhamento"] if b else None)
+        if corpo.get("painel"):
+            # O painel «localizador de faltas» lê os DOIS cursores e o número
+            # do relé. O cursor 2 é a mesma conta guardada, lida noutro
+            # instante; sem cursor na tela não se lê nada — o meio do platô
+            # que a tela de localizar usa seria um número que ninguém pediu.
+            t2 = _numero(str(corpo.get("t2"))) if corpo.get("t2") is not None else None
+            with fasor_mod.usando(estimador):
+                cursor2 = (ldl_mod.montar(registro, b and b["registro"], b["d"] if b else 0.0,
+                                          linha, t2, colunas, chave, colunas_ondas)["cursor"]
+                           if t2 is not None else None)
+            item = acervo.obter(sha)
+            lido = rele_mod.do_registro(
+                acervo.pasta_do_registro(sha),
+                (item.como_dicionario().get("arquivos") or ()) if item else ())
+            pacote["painel"] = localizador_mod.montar(
+                pacote, pacote.get("cursor") if t is not None else None, cursor2,
+                lido, _numero(str(corpo.get("rele_manual")))
+                if corpo.get("rele_manual") is not None else None)
         return jsonify(pacote)
 
     @app.post("/api/base/linhas")

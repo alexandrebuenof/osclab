@@ -5949,3 +5949,37 @@ table.verbetes tr.pendente td:first-child { box-shadow: inset 3px 0 0 var(--dest
 .fila-loc > label { color: var(--suave); min-width: 64px; }
 .tela-localizar input { background: var(--fundo); color: var(--tinta); border: 1px solid var(--linha); border-radius: 4px; padding: 2px 6px; font: inherit; }
 .tela-localizar input.num-loc { width: 82px; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ----------------------------------------------------------------------
+   O PAINEL LOCALIZADOR DE FALTAS
+
+   As curvas dos métodos no tempo, com o relé tracejado. O número de cada
+   método vai na legenda, em negrito na cor da curva; o resultado no rodapé.
+   A tabelinha ao lado só existe com cursor, como a dos analógicos — sem
+   isso o eixo do tempo deste painel desalinharia do dos outros.
+   ---------------------------------------------------------------------- */
+.pl-pilula { display: inline-flex; }
+.pl-pilula .medida + .medida { margin-left: -1px; }
+.legenda .pl-valor { font-weight: 700; font-size: 12.5px; color: var(--tinta); }
+.legenda .pl-marca-rele, .pl-mini .pl-marca-rele {
+  background: repeating-linear-gradient(90deg, var(--tinta) 0 5px, transparent 5px 8px); }
+.legenda li.pl-oculto { opacity: .38; }
+.legenda li.pl-sem { opacity: .65; }
+.legenda li.pl-sem .lado { font-style: italic; }
+.legenda .pl-campo { width: 7em; font: inherit; padding: 0 4px; background: var(--fundo);
+  color: var(--tinta); border: 1px solid var(--destaque); border-radius: 3px; }
+.pl-aviso { margin: 0 0 6px; font-size: 12.5px; color: var(--suave); }
+.rodape-do-painel.pl-rodape { margin: 6px 0 0; font: 12.5px var(--mono); color: var(--suave); }
+.rodape-do-painel.pl-rodape b { color: var(--destaque); }
+.pl-lado { display: none; font: 11.5px var(--mono); }
+#graficos.com-cursores .pl-lado { display: block; }
+.pl-mini { border-collapse: collapse; width: 100%; }
+.pl-mini th, .pl-mini td { padding: 2px 6px; text-align: right; white-space: nowrap; }
+.pl-mini thead th { color: var(--suave); font-weight: 400; border-bottom: 1px solid var(--linha); }
+.pl-mini tbody th { text-align: left; font-weight: 400; color: var(--tinta); }
+.pl-mini .marca { display: inline-block; width: 12px; height: 3px; border-radius: 2px;
+  margin-right: 6px; vertical-align: middle; }
+.pl-mini .em-1, .pl-mini .em-2 { display: inline-block; width: 8px; height: 8px; margin-right: 3px; }
+.pl-mini .em-1 { background: var(--cursor-1); }
+.pl-mini .em-2 { background: var(--cursor-2); }
+.pl-nota { margin: 4px 0 0; color: var(--suave); font-size: 11px; }

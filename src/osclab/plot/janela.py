@@ -37,6 +37,7 @@ from osclab.plot import complexo as complexo_mod
 from osclab.plot import diferencial as diferencial_mod
 from osclab.plot import harmonicos as harmonicos_mod
 from osclab.plot import impedancia as impedancia_mod
+from osclab.plot import localizador as localizador_mod
 from osclab.plot.conversao import LADOS
 
 #: Versão do formato do pacote da janela. Sobe quando a tela passa a depender
@@ -135,6 +136,10 @@ def montar(registro: Record, *, de: float | None = None, ate: float | None = Non
             # Do registro inteiro, como o alfa, e com os ajustes do relé: o
             # gráfico só sai quando todos têm valor. Ver `plot/diferencial.py`.
             saida.append(diferencial_mod.montar(registro, painel, ajustes))
+        elif painel.tipo == paineis.LOCALIZADOR:
+            # Só a identidade: os números vêm da rota da localização, que já
+            # guarda as contas pesadas. Ver `plot/localizador.py`.
+            saida.append(localizador_mod.esqueleto(painel))
         elif painel.tipo == paineis.HARMONICOS:
             # Idem: as barras são de UM instante e vêm da leitura do cursor.
             saida.append(harmonicos_mod.montar(registro, painel, por_id,
