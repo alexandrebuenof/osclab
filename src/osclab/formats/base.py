@@ -335,6 +335,43 @@ class Record:
         raise KeyError(f"canal analogico '{name}' nao existe neste registro")
 
 
+#: Quantas respostas cada registro guarda (`lembrado`). Cada combinação de
+#: lado e contas é uma; as contas mudam enquanto o usuário digita.
+_LEMBRADOS_POR_REGISTRO = 16
+
+
+def lembrado(registro: Record, nome: str, iguais: tuple, mesmos: tuple, fazer):
+    """A resposta de `fazer()` já calculada para este registro, se ainda vale.
+
+    Existe pelo cursor: cada posição dele é um pedido, e cada pedido refazia o
+    agrupamento das trincas e o catálogo inteiro — mais de 100 ms de contas
+    cujo resultado não muda enquanto o registro não muda (medido num `.CEV`,
+    09/11/2026: a leitura do cursor levava 280 ms e o cursor atualizava três
+    vezes por segundo).
+
+    A resposta vale enquanto os `mesmos` forem OS MESMOS objetos (os canais e
+    as matrizes de amostras: compará-los por valor custaria o que se quer
+    poupar) e os `iguais` forem iguais (as correções do usuário, o lado, as
+    contas). Quem troca os canais de um registro — a correção de fase troca a
+    tupla inteira — invalida a resposta sem precisar avisar ninguém.
+
+    Guardado no próprio registro, fora dos campos da dataclass: some junto com
+    ele, e um `replace` começa sem memória.
+    """
+    caixa = registro.__dict__.setdefault("_lembrados", {})
+    chave = (nome, iguais)
+    achado = caixa.get(chave)
+    if achado is not None and len(achado[0]) == len(mesmos) \
+            and all(a is b for a, b in zip(achado[0], mesmos, strict=True)):
+        return achado[1]
+    valor = fazer()
+    caixa.pop(chave, None)
+    caixa[chave] = (mesmos, valor)
+    while len(caixa) > _LEMBRADOS_POR_REGISTRO:
+        caixa.pop(next(iter(caixa)))
+    return valor
+
+
 @runtime_checkable
 class Reader(Protocol):
     """O que um módulo de formato precisa oferecer para entrar no registry.

@@ -54,7 +54,7 @@ from enum import StrEnum
 import numpy as np
 
 from osclab.formats import fases
-from osclab.formats.base import Record
+from osclab.formats.base import Record, lembrado
 
 #: As três que a transformação exige. O neutro é bem-vindo e não é obrigatório:
 #: ele não entra na conta, só acompanha o conjunto na tela.
@@ -801,5 +801,16 @@ def _completos(registro: Record) -> list[Conjunto]:
 
 
 def de_registro(registro: Record) -> tuple[Conjunto, ...]:
-    """Os conjuntos trifásicos completos do registro, já com nome de grupo."""
-    return tuple(rotular(_completos(registro)))
+    """Os conjuntos trifásicos completos do registro, já com nome de grupo.
+
+    Lembrado no registro (`base.lembrado`): é chamado várias vezes por pedido,
+    e mede a presença de sinal em cada canal a cada vez. Muda quando mudam os
+    canais (a correção de fase troca a tupla) ou as trincas corrigidas. O
+    estimador entra porque a presença de sinal passa pela fundamental.
+    """
+    from osclab.dsp import fasor
+    return lembrado(
+        registro, "conjuntos",
+        (repr(registro.trincas_escolhidas), fasor.estimador()),
+        (registro.analog_channels, registro.analog, registro.time),
+        lambda: tuple(rotular(_completos(registro))))

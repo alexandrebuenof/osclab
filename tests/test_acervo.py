@@ -361,6 +361,41 @@ def test_limpar_a_correcao_muda_a_versao_que_o_cache_da_localizacao_usa(tmp_path
     assert _versao_do_registro(sha) != antes
 
 
+def test_o_registro_aberto_fica_guardado_ate_a_pasta_mudar(tmp_path):
+    """Cada posição do cursor relia e decodificava o arquivo (40 a 70 ms num
+    `.CEV`). Guardado, o mesmo objeto volta — até a correção de fase, que muda
+    a pasta, e aí o registro TEM que ser relido: a fase velha na tela seria
+    defeito sem erro nenhum."""
+    sha = acervo.guardar(_par(tmp_path, n=64)).aceitos[0].sha
+    primeiro = acervo.ler(sha)
+    assert acervo.ler(sha) is primeiro
+    acervo.gravar_vinculos(sha, {"0": "C"})
+    corrigido = acervo.ler(sha)
+    assert corrigido is not primeiro
+    assert corrigido.analog_channels[0].phase_escolhida == "C"
+    acervo.gravar_vinculos(sha, {"0": ""})
+    assert acervo.ler(sha).analog_channels[0].phase_escolhida != "C"
+
+
+def test_a_trinca_corrigida_refaz_os_conjuntos_lembrados(tmp_path):
+    """Os conjuntos e o catálogo ficam lembrados no registro; a trinca
+    corrigida tem que chegar a eles mesmo assim."""
+    from osclab.formats import conjuntos
+    from osclab.plot import catalogo
+    sha = acervo.guardar(_trafo(tmp_path)).aceitos[0].sha
+    antes = conjuntos.de_registro(acervo.ler(sha))
+    nomes_antes = [s.id for s in catalogo.de_registro(acervo.ler(sha))]
+    g1 = next(c for c in antes if c.rotulo == "G1")
+    trocada = {"A": g1.abc[0], "B": g1.abc[2], "C": g1.abc[1]}
+    acervo.gravar_trincas(sha, {g1.nome: trocada})
+    depois = next(c for c in conjuntos.de_registro(acervo.ler(sha)) if c.nome == g1.nome)
+    assert depois.abc == (g1.abc[0], g1.abc[2], g1.abc[1])
+    # O catálogo devolve uma CÓPIA: mexer nela não estraga o lembrado.
+    lista = catalogo.de_registro(acervo.ler(sha))
+    lista.clear()
+    assert [s.id for s in catalogo.de_registro(acervo.ler(sha))] == nomes_antes
+
+
 def test_vinculo_com_lixo_e_ignorado(tmp_path):
     """A tela manda texto, e o servidor não confia nele."""
     sha = acervo.guardar(_par(tmp_path, n=64)).aceitos[0].sha

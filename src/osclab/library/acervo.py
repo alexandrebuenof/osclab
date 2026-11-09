@@ -56,8 +56,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
+import threading
+from collections import OrderedDict
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field, fields, replace
 from datetime import datetime
@@ -782,12 +785,56 @@ def caminho_principal(sha: str) -> Path | None:
     return _principal(_raiz() / sha)
 
 
+#: Quantos registros abertos ficam na memoria. Um SEL-487E guarda dezenas de
+#: MB so' de digitais, entao poucos: o que se quer e' nao reler o registro que
+#: esta' na tela a cada gesto, nao guardar o acervo inteiro.
+_ABERTOS_NO_MAXIMO = 4
+_abertos: OrderedDict = OrderedDict()
+_trava_dos_abertos = threading.Lock()
+
+
+def _carimbo(pasta: Path) -> tuple:
+    """Nome, tamanho e hora de cada arquivo da pasta do registro.
+
+    E' o que diz se o registro aberto ainda vale: as correcoes do usuario
+    (`vinculos.json`, `trincas.json`, ...) moram na mesma pasta, e gravar
+    qualquer uma muda o carimbo. Assim nenhuma rota precisa lembrar de avisar
+    que mexeu -- esquecer o aviso deixaria a tela com a fase velha, sem erro.
+    """
+    try:
+        return tuple(sorted((e.name, e.stat().st_size, e.stat().st_mtime_ns)
+                            for e in os.scandir(pasta) if e.is_file()))
+    except OSError:
+        return ()
+
+
 def ler(sha: str) -> Record:
-    """Abre o registro. Levanta `FormatError` se ele sumiu ou quebrou."""
+    """Abre o registro. Levanta `FormatError` se ele sumiu ou quebrou.
+
+    O registro aberto fica guardado enquanto a pasta dele nao mudar (ver
+    `_carimbo`). Cada posicao do cursor e' um pedido, e reler o arquivo a cada
+    uma custava 40 a 70 ms num `.CEV` -- texto, decodificado linha a linha --,
+    medido em 09/11/2026. Quem recebe o registro NAO pode altera'-lo: ele e'
+    o mesmo objeto para todos os pedidos.
+    """
     caminho = caminho_principal(sha)
     if caminho is None:
         raise FormatError("Este registro nao esta' no acervo.")
-    return _com_vinculos(registry.read(caminho), sha)
+    pasta = caminho.parent
+    chave = (str(pasta), sha)
+    carimbo = _carimbo(pasta)
+    with _trava_dos_abertos:
+        achado = _abertos.get(chave)
+        if achado is not None and achado[0] == carimbo:
+            _abertos.move_to_end(chave)
+            return achado[1]
+    registro = _com_vinculos(registry.read(caminho), sha)
+    with _trava_dos_abertos:
+        _abertos[chave] = (carimbo, registro)
+        _abertos.move_to_end(chave)
+        while len(_abertos) > _ABERTOS_NO_MAXIMO:
+            _abertos.popitem(last=False)
+    return registro
 
 
 # ---------------------------------------------------------------------------

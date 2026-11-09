@@ -245,7 +245,7 @@ import numpy as np
 
 from osclab.dsp import envoltoria, potencia, simetricas
 from osclab.formats import conjuntos, fases
-from osclab.formats.base import Record
+from osclab.formats.base import Record, lembrado
 from osclab.plot import conversao, sinais, unidades
 
 #: Índice da componente no resultado de `simetricas.de_fasores`, e como ela se
@@ -576,7 +576,25 @@ def de_registro(registro: Record, lado: str = "arquivo",
     A lista sai inteira, das duas famílias, e a tela separa em abas. O servidor
     monta porque o nome de um sinal é identidade e nasce no Python — ver
     `plot/sinais.py`.
+
+    Lembrada no registro (`base.lembrado`), por lado e por contas: cada
+    posição do cursor pede o catálogo, e montá-lo mede todos os canais. Sai
+    uma CÓPIA da lista, para quem a recebe poder mexer nela.
     """
+    from osclab.dsp import fasor
+    contas = tuple(contas_do_usuario or ())
+    return list(lembrado(
+        registro, "catalogo",
+        (lado, contas, str(registro.filtering), repr(registro.trincas_escolhidas),
+         repr(registro.vinculos_de_potencia), repr(sorted(registro.digitais_sem_placa)),
+         registro.line_frequency, fasor.estimador()),
+        (registro.analog_channels, registro.analog, registro.time,
+         registro.status_channels, registro.sample_rates),
+        lambda: tuple(_montar(registro, lado, contas))))
+
+
+def _montar(registro: Record, lado: str, contas_do_usuario) -> list[Sinal]:
+    """O catálogo, calculado. Ver `de_registro`."""
     escalas = unidades.por_unidade(registro, lado)
     ja_filtrado = str(registro.filtering) == "filtrado"
     # A frequência é a do REGISTRO: um arquivo de 50 Hz escreve `IA 50Hz`.
