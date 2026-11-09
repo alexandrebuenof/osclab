@@ -1,5 +1,34 @@
 # Onde o trabalho está
 
+## 09/11/2026 — painel localizador, parâmetros da linha e linhas de três terminais (commits 469091c … 36261f5)
+
+Feito: painel «localizador de faltas» (curvas dos métodos no tempo; curva apagada fora do
+trecho em que mede; triângulo quando sai da moldura; «relé não mediu» do MiCOM); janela
+«parâmetros» (escolher a linha na base ou digitar; vale com um terminal só); dicionário
+pausado como implementação futura (`futura=True` em `basedados/pasta.py`, nada apagado);
+linhas de três terminais (`basedados/tres_terminais.py`, arquivo `linhas/linhas-3t.csv` ao
+lado do `linhas.csv`, que não é tocado; caminho A–B com perfil; papéis marcáveis na tela;
+TAP cadastrável à mão). O `linhas.gravar` deixou de perder colunas e linhas sem parâmetro.
+
+A carga do `linhas-3t.csv` é `docs-privados/montagem-base-linhas/tres_terminais.py`, pela
+topologia do OnLiner (barra com número 0 = identificada pelo nome; conta barras vizinhas
+distintas, não ramos). Rodar de novo não sobrescreve o que foi marcado ou cadastrado à mão.
+Resultado na base: 14 certas, 2 a conferir, 16 sem TAP confirmado (relatório em
+`relatorio-da-montagem/tres-terminais.md`).
+
+Pendente com o Alexandre:
+
+1. **Alto Boa Vista – Confresa**: na base, a ponta «ALTO BOA VISTA» é a barra `ESPIGAO`
+   do OnLiner, e `BOAVISTA138` está no terceiro ramo. Marcar os papéis na tela.
+2. Os 16 sem TAP confirmado (INCOFIBRAS, MINERA, UTE CARGIL…): o relatório de barras do
+   mesmo `.olr` confirmaria trafo/gerador. **UTE CARGIL é geração**: o aviso do TAP
+   (primário em delta) não vale ali.
+3. A casagem automática com dois registros (`linhas.procurar`) ainda casa terminal por
+   TRECHO de texto, não por palavra inteira — perguntado, sem resposta.
+4. A janela «parâmetros» vai ser refeita na repaginação da identidade visual (pedido dele).
+5. Versão: nada subiu; `0.8.0` quando ele aprovar a rodada.
+6. Push: commits de 09/11 ainda não enviados.
+
 ## Noite de 01/11/2026 — o dicionário dos digitais (commits 3bc20f3, a7665be)
 
 Decisões do Alexandre: `partida` → `pickup`; entram `teleprotecao`, `comando` e `alarme`;
