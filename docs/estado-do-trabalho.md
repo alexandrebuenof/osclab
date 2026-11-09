@@ -18,11 +18,17 @@ Resultado na base: 14 certas, 2 a conferir, 16 sem TAP confirmado (relatório em
 
 Pendente com o Alexandre:
 
-1. **Alto Boa Vista – Confresa**: na base, a ponta «ALTO BOA VISTA» é a barra `ESPIGAO`
-   do OnLiner, e `BOAVISTA138` está no terceiro ramo. Marcar os papéis na tela.
-2. Os 16 sem TAP confirmado (INCOFIBRAS, MINERA, UTE CARGIL…): o relatório de barras do
-   mesmo `.olr` confirmaria trafo/gerador. **UTE CARGIL é geração**: o aviso do TAP
-   (primário em delta) não vale ali.
+1. **Linhas arrumadas pelo Caderno de Manobras (rev. 10) e pela LDAT**, a pedido dele, no
+   `linhas-3t.csv` da base (cada registro com a folha ou o código na nota): Alto Boa Vista–
+   Confresa corrigida (A = Alto Boa Vista, TAP = Espigão do Leste, 137 km A–B); TAP de
+   Morro da Mesa, Mineradora e Cargill cadastrados; 9 linhas em trechos confirmadas sem TAP;
+   Campos de Júlio–Comodoro seccionada na Coletora Comodoro. Resumo: 19 de três terminais,
+   9 sem TAP, 1 seccionada. Continuam a conferir: Rio Claro (caderno sem derivação ×
+   OnLiner com ramo de 54 km), LRV Dist. Ind.–Foz do Cedro (ligação provisória para Canoa
+   Quebrada, FL.52) e Sinop–Sinop Centro (chave 305 NA, FL.47). Coxipó/B. Duro II–Distrito
+   não tem km nem Z na base (FL.12: direto, sem TAP). A cópia `linhas-3t.antes-de-
+   arrumar-…csv` é de meio caminho; a original se refaz com o script da montagem.
+2. Os trechos que o caderno não resolve pedem o relatório de barras do `.olr`.
 3. A casagem automática com dois registros (`linhas.procurar`) ainda casa terminal por
    TRECHO de texto, não por palavra inteira — perguntado, sem resposta.
 4. A janela «parâmetros» vai ser refeita na repaginação da identidade visual (pedido dele).

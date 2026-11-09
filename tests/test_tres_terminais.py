@@ -150,6 +150,35 @@ def test_o_tap_que_o_onliner_nao_reconheceu_se_cadastra_a_mao_e_se_tira(base):
 
 def test_o_resumo_e_o_aviso_que_a_tela_mostra(base):
     assert t3.resumo(base) == {"tres_terminais": 1, "conferir": 0, "marcar": 0,
-                               "trechos_sem_tap": 1}
+                               "sem_tap": 0, "seccionadas": 0, "trechos_sem_tap": 1}
     cam = t3.caminho_de_trechos(t3.trechos_de(base, "LD CV - BF"))
     assert cam["km"] == pytest.approx(13) and "INCOFIBRAS" in cam["aviso"]
+
+
+def test_linha_em_trechos_conferida_sem_tap_ou_seccionada(base):
+    """O que se conferiu no Caderno de Manobras: sem derivação no ponto do meio
+    (dois terminais, sem aviso) ou subestação com disjuntor no meio (cada
+    trecho é uma linha para a proteção)."""
+    t3.conferir_trechos(base, "LD CV - BF", "sem-tap", "caderno FL.25: 12,08 km direto")
+    cv = {x["nome"]: x for x in linhas.entradas(base)}["LD CV - BF"]
+    assert cv["tipo"] == "trechos" and cv["conferido"] and "FL.25" in cv["nota"]
+    cam = t3.caminho_de_trechos(t3.trechos_de(base, "LD CV - BF"), conferido=True)
+    assert cam["aviso"] == "" and cam["km"] == pytest.approx(13)
+    resumo = t3.resumo(base)
+    assert (resumo["sem_tap"], resumo["trechos_sem_tap"], resumo["tres_terminais"]) == (1, 0, 1)
+
+    t3.conferir_trechos(base, "LD CV - BF", "seccionada", "SE no meio com disjuntor")
+    separadas = [x for x in linhas.entradas(base) if x["nome"] == "LD CV - BF"]
+    assert [x["tipo"] for x in separadas] == ["linha", "linha"]
+    assert {x["terminal_r"] for x in separadas} == {"INCOFIBRAS", "BOM FUTURO"}
+    assert all(x["situacao"] == "seccionada" for x in separadas)
+    assert t3.resumo(base)["seccionadas"] == 1
+
+    # Desfazer: o registro foi feito à mão, então se tira.
+    assert t3.remover_manual(base, "LD CV - BF") is True
+    assert {x["nome"]: x for x in linhas.entradas(base)}["LD CV - BF"]["conferido"] is False
+    with pytest.raises(ValueError):
+        t3.conferir_trechos(base, "LD CV - BF", "talvez")
+    # O linhas.csv continua intocado.
+    texto = (base.gaveta("linhas") / "linhas.csv").read_text(encoding="utf-8")
+    assert texto == CABECALHO + "\n".join(LINHAS) + "\n"

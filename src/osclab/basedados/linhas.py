@@ -234,8 +234,11 @@ def entradas(base) -> list[dict]:
     * `linha`: um trecho só, como sempre foi;
     * `3t`: linha de três terminais do `linhas-3t.csv` — o caminho A–B, com o
       TAP dito; os trechos dela ficam DENTRO da entrada;
-    * `trechos`: linha em mais de um trecho, sem TAP confirmado — somada de
-      ponta a ponta, com aviso, e com os trechos dentro.
+    * `trechos`: linha em mais de um trecho sem TAP — somada de ponta a ponta,
+      com os trechos dentro. `conferido` diz se alguém confirmou que ali não há
+      derivação (`sem-tap`); sem isso, vai com aviso;
+    * linha `seccionada` (subestação com disjuntor no meio): cada trecho vira
+      uma entrada `linha` própria, porque para a proteção cada um É uma linha.
 
     Nada some: todo trecho da base continua escolhível, dentro da entrada dele.
     """
@@ -248,7 +251,24 @@ def entradas(base) -> list[dict]:
     for chave_, trechos in grupos.items():
         c = circuitos.get(chave_)
         lista = [{**t.como_dicionario(), **_polar(t.r1_ohm, t.x1_ohm)} for t in trechos]
-        if c is not None:
+        if c is not None and c.situacao == "seccionada" and len(trechos) > 1:
+            for t in lista:
+                saida.append({"tipo": "linha", **t, "trechos": [], "situacao": "seccionada",
+                              "nota": c.nota, "origem": c.origem})
+            continue
+        if c is not None and not c.tem_tap and len(trechos) > 1:
+            cam = t3.caminho_de_trechos(trechos)
+            saida.append({
+                "tipo": "trechos", "nome": trechos[0].nome,
+                "terminal_s": trechos[0].terminal_s, "terminal_r": trechos[-1].terminal_r,
+                "pontos": [t.terminal_r for t in trechos[:-1]],
+                "conferido": c.situacao == "sem-tap", "situacao": c.situacao,
+                "nota": c.nota, "origem": c.origem,
+                "comprimento_km": cam["km"], "r1_ohm": cam["r"], "x1_ohm": cam["x"],
+                "r0_ohm": cam.get("r0"), "x0_ohm": cam.get("x0"), "b1_us": None,
+                **_polar(cam["r"], cam["x"]), "trechos": lista})
+            continue
+        if c is not None and c.tem_tap:
             cam = t3.caminho_de_circuito(c)
             a, b, tap = c.perna("A"), c.perna("B"), c.perna("TAP")
             saida.append({
@@ -269,7 +289,7 @@ def entradas(base) -> list[dict]:
             saida.append({
                 "tipo": "trechos", "nome": trechos[0].nome,
                 "terminal_s": trechos[0].terminal_s, "terminal_r": trechos[-1].terminal_r,
-                "pontos": [t.terminal_r for t in trechos[:-1]],
+                "pontos": [t.terminal_r for t in trechos[:-1]], "conferido": False,
                 "comprimento_km": cam["km"], "r1_ohm": cam["r"], "x1_ohm": cam["x"],
                 "r0_ohm": cam.get("r0"), "x0_ohm": cam.get("x0"), "b1_us": None,
                 **_polar(cam["r"], cam["x"]), "trechos": lista})

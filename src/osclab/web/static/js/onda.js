@@ -12311,6 +12311,21 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         return caixa;
       }
 
+      // A linha marcada como seccionada aparece trecho a trecho; daqui se
+      // desfaz a marcação (só a feita à mão).
+      function desfazerSeccionada(x) {
+        const caixa = criar("div", "dentro-3t");
+        caixa.append(criar("p", "resumo-das-linhas",
+          `seccionada: cada trecho é uma linha para a proteção${x.nota ? ` · ${x.nota}` : ""}`));
+        if (x.origem === "manual") {
+          const tirar = criar("button", "chave", "desfazer a conferência");
+          tirar.type = "button";
+          tirar.addEventListener("click", () => gravar3t({ acao: "remover", nome: x.nome }));
+          caixa.append(tirar);
+        }
+        return caixa;
+      }
+
       // Os trechos de uma linha (escolhíveis um a um, como sempre) e, se o
       // TAP não foi confirmado, o cadastro à mão.
       function trechosDe(x) {
@@ -12341,6 +12356,32 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
           tap: tap.value, tap_km: km.value.replace(",", ".") }));
         marcar.append(criar("label", null, "TAP no ponto"), ponto, tap, km, gravar);
         caixa.append(marcar);
+        // Ou: não há TAP — o ponto é só troca de condutor (dois terminais), ou
+        // uma subestação com disjuntor (seccionada: cada trecho é uma linha).
+        const outra = criar("div", "fila-loc cadastro-3t");
+        const nota = document.createElement("input");
+        nota.placeholder = "de onde se conferiu (ex.: caderno FL.25)";
+        nota.style.flex = "1";
+        const botaoDe = (rotulo, situacao, dica) => {
+          const b = criar("button", "chave", rotulo);
+          b.type = "button";
+          b.title = dica;
+          b.addEventListener("click", () => gravar3t({ acao: "conferir", nome: x.nome, situacao,
+                                                       nota: nota.value }));
+          return b;
+        };
+        outra.append(criar("label", null, "sem TAP"), nota,
+                     botaoDe("dois terminais", "sem-tap",
+                             "O ponto do meio é só troca de condutor ou estrutura: a linha é somada de ponta a ponta, sem aviso."),
+                     botaoDe("seccionada", "seccionada",
+                             "Há uma subestação com disjuntor no meio: cada trecho vira uma linha na lista."));
+        if (x.origem === "manual" && x.situacao) {
+          const tirar = criar("button", "chave", "desfazer a conferência");
+          tirar.type = "button";
+          tirar.addEventListener("click", () => gravar3t({ acao: "remover", nome: x.nome }));
+          outra.append(tirar);
+        }
+        caixa.append(outra);
         return caixa;
       }
 
@@ -12372,7 +12413,9 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         aviso3t.textContent = (r3.tres_terminais || r3.trechos_sem_tap)
           ? `Derivações: ${r3.tres_terminais || 0} linha(s) de três terminais`
             + (r3.conferir ? ` (${r3.conferir} a conferir)` : "")
-            + (r3.trechos_sem_tap ? ` · ${r3.trechos_sem_tap} em trechos sem TAP confirmado`
+            + (r3.sem_tap ? ` · ${r3.sem_tap} em trechos sem TAP (conferidas)` : "")
+            + (r3.seccionadas ? ` · ${r3.seccionadas} seccionada(s)` : "")
+            + (r3.trechos_sem_tap ? ` · ${r3.trechos_sem_tap} a conferir em trechos`
                                    + " — confira e marque A, B e TAP" : "")
           : "";
         const titulos = criar("div", "linha-da-lt cabeca-das-linhas");
@@ -12394,10 +12437,21 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
                          "Linha de três terminais: a conta usa o caminho A–B, e o TAP é tratado como carga."]);
             if (x.situacao !== "certo") marcas.push(["conferir", "conferir", x.nota]);
             if (x.origem === "manual") marcas.push(["manual", "à mão", "TAP cadastrado à mão"]);
+          } else if (x.tipo === "trechos" && x.conferido) {
+            marcas.push(["", "sem TAP · conferido",
+                         `Ponto do meio: ${x.pontos.join(", ")}. Conferido: não há derivação — `
+                         + `a linha é de dois terminais.${x.nota ? `\n${x.nota}` : ""}`]);
           } else if (x.tipo === "trechos") {
-            marcas.push(["trechos", `${x.trechos.length} trechos · TAP?`,
-                         `Ponto do meio: ${x.pontos.join(", ")}. O OnLiner não deixou confirmar se ali há `
-                         + "uma derivação. Abra (▸) para marcar o TAP, ou use a linha somada."]);
+            const conferir = x.situacao === "conferir";
+            marcas.push(["trechos", conferir ? "conferir" : `${x.trechos.length} trechos · TAP?`,
+                         `Ponto do meio: ${x.pontos.join(", ")}. `
+                         + (conferir ? x.nota
+                                     : "O OnLiner não deixou confirmar se ali há uma derivação. "
+                                       + "Abra (▸) para marcar o TAP, ou use a linha somada.")]);
+          } else if (x.situacao === "seccionada") {
+            marcas.push(["", "seccionada",
+                         `Esta linha é seccionada por uma subestação com disjuntor: cada trecho `
+                         + `é uma linha para a proteção.${x.nota ? `\n${x.nota}` : ""}`]);
           }
           const linha = linhaDaTabela(x, { marcas });
           linha.title = (x.sugerida ? `Sugerida: «${x.casou.join("», «")}» está no nome do registro.\n` : "")
@@ -12405,7 +12459,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
             + (x.motivo ? `${x.motivo}\n` : "")
             + (x.tipo === "linha" ? "Clique para usar esta linha."
                                   : "Clique para usar a linha de A a B; ▸ mostra as pernas e os trechos.");
-          if (x.tipo !== "linha") abridor(x, linha);
+          if (x.tipo !== "linha" || x.situacao === "seccionada") abridor(x, linha);
           linha.addEventListener("click", () => {
             if (x.motivo) { aviso3t.textContent = x.motivo; return; }
             escolher(x, x.tipo);
@@ -12414,7 +12468,8 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
           tabela.append(linha);
           if (abertas.has(x.nome)) {
             if (x.tipo === "3t") tabela.append(pernasDe(x));
-            tabela.append(trechosDe(x));
+            if (x.situacao === "seccionada") tabela.append(desfazerSeccionada(x));
+            else tabela.append(trechosDe(x));
           }
         }
       }

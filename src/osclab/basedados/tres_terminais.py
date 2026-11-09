@@ -20,6 +20,15 @@ ponto de junção até um terminal:
 `deduzido` (A e B pelo nome da linha, TAP a terceira) ou `marcado` (o usuário
 escolheu). `origem`: `onliner` ou `manual`.
 
+O mesmo arquivo guarda também o que se CONFERIU numa linha em trechos que não
+tem TAP — sem perna TAP, com a `situacao` dizendo o que é:
+
+* `sem-tap`: o ponto do meio é só troca de condutor ou estrutura; a linha é
+  de dois terminais, somada de ponta a ponta, sem aviso;
+* `seccionada`: no meio há uma subestação com disjuntor dos dois lados — cada
+  trecho é uma linha para a proteção, e a tela os lista separados;
+* `conferir` sem TAP: ainda não se sabe; fica o aviso, com a nota.
+
 A conta da localização usa o CAMINHO A–B: a impedância é a soma das duas
 pernas, e a conversão de impedância em km segue o PERFIL das pernas — com
 condutores diferentes, tratar a linha como uniforme errava 3,3 km numa falta
@@ -85,6 +94,13 @@ class Circuito:
     @property
     def papeis_validos(self) -> bool:
         return sorted(p.papel for p in self.pernas) == sorted(PAPEIS)
+
+    @property
+    def tem_tap(self) -> bool:
+        """É linha de três terminais (e não um registro de conferência de uma
+        linha em trechos sem TAP)."""
+        tap = self.perna("TAP")
+        return tap is not None and bool(tap.nome) and self.situacao in ("certo", "conferir")
 
 
 def _caminho(base) -> Path:
@@ -233,8 +249,10 @@ def trechos_de(base, nome: str) -> list[linhas_mod.Linha]:
     return [x for x in linhas_mod.listar(base) if x.nome.upper() == alvo]
 
 
-def caminho_de_trechos(trechos: list[linhas_mod.Linha]) -> dict:
-    """Os trechos somados, quando não se confirmou TAP nenhum no meio."""
+def caminho_de_trechos(trechos: list[linhas_mod.Linha], conferido: bool = False) -> dict:
+    """Os trechos somados, quando não há TAP no meio. `conferido`: alguém
+    confirmou que não há (`sem-tap`) — aí a linha é de dois terminais e não
+    leva aviso nenhum."""
     if not trechos:
         return {"ok": False, "motivo": "linha sem trechos na base"}
     r = sum(t.r1_ohm for t in trechos)
@@ -245,7 +263,8 @@ def caminho_de_trechos(trechos: list[linhas_mod.Linha]) -> dict:
              "terminais": [trechos[0].terminal_s, trechos[-1].terminal_r],
              "escolhida": True,
              "perfil": _perfil([(t.comprimento_km, t.x1_ohm) for t in trechos]),
-             "aviso": AVISO_DE_TRECHOS.format(n=len(trechos), pontos=", ".join(pontos))}
+             "aviso": "" if conferido else AVISO_DE_TRECHOS.format(
+                 n=len(trechos), pontos=", ".join(pontos))}
     r0, x0 = _soma(t.r0_ohm for t in trechos), _soma(t.x0_ohm for t in trechos)
     if r0 is not None and x0 is not None:
         saida.update(r0=r0, x0=x0)
@@ -280,15 +299,45 @@ def cadastrar(base, nome: str, ponto: int, tap: str, tap_km: float | None = None
     return c
 
 
+#: O que se pode registrar de uma linha em trechos SEM TAP.
+CONFERENCIAS = ("sem-tap", "seccionada", "conferir")
+
+
+def conferir_trechos(base, nome: str, situacao: str, nota: str = "",
+                     origem: str = "manual") -> Circuito:
+    """Registra o que se conferiu numa linha em trechos sem TAP: `sem-tap`
+    (dois terminais), `seccionada` (cada trecho é uma linha) ou `conferir`."""
+    if situacao not in CONFERENCIAS:
+        raise ValueError(f"situação desconhecida: {situacao}")
+    trechos = trechos_de(base, nome)
+    if len(trechos) < 2:
+        raise ValueError("só uma linha com mais de um trecho tem ponto no meio")
+    vazia = lambda nome_t, papel: Perna(nome_t, "", papel, None, None, None, None, None)  # noqa: E731
+    c = Circuito(trechos[0].codigo, trechos[0].nome,
+                 ", ".join(t.terminal_r for t in trechos[:-1]), situacao, "marcado", origem,
+                 nota, (vazia(trechos[0].terminal_s, "A"), vazia(trechos[-1].terminal_r, "B"),
+                        vazia("", "")))
+    gravar(base, c)
+    return c
+
+
 def resumo(base) -> dict:
     """Quantas linhas de três terminais, a conferir, e com trechos sem TAP
     confirmado — o aviso que a tela mostra."""
-    circuitos = {c.nome.upper(): c for c in listar(base)}
+    registros = {c.nome.upper(): c for c in listar(base)}
     por_nome: dict[str, int] = {}
     for x in linhas_mod.listar(base):
         por_nome[x.nome.upper()] = por_nome.get(x.nome.upper(), 0) + 1
-    sem = [n for n, k in por_nome.items() if k > 1 and n not in circuitos]
-    return {"tres_terminais": len(circuitos),
-            "conferir": sum(c.situacao != "certo" for c in circuitos.values()),
-            "marcar": sum(not c.papeis_validos for c in circuitos.values()),
-            "trechos_sem_tap": len(sem)}
+    em_trechos = {n for n, k in por_nome.items() if k > 1}
+    com_tap = [c for c in registros.values() if c.tem_tap]
+    # «Sem TAP confirmado»: linha em trechos que ninguém conferiu, mais as
+    # que se conferiram e continuam em dúvida (`conferir` sem TAP).
+    pendentes = [n for n in em_trechos
+                 if n not in registros
+                 or (not registros[n].tem_tap and registros[n].situacao == "conferir")]
+    return {"tres_terminais": len(com_tap),
+            "conferir": sum(c.situacao == "conferir" for c in com_tap),
+            "marcar": sum(not c.papeis_validos for c in com_tap),
+            "sem_tap": sum(c.situacao == "sem-tap" for c in registros.values()),
+            "seccionadas": sum(c.situacao == "seccionada" for c in registros.values()),
+            "trechos_sem_tap": len(pendentes)}

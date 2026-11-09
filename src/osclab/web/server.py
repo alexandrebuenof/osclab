@@ -537,7 +537,9 @@ def create_app() -> Flask:
                 fonte = tres_terminais_mod.caminho_de_circuito(c) if c else nao_esta
             elif tipo == "trechos":
                 trechos = tres_terminais_mod.trechos_de(base, nome)
-                fonte = (tres_terminais_mod.caminho_de_trechos(trechos)
+                registro_3t = tres_terminais_mod.de_nome(base, nome)
+                conferido = bool(registro_3t and registro_3t.situacao == "sem-tap")
+                fonte = (tres_terminais_mod.caminho_de_trechos(trechos, conferido)
                          if len(trechos) > 1 else nao_esta)
             else:
                 achada = linhas_mod.escolhida(base, nome, pedido.get("terminal_s"),
@@ -705,6 +707,9 @@ def create_app() -> Flask:
                 km = _numero(str(bruto)) if bruto not in (None, "") else None
                 tres_terminais_mod.cadastrar(base, nome, int(corpo.get("ponto") or 0),
                                              str(corpo.get("tap") or ""), km)
+            elif acao == "conferir":
+                tres_terminais_mod.conferir_trechos(
+                    base, nome, str(corpo.get("situacao") or ""), str(corpo.get("nota") or ""))
             elif acao == "remover":
                 if not tres_terminais_mod.remover_manual(base, nome):
                     return jsonify(erro="só se remove o que foi cadastrado à mão"), 400
