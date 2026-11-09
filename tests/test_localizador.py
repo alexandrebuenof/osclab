@@ -66,6 +66,32 @@ def test_hdr_da_sel_e_do_411l_e_do_twfl():
     assert rele.do_texto("Event:  CG T  Location:  +17.31   Frequency: 60.0").valor == 17.31
 
 
+def test_micom_que_nao_mediu_e_dito_e_nao_confundido_com_arquivo_sem_campo(tmp_path):
+    """O P139 escreve o campo com «Not measured» quando o localizador dele
+    não rodou. É informação sobre o AJUSTE do relé — a tela diz «não mediu»
+    em vez do «—» de quem não traz nada. Mas um número noutro arquivo vence."""
+    sem = "15 | 20:11:36 | 0.884 | 004.022 | FT_DA Fault location       | Not measured\n"
+    (tmp_path / "x.hdr").write_text(sem, encoding="cp1252")
+    achado = rele.do_registro(tmp_path, ["x.cfg", "x.hdr"])
+    assert isinstance(achado, rele.NaoMediu)
+    assert (achado.campo, achado.arquivo, achado.escrito) == (
+        "FT_DA Fault location", "x.hdr", "Not measured")
+    (tmp_path / "x.txt").write_text(sem.replace("Not measured", "10.3 km"), encoding="cp1252")
+    assert rele.do_registro(tmp_path, ["x.cfg", "x.hdr", "x.txt"]).km == 10.3
+    (tmp_path / "y.hdr").write_text("nada aqui\n", encoding="cp1252")
+    assert rele.do_registro(tmp_path, ["y.hdr"]) is None
+
+
+def test_o_painel_diz_nao_mediu_sem_linha_do_rele(pacote):
+    nm = rele.NaoMediu("FT_DA Fault location", "x.hdr", "Not measured")
+    p = localizador.montar(pacote, None, None, nm, None)
+    assert p["rele"] is None
+    assert p["rele_nao_mediu"]["escrito"] == "Not measured"
+    # Digitado vence, e aí não há o que dizer de «não mediu».
+    p = localizador.montar(pacote, None, None, nm, 12.5)
+    assert p["rele"]["km"] == 12.5 and p["rele_nao_mediu"] is None
+
+
 def test_micom_le_o_km_e_o_percentual_da_fault_log():
     achado = rele.do_texto(
         "12 | 20:11:36.355 | 0.884 | 004.022 FT_DA Fault location       | 10.3 km\n"
@@ -110,6 +136,21 @@ def test_tudo_sai_em_km_e_em_porcentagem_da_linha(pacote):
     # As marcações em % vêm com o km em que caem: a tela só converte em pixel.
     for marca in p["marcas_pct"]:
         assert marca["km"] == pytest.approx(marca["rotulo"] * L / 100)
+
+
+def test_o_trecho_assentado_cobre_o_plato_e_fica_dentro_da_falta(pacote):
+    """Fora do assentado a tela apaga a curva: entrando na falta a janela está
+    pela metade, saindo dela o laço mede carga. Ele precisa conter o platô —
+    senão a curva de onde sai a mediana sairia apagada — e não pode começar
+    antes de um ciclo depois do início da falta."""
+    ev = pacote["eventos"]
+    a0, a1 = ev["assentado"]
+    p0, p1 = ev["plato"]
+    assert a0 <= p0 and p1 <= a1
+    assert a0 >= ev["inicio"] + 1 / 60 - 1e-9
+    fins = [x for x in (ev["abre_a"], ev["fim_falta"]) if x is not None]
+    if fins:
+        assert a1 <= min(fins) + 1e-9
 
 
 def test_os_dois_cursores_e_a_diferenca(pacote):

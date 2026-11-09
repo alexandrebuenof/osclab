@@ -12092,7 +12092,14 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
          + "\n\nClique para destacar; Ctrl+clique junta outro; Esc limpa.";
   }
 
-  function dicaDoReleLoc(r) {
+  function dicaDoReleLoc(r, semMedida) {
+    if (!r && semMedida) {
+      return `O relé tem o campo da distância e escreveu «${semMedida.escrito}»: `
+           + "registrou a falta, mas o localizador dele não rodou — a partida do "
+           + "localizador não foi atendida, ou a função está desligada (o ajuste "
+           + `diz qual).\n\nDe onde veio: campo ${semMedida.campo}, arquivo `
+           + `${semMedida.arquivo}.\n\nClique para digitar um valor.`;
+    }
     if (!r) {
       return "O arquivo não traz a distância calculada pelo relé (a GE grava num "
            + "relatório à parte; SIPROTEC, no DIGSI). Clique para digitar.";
@@ -12279,9 +12286,11 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         liR.append(criar("span", "pl-valor", valorLocUnid(r, pct) + (r.presumido && !pct ? "*" : "")));
       } else {
         liR.classList.add("pl-sem");
-        liR.append(criar("span", "lado", "—"));
+        // «não mediu» é dito com todas as letras: o relé tem o campo e o
+        // deixou vazio, o que é diferente do arquivo não trazer nada («—»).
+        liR.append(criar("span", "lado", p && p.rele_nao_mediu ? "não mediu" : "—"));
       }
-      liR.title = dicaDoReleLoc(r);
+      liR.title = dicaDoReleLoc(r, p ? p.rele_nao_mediu : null);
       liR.style.cursor = "pointer";
       liR.addEventListener("click", () => editarReleLoc(liR, painel));
       legenda.append(liR);
@@ -12372,6 +12381,18 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     }
     ctx.globalAlpha = 1;
 
+    // Os rótulos só se escrevem onde cabem: vendo o registro inteiro, falta,
+    // abertura e platô caem a poucos pixels um do outro e viravam um borrão.
+    // A linha continua; o nome some até se ampliar.
+    const rotulos = [];
+    const escrever = (texto, x, y, alinhar) => {
+      const w = ctx.measureText(texto).width;
+      const a = alinhar === "right" ? x - w : x, z = a + w;
+      if (rotulos.some((r) => Math.abs(r.y - y) < 12 && a < r.z + 4 && z > r.a - 4)) return;
+      rotulos.push({ a, z, y });
+      ctx.textAlign = alinhar;
+      ctx.fillText(texto, x, y);
+    };
     const ev = pacoteLoc.eventos || {};
     if (ev.plato) {
       const a = emX(ev.plato[0]), z = emX(ev.plato[1]);
@@ -12379,8 +12400,6 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       ctx.globalAlpha = 0.09;
       ctx.fillRect(a, y0, z - a, y1 - y0);
       ctx.globalAlpha = 1;
-      ctx.textAlign = "left";
-      ctx.fillText("platô", a + 4, y0 + 9);
     }
     ctx.save();
     ctx.setLineDash([3, 3]);
@@ -12390,20 +12409,24 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       if (t === null || t === undefined) continue;
       const x = Math.round(emX(t)) + 0.5;
       ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y1); ctx.stroke();
-      ctx.textAlign = "left";
-      ctx.fillText(rotulo, x + 3, y1 - 8);
+      escrever(rotulo, x + 3, y1 - 8, "left");
     }
     ctx.restore();
 
+    // «fim da linha» encostado à DIREITA: as curvas moram no começo da
+    // janela, e à esquerda o rótulo caía em cima do platô e da falta.
     if (p.linha_km) {
       const y = Math.round(Y(p.linha_km)) + 0.5;
       if (y >= y0 && y <= y1) {
         ctx.strokeStyle = corSuave;
         ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke();
         ctx.fillStyle = corSuave;
-        ctx.textAlign = "left";
-        ctx.fillText("fim da linha", x0 + 6, y - 7);
+        escrever("fim da linha", x1 - 6, y - 7, "right");
       }
+    }
+    if (ev.plato) {
+      ctx.fillStyle = corDestaque;
+      escrever("platô", emX(ev.plato[0]) + 4, y0 + 9, "left");
     }
 
     if (p.rele) {
@@ -12418,6 +12441,13 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
 
     const destaque = new Set(meu.destaque_loc || []);
     const res = p.resultado;
+    // Onde a curva MEDE a falta (o servidor diz: `eventos.assentado`). Fora
+    // dali — entrando na falta com a janela pela metade, saindo dela com
+    // carga — o número não significa nada e sai apagado, para não ter a mesma
+    // cara do trecho bom. Sem o intervalo, tudo cheio, como antes.
+    const assentado = ev.assentado
+      ? [Math.max(x0, emX(ev.assentado[0])), Math.min(x1, emX(ev.assentado[1]))]
+      : [x0, x1];
     // O destacado vai por cima de todos; os outros apagam.
     const ordem = [...ORDEM_LOC].reverse()
       .sort((u, w) => Number(destaque.has(u)) - Number(destaque.has(w)));
@@ -12425,24 +12455,59 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       const curva = (pacoteLoc.ldl || {})[m];
       if (!curva) continue;
       const valores = (curva.v || [])[0] || [];
-      ctx.save();
-      ctx.globalAlpha = destaque.size && !destaque.has(m) ? 0.22 : 1;
+      const base = destaque.size && !destaque.has(m) ? 0.22 : 1;
       // `CORES_LOC` guarda `var(--x)`, que vale em HTML e SVG mas NÃO no
       // canvas: o canvas ignora a cor e o traço sai na anterior — todas as
       // curvas saíam cinzas. Aqui o token é resolvido.
-      ctx.strokeStyle = token(CORES_LOC[m].slice(4, -1));
-      ctx.lineWidth = destaque.has(m) ? 3 : res && res.metodo === m ? 2.4 : 1.5;
-      ctx.lineJoin = "round";
-      ctx.beginPath();
-      let aberto = false;
+      const cor = token(CORES_LOC[m].slice(4, -1));
+      const tracar = () => {
+        ctx.strokeStyle = cor;
+        ctx.lineWidth = destaque.has(m) ? 3 : res && res.metodo === m ? 2.4 : 1.5;
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        let aberto = false;
+        curva.t.forEach((t, i) => {
+          const v = valores[i];
+          if (v === null || v === undefined || t === null) { aberto = false; return; }
+          const x = emX(t), y = Y(v);
+          if (aberto) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+          aberto = true;
+        });
+        ctx.stroke();
+      };
+      // Duas passadas da MESMA curva, cada uma recortada no seu trecho:
+      // apagada fora do assentado, cheia dentro.
+      for (const [de, ate, alfa] of [[x0, assentado[0], 0.25], [assentado[1], x1, 0.25],
+                                     [assentado[0], assentado[1], 1]]) {
+        if (ate <= de) continue;
+        ctx.save();
+        ctx.beginPath(); ctx.rect(de, y0, ate - de, y1 - y0); ctx.clip();
+        ctx.globalAlpha = base * alfa;
+        tracar();
+        ctx.restore();
+      }
+      // A curva que sai da moldura não some calada: um triângulo na borda,
+      // onde ela saiu, diz «passou daqui» — sem ele, 150 km e 5000 km
+      // tinham a mesma cara, cortados no topo.
+      ctx.save();
+      ctx.fillStyle = cor;
+      let antes = null;
       curva.t.forEach((t, i) => {
         const v = valores[i];
-        if (v === null || v === undefined || t === null) { aberto = false; return; }
-        const x = emX(t), y = Y(v);
-        if (aberto) ctx.lineTo(x, y); else ctx.moveTo(x, y);
-        aberto = true;
+        if (v === null || v === undefined || t === null) { antes = null; return; }
+        const lado = v > hi ? 1 : v < lo ? -1 : 0;
+        if (lado && antes === 0) {
+          const x = emX(t);
+          if (x >= x0 && x <= x1) {
+            ctx.globalAlpha = base * (x >= assentado[0] && x <= assentado[1] ? 1 : 0.25);
+            const yb = lado > 0 ? y0 + 1 : y1 - 1, d = lado > 0 ? 1 : -1;
+            ctx.beginPath();
+            ctx.moveTo(x, yb); ctx.lineTo(x - 4, yb + 6 * d); ctx.lineTo(x + 4, yb + 6 * d);
+            ctx.closePath(); ctx.fill();
+          }
+        }
+        antes = lado;
       });
-      ctx.stroke();
       ctx.restore();
     }
 

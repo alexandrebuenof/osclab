@@ -52,6 +52,9 @@ _TWFL = re.compile(rf'Fault_Location"?\s*,\s*"?{_NUMERO}\s*\(\s*(km|mi)\s*\)', r
 _MICOM_KM = re.compile(rf"Fault location\s*\|\s*{_NUMERO}\s*km", re.IGNORECASE)
 _MICOM_PCT = re.compile(rf"Fault locat\.?\s*percent\s*\|\s*{_NUMERO}\s*%", re.IGNORECASE)
 _LLUNIT = re.compile(r'LLUNIT"?\s*(?::?=|,)\s*"?\s*(KM|MI)\b', re.IGNORECASE)
+#: O MiCOM escreve o campo mesmo quando o localizador dele não rodou, com o
+#: valor «Not measured» — no banco, a maioria dos Fault logs do P139.
+_MICOM_NAO_MEDIU = re.compile(r"Fault location\s*\|\s*(Not measured)", re.IGNORECASE)
 
 _EXTENSOES = (".cev", ".hdr", ".txt")
 
@@ -79,6 +82,31 @@ class DoRele:
     @property
     def presumido(self) -> bool:
         return self.unidade is None
+
+
+@dataclass(frozen=True)
+class NaoMediu:
+    """O relé TEM o campo da distância e escreveu que não mediu.
+
+    Não é o mesmo que o arquivo não trazer distância nenhuma: aqui o relé
+    registrou a falta e o localizador dele não rodou — o que diz algo do
+    AJUSTE dele (a partida do localizador não foi atendida, ou a função está
+    desligada). A tela escreve «não mediu» em vez de calar.
+    """
+
+    #: O campo, como no `DoRele`.
+    campo: str
+    arquivo: str
+    #: O que o relé escreveu no lugar do número.
+    escrito: str
+
+
+def nao_mediu(texto: str, arquivo: str = "") -> NaoMediu | None:
+    """O campo de distância escrito «não medido», ou `None`."""
+    m = _MICOM_NAO_MEDIU.search(texto)
+    if m:
+        return NaoMediu("FT_DA Fault location", arquivo, m.group(1))
+    return None
 
 
 def _numero(texto: str) -> float | None:
@@ -144,11 +172,14 @@ def do_texto(texto: str, arquivo: str = "") -> DoRele | None:
     return None
 
 
-def do_registro(pasta: Path, arquivos) -> DoRele | None:
+def do_registro(pasta: Path, arquivos) -> DoRele | NaoMediu | None:
     """O número do relé neste registro, ou `None` quando nenhum arquivo o traz.
 
     `.cev` primeiro (é a própria oscilografia), depois `.hdr` e `.txt`.
+    Um número em qualquer arquivo vence um «não medido» noutro; só sem número
+    nenhum o `NaoMediu` é devolvido.
     """
+    sem_medida = None
     for extensao in _EXTENSOES:
         for nome in sorted(arquivos or ()):
             if not str(nome).lower().endswith(extensao):
@@ -159,4 +190,6 @@ def do_registro(pasta: Path, arquivos) -> DoRele | None:
             achado = do_cev(texto, nome) if extensao == ".cev" else do_texto(texto, nome)
             if achado is not None:
                 return achado
-    return None
+            if sem_medida is None:
+                sem_medida = nao_mediu(texto, nome)
+    return sem_medida

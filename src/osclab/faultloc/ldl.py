@@ -622,6 +622,28 @@ def _plato(term: Terminal) -> tuple[float, float] | None:
     return None
 
 
+def _assentado(term: Terminal, inicio: float, abre: float | None,
+               fim_falta: float | None) -> list[float] | None:
+    """`[t0, t1]` em que a curva de um método MEDE a falta, ou `None`.
+
+    Começa quando a janela do fasor ficou inteira dentro da falta — um ciclo
+    depois do início, dois num registro que o relé já filtrou (mesma conta do
+    `_plato`) — e acaba no fim da falta ou na abertura, o que vier antes.
+    Fora disso a curva existe (entrando na falta, saindo dela), mas o número
+    é janela pela metade ou corrente de carga: a tela o desenha apagado, para
+    não ter a mesma cara do trecho que mede.
+
+    É mais largo que o platô de propósito: o platô é de onde sai a MEDIANA e
+    leva folga dos dois lados; aqui é só onde a curva deixou de ser lixo.
+    """
+    ciclo = _ciclo_s(term.registro)
+    a_mais = 1.0 if term.registro.filtering == Filtering.FILTRADO else 0.0
+    t0 = inicio + (1.0 + a_mais) * ciclo
+    fins = [x for x in (abre, fim_falta) if x is not None and x > inicio + ciclo]
+    t1 = min(fins) if fins else float(term.registro.time[-1])
+    return [t0, t1] if t1 > t0 else None
+
+
 def _polar(z: complex | None) -> dict | None:
     if z is None or not math.isfinite(abs(z)):
         return None
@@ -720,10 +742,11 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
             # dentro da falta sustentada ao mesmo tempo.
             t0, t1 = max(plato[0], plato_b[0] - d), min(plato[1], plato_b[1] - d)
             plato = (t0, t1) if t1 > t0 else None
+    abre_a = None if v.fim is None else float(t_a[min(v.fim, t_a.size - 1)])
+    fim_falta = fim_da_falta(term_a)
     pacote["eventos"] = {"inicio": inicio, "plato": list(plato) if plato else None,
-                         "abre_a": (None if v.fim is None
-                                    else float(t_a[min(v.fim, t_a.size - 1)])),
-                         "fim_falta": fim_da_falta(term_a)}
+                         "abre_a": abre_a, "fim_falta": fim_falta,
+                         "assentado": _assentado(term_a, inicio, abre_a, fim_falta)}
 
     # A janela da tela: do pouco antes da falta ao pouco depois do platô.
     fim_plato = plato[1] if plato else inicio + 6 * ciclo

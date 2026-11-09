@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import math
 
+from osclab.faultloc import rele as rele_mod
 from osclab.plot import escala
 
 TIPO = "localizador"
@@ -115,6 +116,13 @@ def montar(pacote: dict, cursor1: dict | None, cursor2: dict | None,
         resultado = {"metodo": res["metodo"], **_par(res["km"], linha_km),
                      "patrulha_km": [a, b],
                      "patrulha_pct": [_pct(a, linha_km), _pct(b, linha_km)]}
+    # O relé que tem o campo e escreveu «não medido»: sem número para a
+    # linha tracejada, mas a tela diz que ele NÃO MEDIU em vez de calar —
+    # é diferente de o arquivo não trazer distância nenhuma.
+    sem_medida = None
+    if isinstance(lido, rele_mod.NaoMediu):
+        sem_medida = {"campo": lido.campo, "arquivo": lido.arquivo, "escrito": lido.escrito}
+        lido = None
     rele = rele_para_a_tela(lido, digitado, linha_km, res["km"] if res else None)
 
     # A régua vertical. Em km, a da conta (`escala_ldl`); sem linha não há
@@ -135,6 +143,7 @@ def montar(pacote: dict, cursor1: dict | None, cursor2: dict | None,
         "metodos": metodos,
         "resultado": resultado,
         "rele": rele,
+        "rele_nao_mediu": sem_medida if rele is None else None,
         "regua": regua,
         "marcas_pct": marcas_pct,
         "cursor1": c1,
