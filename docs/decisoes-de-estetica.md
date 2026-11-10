@@ -130,3 +130,26 @@ precisa dizer isso.
 - **Dois IEDs num gráfico só.** Seis traços sobrepostos ficam cheios; com dois
   registros o «um por gráfico» deixa de ser preferência e vira o arranjo que
   funciona. Não desenhado ainda.
+
+---
+
+## Logotipo: 16 · Amostras — 10/11/2026
+
+| seção | escolha | estado |
+|---|---|---|
+| Logotipo | **16 · Amostras** — um ciclo de senoide apagado ao fundo e 13 amostras em hastes com ponto na ponta, na cor da fase A (`--fase-a`; a senoide em `--tinta`) | decidido |
+| Logotipo, reserva | **L4 · Trinca** — passa a reserva e **não se apaga**: fica no código, desligada, a uma troca de distância | guardado |
+| Nome ao lado | «OscLab» (atual) × «osclab» minúsculo monoespaçado | **aberto** |
+| Favicon 16 px | o desenho inteiro vira mancha a 16 px; há duas versões reduzidas propostas | **aberto** |
+
+O desenho diz o que o programa faz: o relé não grava a onda, grava
+**amostras** dela — e o cursor sempre cai numa delas. Fonte do desenho exato:
+`logotipo-16-amostras.svg` (viewBox 48×48) e a proposta nº 16 de
+`logotipos-20.html`, que mostra cada uso (abertura, favicon 16/32 px, ícone,
+cabeçalho, PDF, uma cor).
+
+Por enquanto ele entra só na maquete de identidade visual (ramo
+`maquete/identidade-visual`), onde o ponto de troca entre os dois é
+`LOGOTIPO` em `static/js/identidade.js` e `logotipo` em
+`templates/_logotipo.html`. O `main` muda quando a identidade final for
+implementada.
