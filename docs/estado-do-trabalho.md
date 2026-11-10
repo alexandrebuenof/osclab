@@ -25,7 +25,9 @@ Pendente com o Alexandre:
    Campos de Júlio–Comodoro seccionada na Coletora Comodoro. Resumo: 19 de três terminais,
    9 sem TAP, 1 seccionada. Continuam a conferir: Rio Claro (caderno sem derivação ×
    OnLiner com ramo de 54 km), LRV Dist. Ind.–Foz do Cedro (ligação provisória para Canoa
-   Quebrada, FL.52) e Sinop–Sinop Centro (chave 305 NA, FL.47). Coxipó/B. Duro II–Distrito
+   Quebrada, FL.52) e Sinop–Sinop Centro (chave 305 NA, FL.47) — o que cada fonte diz está
+   em `duvidas-para-refinar.md` (itens 12–14), na pasta da base, para ele refinar com o
+   OnLiner aberto; toda dúvida de modelagem sai nessa etapa. Coxipó/B. Duro II–Distrito
    não tem km nem Z na base (FL.12: direto, sem TAP). A cópia `linhas-3t.antes-de-
    arrumar-…csv` é de meio caminho; a original se refaz com o script da montagem.
 2. Os trechos que o caderno não resolve pedem o relatório de barras do `.olr`.
