@@ -2884,3 +2884,39 @@ def test_o_TEMA_padrao_e_o_claro_e_o_escuro_vive_no_atributo():
     css = _osclab_css()
     assert '\n:root[data-tema="escuro"] {' in css
     assert ':root[data-tema="claro"] {' not in css
+
+
+# ---------------------------------------------------------------------------
+# Enviar oscilografia pelos menus da tela de oscilografia (10/11/2026)
+# ---------------------------------------------------------------------------
+
+def test_o_envio_e_UM_caminho_so_e_o_accept_sai_do_acervo(cliente):
+    """A página Arquivos e os menus da oscilografia mandam pelo MESMO
+    `envio.js`, e o `accept` do campo sai de `acervo.EXTENSOES`: duas regras
+    divergiriam na primeira mudança, como «num lugar sobe, no outro não»."""
+    from osclab.library import acervo
+    html = cliente.get("/arquivos").get_data(as_text=True)
+    for e in acervo.EXTENSOES:
+        assert e in html and e.upper() in html
+    for pagina in ("index.html", "onda.html", "abas.html"):
+        corpo = _template(pagina)
+        assert "js/envio.js" in corpo and "aceita_no_acervo" in corpo
+        # carregado ANTES de quem o usa
+        quem = {"index.html": "js/acervo.js", "onda.html": "js/onda.js",
+                "abas.html": "js/abas.js"}[pagina]
+        assert corpo.index("js/envio.js") < corpo.index(quem)
+    acervo_js = (paths.STATIC_DIR / "js" / "acervo.js").read_text(encoding="utf-8")
+    assert "new XMLHttpRequest" not in acervo_js
+    assert "osclabEnvio.enviar" in acervo_js
+    for js in ("onda.js", "abas.js"):
+        texto = (paths.STATIC_DIR / "js" / js).read_text(encoding="utf-8")
+        assert "osclabEnvio.itemDeEnvio" in texto
+
+
+def test_o_botao_do_texto_cru_diz_texto():
+    """«como veio» virou «texto» (pedido dele, 10/11/2026); o `title` diz
+    que é o texto como veio no arquivo."""
+    onda = _template("onda.html")
+    assert ">como veio</button>" not in onda
+    assert onda.count(">texto</button>") == 2
+    assert "como veio no arquivo" in onda

@@ -8,7 +8,7 @@
 {%- from "_barra.html" import barra with context %}
 {%- from "_faixa.html" import faixa %}
 </head>
-<body class="portal tela-de-arquivos">
+<body class="portal tela-de-arquivos" data-aceita="{{ aceita_no_acervo }}">
   {{ barra(atual="arquivos") }}
   {{ faixa("Arquivos", "Envie oscilografias e abra as que já estão no acervo.", acende="oscilografia") }}
 
@@ -28,7 +28,7 @@
 
       <form id="envio" class="solta" aria-label="Enviar oscilografias">
         <input type="file" id="escolher" multiple hidden
-               accept=".cfg,.CFG,.dat,.DAT,.cff,.CFF,.cev,.CEV,.hdr,.HDR,.inf,.INF">
+               accept="{{ aceita_no_acervo }}">
         <p class="solta-titulo">Arraste os arquivos aqui</p>
         <p class="solta-sub">
           ou <button type="button" class="link" id="botao-escolher">escolha da
@@ -54,6 +54,7 @@
 
   {% include "_rodape.html" %}
 
+  <script src="{{ url_for('static', filename='js/envio.js') }}"></script>
   <script src="{{ url_for('static', filename='js/acervo.js') }}"></script>
   <script src="{{ url_for('static', filename='js/vitrine.js') }}"></script>
 </body>

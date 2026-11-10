@@ -579,22 +579,15 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const ja = new Set([sha, ...outrosRegistros.map((x) => x.sha)]);
     menuSuspenso("menu-mais-oscilografia", "pôr nesta aba:", (caixa) => {
       const livres = itens.filter((x) => !ja.has(x.sha));
-      /* O caminho para SUBIR o arquivo que ainda não está no acervo — antes,
-         com o acervo sem outro registro, o menu só dizia isso e parava
-         (pedido dele, 01/11/2026). Abre o acervo numa aba NOVA do navegador:
-         a análise desta continua de pé, e ao voltar este menu relê o acervo. */
-      const subir = () => {
-        const b = criar("button", "opcao-de-registro subir-no-acervo");
-        b.type = "button";
-        b.append(criar("span", "nome-do-registro", "＋ subir outra oscilografia no acervo"));
-        b.append(criar("span", "sub-do-registro",
-                       "abre o acervo numa aba nova; depois volte aqui e escolha"));
-        b.addEventListener("click", () => {
-          if (menuAberto) menuAberto();
-          window.open("/arquivos", "_blank");
-        });
-        return b;
-      };
+      /* O caminho para SUBIR o arquivo que ainda não está no acervo (pedido
+         dele, 01/11/2026). Era um link que abria a página Arquivos numa aba
+         nova do navegador, para depois voltar aqui e escolher; desde
+         10/11/2026 é o próprio explorador de arquivos, pelo mesmo envio da
+         página Arquivos (`envio.js`), e o registro entra direto NESTA aba. */
+      const subir = () => window.osclabEnvio.itemDeEnvio({
+        explicacao: "sobe ao acervo e entra nesta aba",
+        aoChegar: porNestaAba,
+      });
       if (!livres.length) {
         caixa.append(criar("p", "nota-do-menu", "Não há outro registro no acervo."));
         caixa.append(subir());
@@ -615,6 +608,33 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       }
       caixa.append(subir());
     });
+  }
+
+  /** O que acabou de subir pelo «enviar do computador…» entra nesta aba.
+   *
+   * Todos os que couberem: a aba leva até três oscilografias. O que não
+   * couber, ou já estiver aqui, fica no acervo e o recado diz qual. Devolve
+   * as frases que o recado do envio acrescenta. */
+  function porNestaAba(itens) {
+    const ja = new Set([sha, ...outrosRegistros.map((x) => x.sha)]);
+    const novos = itens.filter((x) => !ja.has(x.sha));
+    const entram = novos.slice(0, Math.max(0, MAXIMO_DE_OUTROS - outrosRegistros.length));
+    const frases = [];
+    const nomes = (lista) => lista.map((x) => x.nome).join(", ");
+    if (novos.length < itens.length) {
+      frases.push(`Já estava nesta aba: ${nomes(itens.filter((x) => ja.has(x.sha)))}.`);
+    }
+    if (entram.length < novos.length) {
+      frases.push("Não couberam nesta aba (até três oscilografias por aba): "
+                  + `${nomes(novos.slice(entram.length))} — ficaram no acervo; `
+                  + "abra pelo «+ nova aba».");
+    }
+    if (entram.length) {
+      menuAberto?.();
+      trocarRegistros([...outrosRegistros, ...entram.map((x) => ({ sha: x.sha }))]);
+      frases.push(`${entram.length > 1 ? "Postos" : "Posto"} nesta aba: ${nomes(entram)}.`);
+    }
+    return frases;
   }
 
   //: Contador dos ids que a tela cria. Não reaproveita número de painel
@@ -15212,6 +15232,31 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   //: aqui que `menuSuspenso` consegue fechar DE VERDADE o que já estava
   //: aberto, em vez de apenas esvaziar a âncora. Ver o comentário lá dentro.
   let menuAberto = null;
+
+  /* FECHAR O QUE ESTÁ ABERTO, pelo Esc e de fora do quadro (10/11/2026).
+   *
+   * Todo menu e toda paleta desta tela fecha num `pointerdown` FORA dele,
+   * ouvido no documento. Dois caminhos não passavam por ali: o Esc com o foco
+   * fora do menu, e o clique fora do QUADRO — dentro de uma aba, esta página
+   * é um `<iframe>`, e o clique na barra das abas ou na barra de cima é de
+   * outro documento. O `abas.js` repassa esse clique como um `pointerdown` no
+   * documento daqui (ver lá), e o Esc faz o mesmo: um `pointerdown` cujo alvo
+   * é o próprio documento está fora de qualquer menu, e cada menu se fecha
+   * pela regra que já tinha. Só os ouvintes do DOCUMENTO o recebem; a
+   * seleção de sinal e os gestos do gráfico ouvem os elementos, e não mudam.
+   *
+   * As janelas com edição (lógica, «+ sinal», calculadora, catálogos) não
+   * entram aqui: são `<dialog>` ou painéis flutuantes que se fecham pelo ×,
+   * e fechar no clique fora perderia o que se estava digitando. */
+  const haMenuAberto = () => !!document.querySelector(".menu-suspenso, .paleta-flutuante");
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || !haMenuAberto()) return;
+    // O Esc fecha o menu e para aqui: não tira cursor nem fecha a janela de
+    // baixo, que seriam o segundo Esc.
+    e.preventDefault();
+    e.stopPropagation();
+    document.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+  }, true);
 
   function menuSuspenso(idDaAncora, titulo, montar, opcoes = {}) {
     const ancora = document.getElementById(idDaAncora);

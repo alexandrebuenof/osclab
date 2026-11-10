@@ -38,15 +38,12 @@
   async function enviar(arquivos) {
     if (!arquivos || arquivos.length === 0) return;
 
-    const dados = new FormData();
-    for (const arquivo of arquivos) dados.append("arquivos", arquivo);
-
     recado.hidden = true;
     area.classList.add("ocupada");
     const painel = progressoDoEnvio([...arquivos]);
 
     try {
-      const corpo = await enviarComProgresso(dados, painel);
+      const corpo = await enviarComProgresso([...arquivos], painel);
       painel.fase("lido", "pronto");
       relatar(corpo);
       await carregarLista();
@@ -67,9 +64,8 @@
   // servidor abrindo o .cfg/.dat, conferindo o par e gravando no acervo — o
   // que sobra de espera depois que o último byte subiu.
   //
-  // `fetch` não diz quanto já subiu; o XMLHttpRequest diz, pelo
-  // `upload.onprogress`. A velocidade é a real: em localhost a barra enche
-  // num piscar, e é isso mesmo.
+  // O XMLHttpRequest (em `envio.js`) diz quanto já subiu. A velocidade é a
+  // real: em localhost a barra enche num piscar, e é isso mesmo.
 
   const kB = (bytes) => (bytes / 1024).toLocaleString("pt-BR",
     { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -135,52 +131,19 @@
     };
   }
 
-  function enviarComProgresso(dados, painel) {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("POST", "/api/acervo");
-      xhr.upload.onprogress = (ev) => {
-        // `ev.total` é o pedido inteiro; a fração dele vale para os arquivos
-        painel.mostrar(ev.lengthComputable && ev.total
-          ? (ev.loaded / ev.total) * painel.total : ev.loaded);
-      };
+  /* O pedido e a leitura da resposta são do `envio.js`, o MESMO que os menus
+     da tela de oscilografia usam: aqui só se pinta o progresso por arquivo. */
+  function enviarComProgresso(arquivos, painel) {
+    return window.osclabEnvio.enviar(arquivos, {
+      // a fração é do pedido inteiro; ela vale para os arquivos
+      aoProgresso: (f) => painel.mostrar(f * painel.total),
       // O último byte subiu: a espera dali em diante é a leitura.
-      xhr.upload.onload = () => {
-        painel.mostrar(painel.total);
-        painel.fase("lendo", "lendo e conferindo");
-      };
-      xhr.onload = () => {
-        try {
-          resolve(JSON.parse(xhr.responseText));
-        } catch (_e) {
-          reject(new Error(`o servidor respondeu ${xhr.status} sem um relatório legível`));
-        }
-      };
-      xhr.onerror = () => reject(new Error("o servidor não respondeu"));
-      xhr.send(dados);
+      aoLer: () => painel.fase("lendo", "lendo e conferindo"),
     });
   }
 
   function relatar(corpo) {
-    const linhas = [];
-    let tom = "bom";
-
-    for (const item of corpo.aceitos || []) {
-      linhas.push(`Entrou: ${item.nome} — ${item.n_analogicos} analógicos, ` +
-                  `${item.n_amostras} amostras`);
-    }
-    for (const item of corpo.repetidos || []) {
-      linhas.push(`Já estava no acervo: ${item.nome}`);
-    }
-    for (const linha of corpo.aguardando || []) {
-      linhas.push(linha);
-      if (tom === "bom") tom = "atencao";
-    }
-    for (const problema of corpo.problemas || []) {
-      linhas.push(problema);
-      tom = (corpo.aceitos || []).length ? "atencao" : "ruim";
-    }
-    if (linhas.length === 0) linhas.push("Nada foi enviado.");
+    const { linhas, tom } = window.osclabEnvio.relato(corpo);
     mostrarRecado(linhas, tom);
   }
 

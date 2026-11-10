@@ -106,6 +106,12 @@
       document.body.append(menu);
     });
     document.addEventListener("click", (ev) => { if (menu && !menu.contains(ev.target)) fechar(); });
+    // O clique DENTRO do quadro de uma aba não chega a este documento: o
+    // `abas.js` o repassa como um `pointerdown` no documento, e é ele que
+    // fecha aqui. O botão fica de fora — quem fecha nele é o próprio `click`.
+    document.addEventListener("pointerdown", (ev) => {
+      if (menu && !menu.contains(ev.target) && !botao.contains(ev.target)) fechar();
+    }, true);
     document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") fechar(); });
   });
 

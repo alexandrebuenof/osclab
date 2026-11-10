@@ -26,7 +26,7 @@
   const botaoCru = document.getElementById("cru-da-logica");
   if (!chave || !painel) return;
 
-  /* O botão «como veio» aceso: o arquivo letra por letra, sem separar ajuste
+  /* O botão «texto» aceso: o arquivo letra por letra, sem separar ajuste
      de lógica. É a saída para o relé que escreve de um jeito que o leitor não
      conhece — pedido dele, 02/11/2026. */
   let verCru = false;
@@ -56,7 +56,7 @@
       ? "Os ajustes e a lógica que vieram dentro do arquivo (" + estado.de + ")."
       : estado && estado.bruto
         ? "O programa não reconheceu ajuste nem lógica no " + estado.de +
-          " — clique para ver o arquivo como veio."
+          " — clique para ver o texto como veio no arquivo."
         : "Este registro não trouxe ajustes — clique para saber por quê.";
   }
 

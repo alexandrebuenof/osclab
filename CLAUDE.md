@@ -282,6 +282,19 @@ osclab/
   o nome na legenda está sempre no mesmo lugar e não se move. Os dois gestos
   fazem a mesma coisa, e **Ctrl** em qualquer um deles acumula a seleção —
   comparar duas fases é o gesto mais comum do ofício.
+- **Menu aberto fecha no clique em QUALQUER lugar fora dele e no Esc — dos
+  dois lados do quadro da aba** *(10/11/2026)*. Cada aba é um `<iframe>`, e
+  clique num documento não chega ao outro: o `abas.js` repassa o clique de
+  verdade de um lado como `pointerdown` no DOCUMENTO do outro (alvo fora de
+  todo menu, e só os ouvintes do documento o veem). Menu novo que se fecha
+  por `pointerdown` no documento ganha isso de graça. Janela com edição
+  (lógica, «+ sinal», calculadora) fecha só pelo ×: fechar no clique fora
+  perderia o que se digitava.
+- **Enviar oscilografia é UM caminho só** (`static/js/envio.js`): a página
+  Arquivos e o «enviar do computador…» dos menus da oscilografia usam o
+  mesmo pedido e a mesma leitura da resposta, e o `accept` sai de
+  `acervo.EXTENSOES`. Quem pareia, guarda na antessala e reconhece repetido
+  é o servidor.
 - **Ctrl+Z desfaz o que está na TELA, não o que foi decidido.** Sinal tirado,
   acrescentado, digital escondido: tudo volta. Correção de fase não, porque
   aquilo é dado gravado ao lado do registro e se desfaz no próprio lápis —

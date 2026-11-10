@@ -7,7 +7,8 @@
   {% include "_cabeca.html" %}
 {%- from "_barra.html" import barra with context %}
 </head>
-<body data-sha="{{ item.sha }}" data-laco="{{ item.falta_laco or '' }}">
+<body data-sha="{{ item.sha }}" data-laco="{{ item.falta_laco or '' }}"
+      data-aceita="{{ aceita_no_acervo }}">
 {# O laço em falta que o classificador achou (`analysis/falta.py`).
    Vem para a tela porque é com ele que um plano de impedância novo
    nasce: abrir sempre em AN faria o usuário trocar o laço à mão em
@@ -303,7 +304,7 @@
       <h3>Lógica e ajustes</h3>
       <span class="de-onde" id="de-onde-a-logica"></span>
       <button type="button" class="chave como-veio" id="cru-da-logica" hidden
-              title="Ver o arquivo como o relé escreveu, sem a separação em ajustes e lógica.">como veio</button>
+              title="Mostra o texto como veio no arquivo, letra por letra, sem a separação em ajustes e lógica.">texto</button>
       <button type="button" class="fechar" id="fechar-logica"
               title="fechar">×</button>
     </div>
@@ -327,7 +328,7 @@
       {#- O arquivo como veio, sempre ao alcance: é a saída quando o programa
           acha que leu a tabela e leu as colunas trocadas. #}
       <button type="button" class="chave como-veio" id="cru-dos-eventos"
-              title="Ver o arquivo como o relé escreveu, sem a tabela.">como veio</button>
+              title="Mostra o texto como veio no arquivo, letra por letra, sem a tabela.">texto</button>
       <button type="button" class="fechar" id="fechar-eventos"
               title="fechar">×</button>
     </div>
@@ -588,6 +589,7 @@
     </div>
   </dialog>
 
+  <script src="{{ url_for('static', filename='js/envio.js') }}"></script>
   <script src="{{ url_for('static', filename='js/onda.js') }}"></script>
   <script src="{{ url_for('static', filename='js/dicionario.js') }}"></script>
   <script src="{{ url_for('static', filename='js/logica.js') }}"></script>

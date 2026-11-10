@@ -2099,6 +2099,8 @@ a.chave, .tema, .voltar, #exportar { text-decoration: none; }
   --ic-avancado: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M1.5 8.5l1-3.5 1 5.5 1-6.5 1 7.5 1-5 1 3.5 1-6 1 7 1-4.5 1 2.5 1-2'/></svg>");
   --ic-filtro: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linejoin='round'><path d='M2 3h12l-4.6 5.2v5.3L6.6 12V8.2z'/></svg>");
   --ic-tema: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5'><circle cx='8' cy='8' r='4.2'/><path d='M8 3.8a4.2 4.2 0 0 0 0 8.4z' fill='black' stroke='none'/><path d='M8 .8v1.4M8 13.8v1.4M.8 8h1.4M13.8 8h1.4M2.9 2.9l1 1M12.1 12.1l1 1M13.1 2.9l-1 1M3.9 12.1l-1 1' stroke-linecap='round'/></svg>");
+  /* Enviar: a seta SOBE para fora da bandeja — o contrário do exportar. */
+  --ic-enviar: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M8 10.5V3M5 6l3-3 3 3M2.5 10v3.2h11V10'/></svg>");
   --ic-exportar: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M8 2v7.5M5 7l3 3 3-3M2.5 13.2h11'/></svg>");
   /* A pasta do acervo. A seta para a esquerda ficou com o «menu», que é quem
      volta ao começo -- duas chaves com a mesma seta não diriam qual é qual. */
@@ -5897,10 +5899,31 @@ p.sem-logica {
   white-space: nowrap;
 }
 .opcao-de-registro:hover .nome-do-registro { color: var(--destaque); }
-/* «subir outra no acervo» é um CAMINHO, não um registro: fica no fim, depois
-   de um fio, e na cor de ação. */
-.opcao-de-registro.subir-no-acervo { border-top: 1px solid var(--linha); margin-top: 6px; }
-.opcao-de-registro.subir-no-acervo .nome-do-registro { color: var(--destaque); }
+/* «enviar do computador…» é um CAMINHO, não um registro: fica no fim, depois
+   de um fio, e na cor de ação. Enquanto sobe, a linha de baixo é o
+   progresso, e o item não aceita outro clique. */
+.opcao-de-registro.enviar-do-computador { border-top: 1px solid var(--linha); margin-top: 6px; border-radius: 0 0 5px 5px; }
+.opcao-de-registro.enviar-do-computador .nome-do-registro { color: var(--destaque); display: flex; align-items: center; gap: 6px; }
+.opcao-de-registro.enviar-do-computador .icone-de-envio { --ic: var(--ic-enviar); width: 13px; height: 13px; flex: none; }
+.opcao-de-registro.enviar-do-computador.enviando { cursor: progress; }
+.opcao-de-registro.enviar-do-computador.enviando .sub-do-registro { color: var(--destaque); }
+
+/* O recado do envio feito por um menu: o menu já fechou (ou vai fechar), e o
+   que entrou, o que ficou na antessala e o que não era oscilografia
+   precisam ficar escritos em algum lugar. Canto de baixo, some sozinho. */
+.recado-do-envio {
+  position: fixed; right: 16px; bottom: 16px; z-index: 60;
+  max-width: min(460px, calc(100vw - 32px));
+  padding: 10px 14px; font-size: 13px;
+  background: var(--superficie); color: var(--tinta);
+  border: 1px solid var(--linha); border-left: 4px solid var(--bom);
+  border-radius: 4px; box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+  cursor: pointer;
+}
+.recado-do-envio p { margin: 0 0 4px; }
+.recado-do-envio p:last-child { margin-bottom: 0; }
+.recado-do-envio.atencao { border-left-color: var(--atencao); }
+.recado-do-envio.ruim { border-left-color: var(--ruim); }
 
 /* A vista do plano de impedância, dentro da caixa de ajustes: um rótulo
    curto e as chaves dele na mesma linha. */

@@ -160,6 +160,11 @@ def create_app() -> Flask:
             "contar_acervo": lambda: len(acervo.listar()),
             "formatos_lidos": [NOME_DO_FORMATO.get(r.name, r.name)
                                for r in registry.readers()],
+            # O `accept` de todo campo de envio sai da MESMA lista que o
+            # acervo usa para separar o que é oscilografia: página Arquivos e
+            # menus da tela de oscilografia não podem aceitar coisas diferentes.
+            "aceita_no_acervo": ",".join(
+                f"{e},{e.upper()}" for e in sorted(acervo.EXTENSOES)),
         }
 
     @app.template_filter("milhar")
