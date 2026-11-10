@@ -4,31 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OscLab — Base de dados</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/osclab.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/fases.css') }}">
-  <script src="{{ url_for('static', filename='js/tema.js') }}"></script>
+  {% include "_cabeca.html" %}
+{%- from "_barra.html" import barra with context %}
 </head>
-<body>
-  <header class="topo">
-    <div class="marca">
-      <h1>OscLab</h1>
-      <p class="sub">Base de dados</p>
-    </div>
-    <div class="acoes">
-      <button type="button" class="chave tema com-icone" id="tema"
-              style="--ic: var(--ic-tema)" title="Alternar tema">tema</button>
-      {#- «voltar» fecha o painel aberto e volta ao passo anterior; aparece
-          só quando há painel. Fica aqui em CIMA, ao lado de «menu», porque
-          são a mesma coisa -- sair de onde se está -- e botão de sair que
-          muda de lugar e' botao que se procura. Decisao dele, 19/10/2026. #}
+<body class="portal">
+  {#- «voltar» fecha o painel aberto e volta ao passo anterior; aparece só
+      quando há painel. Mora na BARRA, à esquerda do que é da casa: sair de
+      onde se está é sempre em cima, e botão de sair que muda de lugar é
+      botão que se procura. Decisão dele, 19/10/2026; a «menu» que ficava ao
+      lado virou o «Início» do menu da barra (10/11/2026). #}
+  {% call barra(atual="base") %}
       <button type="button" class="chave voltar-passo com-icone" id="voltar-passo"
               style="--ic: var(--ic-voltar)" hidden
               title="Voltar ao passo anterior">voltar</button>
-      <a class="chave voltar com-icone" style="--ic: var(--ic-voltar)"
-         href="/" title="Voltar à tela inicial">menu</a>
-      <span class="versao-etiqueta">v{{ versao }}</span>
-    </div>
-  </header>
+  {%- endcall %}
 
   {#- A tela inteira e' desenhada pelo `base.js`, a partir do estado que vem
       aqui embaixo ja' pronto. O estado viaja NO HTML, e nao numa primeira
@@ -68,6 +57,8 @@
       <button type="button" class="chave escolhido" id="usar-pasta">usar esta pasta</button>
     </div>
   </dialog>
+
+  {% include "_rodape.html" %}
 
   <script src="{{ url_for('static', filename='js/base.js') }}"></script>
 </body>

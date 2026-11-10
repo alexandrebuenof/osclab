@@ -27,6 +27,7 @@
 *.pdf  binary
 *.zip  binary
 *.xlsx binary
+*.woff2 binary
 
 # Oscilografia: o .dat binario nao e' texto, e o .cfg e' texto mas vem em
 # cp1252 de fabricantes que usam acento. Nenhum dos dois pode ser reescrito

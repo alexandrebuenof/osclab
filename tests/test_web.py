@@ -452,12 +452,12 @@ def _tokens_do_css() -> dict[str, dict[str, str]]:
 
     from osclab import paths
     texto = (paths.STATIC_DIR / "css" / "osclab.css").read_text(encoding="utf-8")
-    # O tema claro vive sob `[data-tema="claro"]`; o escuro é o `:root`. O
-    # corte é no SELETOR, em começo de linha — o comentário do topo do arquivo
-    # também cita `[data-tema="claro"]`, e cortar ali deixava o tema escuro
-    # com zero cores e o teste passando por vacuidade.
-    corte = texto.index(':root[data-tema="claro"]')
-    pedacos = {"escuro": texto[:corte], "claro": texto[corte:]}
+    # Desde 10/11/2026 o claro é o `:root` e o escuro vive sob
+    # `[data-tema="escuro"]`. O corte é no SELETOR, em começo de linha — o
+    # comentário do topo do arquivo também cita o atributo, e cortar ali
+    # deixava um dos temas com zero cores e o teste passando por vacuidade.
+    corte = texto.index('\n:root[data-tema="escuro"] {')
+    pedacos = {"claro": texto[:corte], "escuro": texto[corte:]}
     padrao = re.compile(r"(--(?:fase-[abcn]|calculado-[123]|traco-[123]))\s*:\s*(#[0-9a-f]{6})")
     return {tema: dict(padrao.findall(pedaco)) for tema, pedaco in pedacos.items()}
 
@@ -497,7 +497,7 @@ def _convencoes_do_css() -> dict[tuple[str, str], dict[str, str]]:
 
     from osclab import paths
     texto = (paths.STATIC_DIR / "css" / "fases.css").read_text(encoding="utf-8")
-    seletor = r'(:root(?:\[data-tema="claro"\])?\[data-fases="([a-z0-9]+)"\])'
+    seletor = r'(:root\[data-tema="(?:claro|escuro)"\]\[data-fases="([a-z0-9]+)"\])'
     blocos = re.findall(seletor + r"\s*\{([^}]*)\}", texto)
     cor = re.compile(r"(--(?:fase-[abcn]|traco-[123]))\s*:\s*(#[0-9a-f]{6})")
     return {(ident, "claro" if "claro" in sel else "escuro"): dict(cor.findall(corpo))
@@ -1552,17 +1552,21 @@ def test_a_janelinha_SOBRE_diz_licenca_e_titularidade():
     from osclab.web.server import create_app
     app = create_app()
     app.config.update(TESTING=True)
-    #: Na TELA INICIAL, que é onde o «sobre» mora: a tela de arquivos é de um
-    #: módulo, e a licença é do programa.
-    pagina = app.test_client().get("/").get_data(as_text=True)
-    assert 'id="janela-sobre"' in pagina
-    assert 'class="versao" id="sobre"' in pagina
-    assert "AGPL-3.0-or-later" in pagina
-    assert "servi-lo pela rede" in pagina
-    assert "direitos patrimoniais" in pagina
+    #: Desde 10/11/2026 a versão mora na BARRA DE CIMA, que é a mesma em todo
+    #: o portal — e o «sobre» vai junto: a licença é do programa, e quem
+    #: clica na versão na tela de arquivos faz a mesma pergunta.
+    cli = app.test_client()
+    for rota in ("/", "/arquivos", "/base"):
+        pagina = cli.get(rota).get_data(as_text=True)
+        assert 'id="janela-sobre"' in pagina, rota
+        assert 'class="versao" id="sobre"' in pagina, rota
+        assert "AGPL-3.0-or-later" in pagina, rota
+        assert "servi-lo pela rede" in pagina, rota
+        assert "direitos patrimoniais" in pagina, rota
+        assert "js/barra.js" in pagina, rota
 
     from osclab import paths
-    js = (paths.STATIC_DIR / "js" / "menu.js").read_text(encoding="utf-8")
+    js = (paths.STATIC_DIR / "js" / "barra.js").read_text(encoding="utf-8")
     assert "sobre.showModal()" in js
     # Clique no escuro em volta fecha: o `<dialog>` entrega o clique do fundo
     # como se fosse dele, então quem decide é a POSIÇÃO.
@@ -1744,7 +1748,8 @@ def test_o_botao_do_TEMA_e_uma_chave_nas_TRES_telas():
     solto: herdava só o `min-width` do `#tema` e saía um retângulo sem moldura
     nem ícone, mais alto que o vizinho. Chave igual às outras nas três."""
     from osclab import paths
-    for nome in ("menu.html", "index.html", "onda.html"):
+    # Desde 10/11/2026 o do portal mora na barra de cima (`_barra.html`).
+    for nome in ("_barra.html", "onda.html"):
         tela = (paths.TEMPLATES_DIR / nome).read_text(encoding="utf-8")
         assert 'class="chave tema com-icone" id="tema"' in tela, nome
         assert "--ic: var(--ic-tema)" in tela, nome
@@ -1759,10 +1764,11 @@ def test_a_chave_do_MENU_tem_a_seta_para_a_esquerda_nas_duas_telas():
     css = _osclab_css()
     assert "--ic-arquivos: url(" in css
 
-    arquivos = (paths.TEMPLATES_DIR / "index.html").read_text(encoding="utf-8")
-    assert ('<a class="chave voltar com-icone" style="--ic: var(--ic-voltar)"'
-            in arquivos)
-    assert 'href="/" title="Voltar à tela inicial">menu</a>' in arquivos
+    # No portal a chave «menu» virou o «Início» do menu da barra de cima
+    # (10/11/2026): o mesmo destino, um item à esquerda, em toda página.
+    barra_de_cima = (paths.TEMPLATES_DIR / "_barra.html").read_text(encoding="utf-8")
+    assert '("inicio", "/", "Início")' in barra_de_cima
+    assert ">menu</a>" not in (paths.TEMPLATES_DIR / "index.html").read_text(encoding="utf-8")
 
     onda = (paths.TEMPLATES_DIR / "onda.html").read_text(encoding="utf-8")
     # Na tela da onda são DUAS navegações, na barra do aplicativo, e desde
@@ -2474,7 +2480,9 @@ def test_VOLTAR_mora_no_cabecalho_ao_lado_de_MENU():
     assert 'id="voltar-passo"' in html
     # nasce escondido: só há o que voltar quando há painel aberto
     assert "hidden" in html.split('id="voltar-passo"')[1].split(">")[0]
-    assert html.index('id="voltar-passo"') < html.index('href="/" title="Voltar à tela inicial"')
+    # e mora NA BARRA de cima (o `call` dela), onde fica o «Início»
+    assert html.index('{% call barra(atual="base") %}') < html.index('id="voltar-passo"') \
+        < html.index("{%- endcall %}")
 
     js = _base_js()
     assert 'document.getElementById("voltar-passo")' in js
@@ -2745,3 +2753,63 @@ def test_a_simulacao_de_daltonismo_deixa_o_cinza_cinza():
         for visao in ("protanopia", "deuteranopia", "tritanopia"):
             r, g, b = paleta.como_daltonico(paleta.de_hex(cinza), visao)
             assert max(r, g, b) - min(r, g, b) < 0.01, (cinza, visao, (r, g, b))
+
+
+# ---------------------------------------------------------------------------
+# A moldura da casa (identidade f10, 10/11/2026)
+# ---------------------------------------------------------------------------
+
+def test_a_BARRA_DE_CIMA_e_a_mesma_em_todo_o_portal_e_marca_onde_se_esta(cliente):
+    """Uma barra só, presa ao rolar, com o item atual marcado. Página que
+    escrevesse a própria barra à mão seria a primeira a ficar diferente."""
+    for rota, atual in (("/", "Início"), ("/arquivos", "Arquivos"),
+                        ("/base", "Base de dados")):
+        html = cliente.get(rota).get_data(as_text=True)
+        assert html.count('id="barra-de-cima"') == 1, rota
+        assert f'aria-current="page">{atual}</a>' in html, rota
+        # «Oscilografia» só aparece no menu de quem está nela
+        assert 'class="item-da-casa atual" aria-current="page">Oscilografia' not in html, rota
+        assert html.count('id="tema"') == 1, rota
+        assert 'rel="icon"' in html and "favicon-mono.svg" in html, rota
+        assert 'class="rodape-da-casa"' in html, rota
+        assert 'class="tela-do-menu portal"' in html or 'class="portal"' in html, rota
+    abas = cliente.get("/abas").get_data(as_text=True)
+    assert 'aria-current="page">Oscilografia</span>' in abas
+    assert 'class="rodape-da-casa"' not in abas
+    assert "position: sticky" in _osclab_css().split(".barra-de-cima {")[1][:80]
+
+
+def test_DENTRO_de_uma_aba_a_onda_nao_repete_a_barra(cliente):
+    """A barra já está na janela de fora; dentro do quadro ela seria a segunda.
+    Fora de uma aba ela aparece SEM o tema, que a onda tem no cabeçalho dela —
+    dois `#tema` na página e só um funcionaria."""
+    onda = _template("onda.html")
+    assert "{%- if not em_aba %}" in onda
+    assert 'barra(atual="oscilografia", tema=False)' in onda
+    import inspect
+
+    from osclab.web import server
+    assert 'em_aba="aba" in request.args' in inspect.getsource(server)
+
+
+def test_as_FONTES_viajam_no_pacote_com_a_licenca():
+    """Nada de CDN, e a OFL exige que a licença vá junto com as fontes."""
+    fontes = paths.STATIC_DIR / "fontes"
+    for nome in ("public-sans-400", "public-sans-700",
+                 "ibm-plex-mono-400", "ibm-plex-mono-600"):
+        assert (fontes / f"{nome}.woff2").is_file(), nome
+        assert f"../fontes/{nome}.woff2" in _osclab_css(), nome
+    licenca = (fontes / "OFL.txt").read_text(encoding="utf-8")
+    assert "SIL OPEN FONT LICENSE Version 1.1" in licenca
+    assert '--sans: "Public Sans"' in _osclab_css()
+    assert '--mono: "IBM Plex Mono"' in _osclab_css()
+
+
+def test_o_TEMA_padrao_e_o_claro_e_o_escuro_vive_no_atributo():
+    js = (paths.STATIC_DIR / "js" / "tema.js").read_text(encoding="utf-8")
+    assert 'const PADRAO = "claro";' in js
+    # o quadro de uma aba acompanha a troca feita na barra de fora
+    assert "if (e.key === CHAVE) aplicar(ler());" in js
+    css = _osclab_css()
+    assert '\n:root[data-tema="escuro"] {' in css
+    assert ':root[data-tema="claro"] {' not in css

@@ -4,45 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OscLab</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/osclab.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/fases.css') }}">
-  <script src="{{ url_for('static', filename='js/tema.js') }}"></script>
+  {% include "_cabeca.html" %}
+{%- from "_barra.html" import barra with context %}
 </head>
-<body class="tela-do-menu">
-  <header class="topo">
-    <div class="marca">
-      {#- O logotipo «Trinca» (L4): tres ondas defasadas de 120 graus, nas
-          cores de fase do programa. E' o que o programa olha o dia inteiro, e
-          as cores sao as mesmas dos tracos -- quem aprende a figura aqui le'
-          o grafico depois. #}
-      <svg class="logotipo" viewBox="0 0 56 32" width="56" height="32"
-           role="img" aria-label="OscLab">
-        <path d="M2 16 C7 2, 13 2, 18 16 S29 30, 34 16 S45 2, 50 16"
-              fill="none" stroke="var(--fase-a)" stroke-width="2.4"
-              stroke-linecap="round"/>
-        <path d="M2 16 C7 30, 13 30, 18 16 S29 2, 34 16 S45 30, 50 16"
-              fill="none" stroke="var(--fase-c)" stroke-width="2.4"
-              stroke-linecap="round" opacity=".92"/>
-        <path d="M6 16 C11 4, 17 28, 22 16 S33 4, 38 16 S49 28, 54 16"
-              fill="none" stroke="var(--fase-b)" stroke-width="2.4"
-              stroke-linecap="round" opacity=".85"/>
-      </svg>
-      <div>
-        <h1>OscLab</h1>
-        <p class="sub">Leitor e analisador de oscilografia</p>
-      </div>
-    </div>
-    <div class="acoes">
-      <button type="button" class="chave tema com-icone" id="tema"
-              style="--ic: var(--ic-tema)"
-              title="Alternar tema">tema</button>
-      {#- A versao e' BOTAO: quem olha para ela esta' perguntando «que programa
-          e' este, e de quem» -- e a resposta inteira (licenca, titularidade,
-          formatos) nao cabe num canto do cabecalho. #}
-      <button type="button" class="versao" id="sobre"
-              title="Sobre o OscLab: versão, licença e titularidade">v{{ versao }}</button>
-    </div>
-  </header>
+<body class="tela-do-menu portal">
+  {{ barra(atual="inicio") }}
 
   <main class="menu">
     <p class="chamada">Escolha o que você vai analisar.</p>
@@ -168,42 +134,7 @@
     </p>
   </dialog>
 
-  {#- A janelinha «sobre». O texto mora aqui, com o resto das palavras da
-      pagina, e nao dentro do JavaScript. #}
-  <dialog class="busca janela-sobre" id="janela-sobre">
-    <div class="cabeca">
-      <h3>Sobre o OscLab</h3>
-      <button type="button" class="fechar" id="fechar-sobre"
-              title="fechar">×</button>
-    </div>
-
-    <p class="sobre-linha">Leitor e analisador de oscilografia</p>
-
-    <dl class="sobre-fatos">
-      <dt>versão</dt>
-      <dd>{{ versao }}</dd>
-
-      <dt>licença</dt>
-      <dd>
-        <b>AGPL-3.0-or-later</b> — permite uso comercial. O que ela exige é
-        outra coisa: quem distribuir o programa, <b>ou servi-lo pela rede</b>,
-        entrega o código-fonte junto, sob esta mesma licença, incluindo as
-        modificações.
-      </dd>
-
-      <dt>titularidade</dt>
-      <dd>
-        Os direitos patrimoniais pertencem à distribuidora de energia para a
-        qual o programa foi desenvolvido.
-      </dd>
-    </dl>
-
-    <p class="sobre-rodape">
-      <a href="/saude">/saude</a> diz o que esta instalação está enxergando —
-      pastas, formatos e versão — quando houver dúvida sobre qual cópia está
-      rodando.
-    </p>
-  </dialog>
+  {% include "_rodape.html" %}
 
   <script src="{{ url_for('static', filename='js/menu.js') }}"></script>
 </body>

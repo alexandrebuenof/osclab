@@ -482,10 +482,14 @@ osclab/
   sai disso é `plot/navegacao.py` — inclusive o piso de amostras e as bordas.
 - **A escala vertical se ajusta à janela visível**, por grupo. Ampliar a
   pré-falta tem que mostrar a corrente de carga, não um fio reto no zero.
-- **Tema escuro é o padrão**, por escolha do projeto; o claro é um botão no
-  cabeçalho, guardado no navegador.
-- **Nada de CDN.** Toda biblioteca de front-end viaja dentro do pacote: uma
-  subestação sem internet não pode depender de um `<script src="https://...">`.
+- **Tema claro é o padrão desde 10/11/2026** — o da identidade nova (f10),
+  que foi escolhida olhando o claro; até ali era o escuro. O escuro continua
+  no botão «tema» da barra de cima, e a escolha de quem já escolheu fica
+  guardada no navegador. Na folha, o claro é o `:root` e o escuro vive sob
+  `[data-tema="escuro"]`.
+- **Nada de CDN.** Toda biblioteca de front-end — e as FONTES — viaja dentro
+  do pacote: uma subestação sem internet não pode depender de um
+  `<script src="https://...">`.
 - **Cores de fase são token CSS** (`--fase-a/b/c/n`), validadas para daltonismo
   e contraste nos dois temas. A identidade nunca é so' a cor: legenda e leitura
   do cursor sempre nomeiam o canal.

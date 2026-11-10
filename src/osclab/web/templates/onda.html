@@ -4,9 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ item.nome }} — OscLab</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/osclab.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/fases.css') }}">
-  <script src="{{ url_for('static', filename='js/tema.js') }}"></script>
+  {% include "_cabeca.html" %}
+{%- from "_barra.html" import barra with context %}
 </head>
 <body data-sha="{{ item.sha }}" data-laco="{{ item.falta_laco or '' }}">
 {# O laço em falta que o classificador achou (`analysis/falta.py`).
@@ -14,6 +13,12 @@
    nasce: abrir sempre em AN faria o usuário trocar o laço à mão em
    toda falta que não fosse da fase A -- e quem acabou de ler «BCG»
    no selo não espera ver o plano de outro laço. #}
+  {#- A barra de cima só quando a página NÃO está numa aba: dentro de
+      `/abas` ela já está na janela de fora. Sem o botão do tema, que esta
+      página tem no cabeçalho do registro. #}
+  {%- if not em_aba %}
+  {{ barra(atual="oscilografia", tema=False) }}
+  {%- endif %}
   {#- A BARRA DO APLICATIVO: o que leva para FORA deste registro. À esquerda
       as duas voltas (ao acervo e à tela inicial), à direita o que sai daqui
       (exportar) e o que vale para o programa inteiro (a base de dados). O

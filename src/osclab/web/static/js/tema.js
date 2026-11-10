@@ -1,19 +1,20 @@
 /* Tema claro e escuro.
  *
- * O padrão é o ESCURO, por escolha do projeto — quem analisa oscilografia
- * costuma ficar horas na tela, muitas vezes em sala de controle com pouca luz.
- * O sistema operacional não decide aqui: quem decide é a preferência salva no
- * navegador, e o padrão dela é escuro.
+ * O padrão é o CLARO desde 10/11/2026: a identidade nova do programa foi
+ * escolhida olhando o claro, e o escuro continua a um clique, no botão «tema».
+ * Até ali o padrão era o escuro. Quem já escolheu um dos dois fica com a
+ * escolha: a preferência guardada no navegador vence o padrão. O sistema
+ * operacional não decide aqui.
  *
  * Este arquivo roda no <head>, sem `defer`, de propósito: se rodasse depois do
- * desenho da página, o tema claro apareceria por um instante antes de o escuro
- * entrar — aquele clarão que incomoda.
+ * desenho da página, o tema padrão apareceria por um instante antes do
+ * escolhido entrar — aquele clarão que incomoda.
  */
 
 (() => {
   "use strict";
   const CHAVE = "osclab-tema";
-  const PADRAO = "escuro";
+  const PADRAO = "claro";
 
   const ler = () => {
     // Navegação anônima e sites com armazenamento bloqueado fazem isto
@@ -64,8 +65,12 @@
   };
   aplicarFases(lerFases());
   // Outra aba (ou o quadro de uma aba de registros) trocou: segue junto.
+  // O mesmo para o TEMA: o botão mora na barra da janela das abas, e cada
+  // aba é outro documento (um quadro) — sem isto, trocar o tema lá fora
+  // deixava as oscilografias no tema velho até recarregar.
   window.addEventListener("storage", (e) => {
     if (e.key === CHAVE_FASES) aplicarFases(lerFases());
+    if (e.key === CHAVE) aplicar(ler());
   });
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -112,6 +117,8 @@
       (botao.textContent = document.documentElement.dataset.tema === "claro"
         ? "tema escuro" : "tema claro");
     rotular();
+    // trocado em outro documento (a barra das abas): o rótulo acompanha
+    document.addEventListener("osclab:tema", rotular);
     botao.addEventListener("click", () => {
       const novo = document.documentElement.dataset.tema === "claro"
         ? "escuro" : "claro";

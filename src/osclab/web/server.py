@@ -102,6 +102,14 @@ from osclab.plot import varios as varios_mod
 #: inteira de uma vez, e recusar por tamanho no meio disso seria irritante.
 TAMANHO_MAXIMO = 512 * 1024 * 1024
 
+#: Como o rodapé e o «sobre» escrevem cada leitor. O nome interno (`cev`) é
+#: identificador; quem lê a tela quer saber que arquivo abre.
+NOME_DO_FORMATO = {
+    "comtrade": "COMTRADE (.cfg + .dat, .cff)",
+    "cev": "SEL .CEV (relatório de evento)",
+    "sel-texto": "SEL, relatório em texto",
+}
+
 
 def create_app() -> Flask:
     """Monta a aplicação Flask. Não sobe servidor."""
@@ -136,6 +144,23 @@ def create_app() -> Flask:
     # -----------------------------------------------------------------------
     # Páginas
     # -----------------------------------------------------------------------
+
+    @app.context_processor
+    def _o_que_a_moldura_le():
+        """O que a barra de cima e o rodapé leem em TODA página.
+
+        Num lugar só para a moldura não depender de cada rota lembrar de
+        mandar. A contagem do acervo é uma FUNÇÃO, e não um número: a página
+        da onda dentro de uma aba não desenha a barra, e não há por que ler o
+        acervo inteiro para ela. Valor passado pela rota vence este (é a regra
+        do Flask), então `versao=` explícito continua valendo.
+        """
+        return {
+            "versao": version.read(),
+            "contar_acervo": lambda: len(acervo.listar()),
+            "formatos_lidos": [NOME_DO_FORMATO.get(r.name, r.name)
+                               for r in registry.readers()],
+        }
 
     @app.template_filter("milhar")
     def _milhar(v) -> str:
@@ -192,6 +217,9 @@ def create_app() -> Flask:
                 relacoes = []
         return render_template(
             "onda.html", versao=version.read(), item=dados, relacoes=relacoes,
+            # Dentro de uma aba (`/abas` abre `?aba=<id>`) a barra de cima já
+            # está na janela de fora: repeti-la no quadro poria duas barras.
+            em_aba="aba" in request.args,
             # Quem compara é o servidor, não o Jinja: `AB` × `AB T` precisa de
             # normalização, e normalizar sigla dentro de template é o tipo de
             # regra que ninguém acha depois. Ver `analysis/falta.mesmo_tipo`.
