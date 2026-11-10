@@ -152,36 +152,6 @@ def gravar(base, linha: Linha) -> Path:
     return destino
 
 
-def _normal(texto: str) -> str:
-    return " ".join(str(texto or "").upper().split())
-
-
-def procurar(base, textos_a: list[str], textos_b: list[str]) -> list[Linha]:
-    """As linhas cujos dois terminais aparecem, um em cada registro.
-
-    `textos_a` e `textos_b` são o que cada registro diz de si: estação,
-    equipamento, apelido, nome do arquivo. Casa por TRECHO de texto, em
-    qualquer ordem dos terminais — quem é S na base não precisa ser o IED A.
-    Devolve todas as que casarem: mais de uma é dúvida, e a tela pergunta.
-    """
-    a = [_normal(t) for t in textos_a if t]
-    b = [_normal(t) for t in textos_b if t]
-
-    def aparece(terminal: str, textos: list[str]) -> bool:
-        alvo = _normal(terminal)
-        return bool(alvo) and any(alvo in t for t in textos)
-
-    # Pelas ENTRADAS (`entradas`), não pelos trechos: numa linha com
-    # derivação nenhum trecho vai de uma ponta à outra, e com os dois
-    # registros abertos a casagem respondia «nenhuma linha».
-    saida = []
-    for x in entradas(base):
-        s, r = x["terminal_s"], x["terminal_r"]
-        if (aparece(s, a) and aparece(r, b)) or (aparece(r, a) and aparece(s, b)):
-            saida.append(x)
-    return saida
-
-
 def _palavras(texto) -> str:
     """O texto em maiúsculas, sem acento, com tudo que não é letra ou dígito
     virando espaço, e com espaço nas pontas — para casar por PALAVRA INTEIRA:
@@ -191,20 +161,23 @@ def _palavras(texto) -> str:
     return " " + " ".join("".join(c if c.isalnum() else " " for c in t).split()) + " "
 
 
-def buscar(base, texto: str, textos_do_registro: list[str]) -> list[dict]:
+def buscar(base, texto: str) -> list[dict]:
     """A busca da janela «parâmetros» do localizador.
 
     Toda linha da base em que cada palavra digitada aparece (no nome ou num
     terminal, sem acento, como começo de palavra ou dentro dela — quem digita
-    «verd» quer «RIO VERDE»). As SUGERIDAS vêm primeiro: as que têm um
-    terminal escrito, como palavra inteira, no que o registro diz de si.
+    «verd» quer «RIO VERDE»), em ordem alfabética.
 
-    Palavra inteira, e não trecho: por trecho, o terminal «MI» casava com o
-    «TERMINAL» do nome do arquivo, e toda linha de nome curto virava sugerida
-    (achado na maquete de 09/11/2026).
+    O programa NÃO sugere linha nenhuma (decidido em 10/11/2026). Houve uma
+    estrela de «sugerida» para a linha com um terminal escrito no nome do
+    registro, e antes dela uma casagem automática que escolhia a linha
+    sozinha; as duas eram palpite tirado de um nome, e o km da falta sai da
+    linha escolhida. Quem escolhe é quem olha.
+
+    `sugerida` e `casou` continuam no pacote, sempre falsos e vazios, só
+    porque a tela atual ainda os lê; saem quando a janela for refeita.
     """
     digitadas = _palavras(texto).split()
-    registro = [_palavras(t) for t in textos_do_registro if t]
     saida = []
     for x in entradas(base):
         nomes = [x["terminal_s"], x["terminal_r"]] + ([x["tap"]] if x.get("tap") else [])
@@ -213,12 +186,10 @@ def buscar(base, texto: str, textos_do_registro: list[str]) -> list[dict]:
                                      for t in x["trechos"]]))
         if any(p not in alvo for p in digitadas):
             continue
-        casou = [t for t in nomes
-                 if _palavras(t).strip() and any(_palavras(t) in r for r in registro)]
-        saida.append({**x, "sugerida": bool(casou), "casou": casou})
+        saida.append({**x, "sugerida": False, "casou": []})
     # Ordem alfabética SEM acento: pelo código do caractere, «ÁGUA BOA» ia
     # para depois de «SIGMA».
-    saida.sort(key=lambda d: (not d["sugerida"], _palavras(d["nome"])))
+    saida.sort(key=lambda d: _palavras(d["nome"]))
     return saida
 
 

@@ -508,11 +508,6 @@ def create_app() -> Flask:
                 [c.name for c in term["registro"].status_channels])
             return impedancia_mod.como_dicionario(lidos.get("ajustes"))
 
-        def textos(term) -> list[str]:
-            r = term["registro"]
-            return [term["nome"], r.station, r.device_id,
-                    str(getattr(r.source, "name", "") or "")]
-
         fontes: dict = {}
         base = base_mod.ativa()
         tem_base = base is not None and base.existe and base_mod.usa("linhas")
@@ -553,19 +548,15 @@ def create_app() -> Flask:
 
         if escolhida and tem_base:
             fontes["base"] = fonte_da_entrada(pedida_base, True)
-        elif tem_base and len(terminais) > 1:
-            achadas = linhas_mod.procurar(base, textos(terminais[0]), textos(terminais[1]))
-            if len(achadas) == 1:
-                fontes["base"] = fonte_da_entrada(achadas[0], False)
-            else:
-                fontes["base"] = {"ok": False, "motivo": (
-                    "mais de uma linha da base casa com estes terminais"
-                    if achadas else "nenhuma linha da base casa com estes terminais"),
-                    "candidatas": [x["nome"] for x in achadas]}
         elif tem_base:
-            fontes["base"] = {"ok": False, "motivo": (
-                "com um terminal só, a base não casa a linha sozinha — escolha-a "
-                "em «parâmetros»")}
+            # A linha é SEMPRE escolhida pelo usuário (decidido em 10/11/2026).
+            # Havia uma casagem automática pelo nome da estação gravado nos
+            # registros: ela errava com acento («GUIMARÃES» × «GUIMARAES») e
+            # com nome dentro de nome («SINOP» em «SINOP CENTRO») — e, quando
+            # acertava o texto e errava a linha, o km saía da linha errada com
+            # cara de certo. Escolher custa um clique; o palpite não se confere.
+            fontes["base"] = {"ok": False,
+                              "motivo": "escolha a linha da base em «parâmetros»"}
         else:
             fontes["base"] = {"ok": False, "motivo": "sem base de dados ativa"}
         for term in terminais[:2]:
@@ -646,12 +637,9 @@ def create_app() -> Flask:
             registro = acervo.ler(sha)
         except FormatError as exc:
             return jsonify(erro=str(exc)), 404
-        item = acervo.obter(sha)
-        textos = [registro.station, registro.device_id, acervo.apelido(sha),
-                  item.nome if item else ""]
         return jsonify(base=True, nome_da_base=base.nome,
                        total=len(linhas_mod.entradas(base)), estacao=registro.station,
-                       linhas=linhas_mod.buscar(base, request.args.get("q") or "", textos),
+                       linhas=linhas_mod.buscar(base, request.args.get("q") or ""),
                        resumo_3t=tres_terminais_mod.resumo(base))
 
     @app.post("/api/base/linhas")

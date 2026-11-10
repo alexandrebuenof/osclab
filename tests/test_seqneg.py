@@ -91,16 +91,19 @@ class _Base:
         return destino
 
 
-def test_base_de_linhas_grava_le_e_casa_os_terminais(tmp_path):
+def test_base_de_linhas_grava_e_le(tmp_path):
     base = _Base(tmp_path)
     linhas.gravar(base, linhas.Linha("LT COXIPO - BDURO", "COXIPO", "BARRO DURO",
                                      0.67, 3.759, 9.29))
     lidas = linhas.listar(base)
     assert lidas[0].x1_ohm == pytest.approx(3.759)
-    # Em qualquer ordem dos terminais, por trecho do texto do registro.
-    achadas = linhas.procurar(base, ["UPC1 BARRO DURO SEL-451"], ["LT COXIPO I UPC1"])
-    assert [x["nome"] for x in achadas] == ["LT COXIPO - BDURO"]
-    assert linhas.procurar(base, ["SE ALFA"], ["SE BETA"]) == []
+
+
+def test_a_base_nao_adivinha_linha_pelo_nome_do_registro():
+    """Decidido em 10/11/2026: a linha é sempre escolhida pelo usuário. A
+    casagem pelo nome da estação errava com acento e com nome dentro de nome
+    («SINOP» em «SINOP CENTRO») — e o km sai da linha escolhida."""
+    assert not hasattr(linhas, "procurar")
 
 
 def test_no_411l_o_comprimento_e_o_llr_na_unidade_do_llunit():

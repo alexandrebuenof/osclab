@@ -237,22 +237,21 @@ def _lt(nome, s, r, km=60.0, z0=True):
                  0.3 * km if z0 else None, 1.2 * km if z0 else None)
 
 
-def test_a_busca_sugere_por_PALAVRA_INTEIRA_e_poe_as_sugeridas_primeiro(tmp_path, monkeypatch):
-    """Por trecho de texto, o terminal «MI» casava com o «TERMINAL» do nome do
-    arquivo e toda linha de nome curto virava sugerida (maquete, 09/11/2026)."""
+def test_a_busca_nao_sugere_nada_e_lista_em_ordem_alfabetica(tmp_path, monkeypatch):
+    """Decidido em 10/11/2026: nenhuma linha é sugerida pelo nome do registro.
+    A estrela era palpite tirado de um nome; quem escolhe é quem olha."""
     from osclab.basedados import linhas as linhas_mod
     base = _base_com(tmp_path, monkeypatch,
                      _lt("LT MI - NI", "MI", "NI"), _lt("LT SIGMA - OMEGA", "SIGMA", "OMEGA"),
                      _lt("LT ÁGUA BOA - SIGMA", "ÁGUA BOA", "SIGMA", z0=False))
-    achadas = linhas_mod.buscar(base, "", ["SE SIGMA", "MAQ_3_SIGMA_um_terminal"])
-    assert [x["nome"] for x in achadas] == ["LT ÁGUA BOA - SIGMA", "LT SIGMA - OMEGA",
-                                            "LT MI - NI"]
-    assert [x["sugerida"] for x in achadas] == [True, True, False]
-    assert achadas[0]["casou"] == ["SIGMA"]
+    achadas = linhas_mod.buscar(base, "")
+    assert [x["nome"] for x in achadas] == ["LT ÁGUA BOA - SIGMA", "LT MI - NI",
+                                            "LT SIGMA - OMEGA"]
+    assert not any(x["sugerida"] or x["casou"] for x in achadas)
     # Cada palavra digitada filtra, sem acento e como pedaço de palavra.
-    assert [x["nome"] for x in linhas_mod.buscar(base, "agua", [])] == ["LT ÁGUA BOA - SIGMA"]
-    assert [x["nome"] for x in linhas_mod.buscar(base, "sig ome", [])] == ["LT SIGMA - OMEGA"]
-    assert linhas_mod.buscar(base, "nada disso", []) == []
+    assert [x["nome"] for x in linhas_mod.buscar(base, "agua")] == ["LT ÁGUA BOA - SIGMA"]
+    assert [x["nome"] for x in linhas_mod.buscar(base, "sig ome")] == ["LT SIGMA - OMEGA"]
+    assert linhas_mod.buscar(base, "nada disso") == []
     assert achadas[0]["r0_ohm"] is None          # a tela avisa «sem Z0»
     assert linhas_mod.escolhida(base, "lt sigma - omega").comprimento_km == 60.0
     assert linhas_mod.escolhida(base, "LT INEXISTENTE") is None
@@ -276,8 +275,8 @@ def test_dois_trechos_de_mesmo_nome_se_distinguem_pelos_terminais(tmp_path, monk
 
 
 def test_a_linha_escolhida_pelo_nome_vale_com_um_terminal_so(tmp_path, monkeypatch, cliente):
-    """Com um registro só a base não casa a linha sozinha (precisa das duas
-    pontas): a escolha pelo nome é o caminho, e vence a dedução."""
+    """A linha da base é sempre ESCOLHIDA: sem escolha, a fonte «base» diz
+    para escolher em «parâmetros» — nunca casa sozinha pelo nome."""
     _base_com(tmp_path, monkeypatch, _lt("LT ALFA - BETA", "ALFA", "BETA", km=37.5))
     monkeypatch.setattr(paths, "LIBRARY_DIR", tmp_path / "acervo")
     caminho = escrever_cev(tmp_path / "origem", nome="UM_TERMINAL")

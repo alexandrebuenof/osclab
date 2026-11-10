@@ -90,9 +90,10 @@ def test_uma_entrada_por_linha_e_nenhum_trecho_some(base):
     assert ent["LD ALFA - BETA"]["tipo"] == "linha"
 
 
-def test_a_casagem_automatica_acha_o_circuito_pelas_pontas(base):
-    """Nenhum TRECHO vai de Várzea Grande a Poconé; o circuito vai."""
-    achadas = linhas.procurar(base, ["SE VARZEA GRANDE"], ["POCONE"])
+def test_a_busca_acha_o_circuito_pelas_pontas(base):
+    """Nenhum TRECHO vai de Várzea Grande a Poconé; o circuito vai — e é
+    UMA entrada na lista, não um trecho de cada vez."""
+    achadas = linhas.buscar(base, "pocone")
     assert [x["nome"] for x in achadas] == ["LD VG - POCONE"]
 
 

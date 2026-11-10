@@ -29,8 +29,10 @@ Pendente com o Alexandre:
    não tem km nem Z na base (FL.12: direto, sem TAP). A cópia `linhas-3t.antes-de-
    arrumar-…csv` é de meio caminho; a original se refaz com o script da montagem.
 2. Os trechos que o caderno não resolve pedem o relatório de barras do `.olr`.
-3. A casagem automática com dois registros (`linhas.procurar`) ainda casa terminal por
-   TRECHO de texto, não por palavra inteira — perguntado, sem resposta.
+3. ~~Casagem automática com dois registros~~ — **retirada em 10/11/2026**, decisão dele:
+   o programa não adivinha linha. A linha da base é sempre escolhida em «parâmetros»;
+   a estrela de «sugerida» também saiu (`sugerida`/`casou` seguem no pacote, sempre
+   falsos, até a janela ser refeita).
 4. A janela «parâmetros» vai ser refeita na repaginação da identidade visual (pedido dele).
 5. Versão: nada subiu; `0.8.0` quando ele aprovar a rodada.
 6. Push: commits de 09/11 ainda não enviados.
