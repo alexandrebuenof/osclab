@@ -31,6 +31,14 @@ Pendente com o Alexandre:
    não tem km nem Z na base (FL.12: direto, sem TAP). A cópia `linhas-3t.antes-de-
    arrumar-…csv` é de meio caminho; a original se refaz com o script da montagem.
 2. Os trechos que o caderno não resolve pedem o relatório de barras do `.olr`.
+   **Decisão de 10/11/2026: a base fica só com as linhas de qualidade BOA (115).** As outras
+   60 (16 casadas pelo comprimento, 4 com km discordante, 3 derivações a conferir, 2 de
+   fonte mista fora do padrão, 2 sem comprimento, 33 sem impedância) foram para
+   `linhas/a-conferir/`, inteiras e com o motivo, e voltam numa etapa de conferência com o
+   OnLiner aberto. Relatório da montagem, com uma linha de exemplo:
+   `relatorio-da-montagem/como-a-base-foi-montada.html` (gerado por
+   `docs-privados/montagem-base-linhas/relatorio_base.py`). Atenção: o `montar.py`
+   reescreve o `linhas.csv` e traria as separadas de volta.
 3. ~~Casagem automática com dois registros~~ — **retirada em 10/11/2026**, decisão dele:
    o programa não adivinha linha. A linha da base é sempre escolhida em «parâmetros»;
    a estrela de «sugerida» também saiu (`sugerida`/`casou` seguem no pacote, sempre
