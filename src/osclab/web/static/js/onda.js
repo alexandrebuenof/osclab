@@ -57,6 +57,28 @@
 
   const ALTURA = 190;        // altura útil de cada gráfico, em pixels de CSS
 
+  //: A altura ESTICÁVEL do gráfico analógico (10/11/2026). Vai de metade a
+  //: três vezes a padrão: abaixo de 95 px a grade e os rótulos do eixo se
+  //: atropelam, e acima de 570 px um gráfico só já não cabe na tela de um
+  //: notebook junto com o cabeçalho.
+  const ALTURA_MIN = Math.round(ALTURA / 2);
+  const ALTURA_MAX = ALTURA * 3;
+
+  /** A altura útil do desenho de um painel, em pixels de CSS.
+   *
+   * É da TELA, como o nome e a ordem: mora no painel da lista `paineis`
+   * (`altura`), entra no Ctrl+Z junto com o resto do arranjo e NÃO vai ao
+   * servidor — não muda número nenhum, só quantos pixels a mesma escala ocupa.
+   * Sem altura escolhida, a padrão. Quem desenha (`pintar`) e quem mede o
+   * gesto (`noDesenho`, `sinalPerto`) chamam a MESMA função: duas contas da
+   * mesma altura é como a roda deixa de responder no pedaço esticado.
+   */
+  function alturaDoPainel(id) {
+    const meu = id === undefined || id === null ? null : painelPorId(id);
+    const h = meu && Number(meu.altura);
+    return h > 0 ? Math.min(ALTURA_MAX, Math.max(ALTURA_MIN, h)) : ALTURA;
+  }
+
   //: A versão do formato do pacote que esta tela sabe ler. O servidor manda a
   //: dele em `contrato`; quando não batem, a tela avisa em vez de desenhar
   //: errado. Existe porque os `.py` só são lidos quando o programa SOBE e o
@@ -437,7 +459,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       ? "Até três oscilografias por aba: tire uma para pôr outra."
       : "Pôr outro registro do acervo nesta aba, para comparar no mesmo tempo.";
     mais.addEventListener("click", abrirEscolhaDeRegistro);
-    barra.append(mais, ancora);
+    barra.append(mais, ancora, botaoNovoGrafico());
 
     if (ieds.length > 1) {
       barra.append(criar("span", "rotulo-dos-ieds", "alinhar por"));
@@ -1255,7 +1277,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     for (const b of blocos) {
       if (b._painel) ligarArrastoDoPainel(b, b._painel);
     }
-    area.replaceChildren(...emLinhas(blocos), rodapeDosPaineis());
+    area.replaceChildren(...emLinhas(blocos));
 
     //: Do que o rodapé dizia, sobra o que é AVISO: um sinal que ficou no lado
     //: errado porque o arquivo não declara a relação de TC/TP. A contagem de
@@ -1325,13 +1347,6 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     return caixa;
   }
 
-  /** Os botões que criam um painel novo, no fim da lista.
-   *
-   * No fim, e não no topo: a tela se lê de cima para baixo como a sequência do
-   * evento, e um botão no meio disso seria um degrau. Dois botões em vez de um
-   * menu porque são só dois tipos — abrir menu para escolher entre duas coisas
-   * é um clique a mais para não ganhar nada.
-   */
   //: Os tipos de gráfico que se pode acrescentar, e o que cada um é.
   const TIPOS_DE_PAINEL = [
     ["analogico", "gráfico analógico",
@@ -1372,7 +1387,8 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     ["localizador", "localizador de faltas",
      "A distância da falta calculada por cada método, ao longo do registro, no "
      + "mesmo tempo das ondas, com o número do próprio relé tracejado. Os métodos "
-     + "e a linha são os da tela «localizar falta»."],
+     + "e a linha são os da tela «localizar falta», que se abre pelo botão "
+     + "«abrir tela de localização» no cabeçalho dele."],
     ["alfa", "plano alfa",
      "A razão k = I remoto / I local entre dois terminais, fase por fase, "
      + "com a coroa de restrição do 87L da SEL. Falta externa fica perto de "
@@ -1380,18 +1396,71 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
      + "corrente no registro."],
   ];
 
-  /** O botão que acrescenta um gráfico, no fim da lista.
+  //: O desenho de cada tipo no menu: traço fino numa grade de 24, sem
+  //: preenchimento — a família dos ícones do início. Cada um é a figura que o
+  //: gráfico de fato desenha, e não um símbolo genérico: quem já viu o
+  //: diagrama reconhece o ícone. Partes separadas por `|`; `c:x,y,r` é ponto
+  //: cheio e `c0:x,y,r` é círculo vazado. Vieram da maquete f10 (10/11/2026).
+  const TRACOS_DOS_TIPOS = {
+    // senoide sobre o eixo
+    analogico: "M2 12h20|M2 12c1.67-8 3.33-8 5 0s3.33 8 5 0 3.33-8 5 0 3.33 8 5 0",
+    // degraus: 0 embaixo, 1 em cima
+    digital: "M2 17h4V7h5v10h3V7h4v10h4",
+    // três setas saindo da origem, a 120°
+    fasorial: "M12 12V3|M10.5 5.6 12 3l1.5 2.6|M12 12l7.8 4.5|M16.8 16.5h3l-1.5-2.6|M12 12l-7.8 4.5|M5.7 13.9l-1.5 2.6h3|c:12,12,1",
+    // as três tensões do neutro e o triângulo das tensões de linha
+    triangulo: "M12 4 19.8 17.5H4.2Z|M12 13V4|M12 13l7.8 4.5|M12 13l-7.8 4.5|c:12,13,1",
+    // barras por ordem sobre a base
+    harmonicos: "M2 20.5h20|M4 20V4h3v16|M9.5 20v-5h3v5|M15 20v-8h3v8|M20.5 20v-3",
+    // eixos e a curva em dB com os picos das ordens
+    espectro: "M3 3v17.5h18|M3 18.5h1.5l1.5-14 1.5 13h2l1.2-7 1.2 7h2l1-4 1 4H21",
+    // Re × Im e o caminho do fasor até o ponto do cursor
+    complexo: "M12 3v18|M3 12h18|M12 12c2.5 0 3.2 3 1 4.2s-5.6.3-6-3.4S9.5 6 13.5 6.2s6.4 3 5.8 6.8|M17.6 11.2l1.7 1.8 1.4-2.1",
+    // R × X, a característica mho pela origem e a reta da linha
+    impedancia: "M6 21V3|M3 17h18|c0:11,11,7.8|M6 17l9-10.7",
+    // Iop × Irt e a característica de dois slopes
+    diferencial: "M4 3v17h17|M4 16.5h4l5-4 8-8.5|c:11,7,1.1",
+    // a linha entre dois terminais, a falta e a distância medida
+    localizador: "M3 16.5h18|M3 13.5v6|M21 13.5v6|M14.5 4l-2 4.5h3l-2 4.5|M3 21.5h11.5",
+    // o plano k: eixos e a coroa de restrição em volta de 1∠180°, com o
+    // ponto da falta externa dentro dela
+    alfa: "M12 3v18|M3 12h18|M6.34 6.34A8 8 0 0 0 6.34 17.66L9.53 14.47A3.5 3.5 0 0 1 9.53 9.53Z|c:6.8,12,1.2",
+  };
+
+  /** O ícone de traço de um tipo de gráfico, como `<svg>`. */
+  function iconeDoTipo(tipo) {
+    const sv = document.createElementNS(SVG_DO_ICONE, "svg");
+    sv.setAttribute("viewBox", "0 0 24 24");
+    sv.setAttribute("class", "icone-do-tipo");
+    sv.setAttribute("aria-hidden", "true");
+    for (const parte of (TRACOS_DOS_TIPOS[tipo] || "").split("|")) {
+      if (!parte) continue;
+      if (parte.startsWith("c")) {
+        const [cx, cy, r] = parte.slice(parte.indexOf(":") + 1).split(",");
+        const roda = document.createElementNS(SVG_DO_ICONE, "circle");
+        roda.setAttribute("cx", cx);
+        roda.setAttribute("cy", cy);
+        roda.setAttribute("r", r);
+        if (parte.startsWith("c:")) roda.setAttribute("class", "cheio");
+        sv.append(roda);
+      } else {
+        const traco = document.createElementNS(SVG_DO_ICONE, "path");
+        traco.setAttribute("d", parte);
+        sv.append(traco);
+      }
+    }
+    return sv;
+  }
+
+  /** O «+ adicionar gráfico» e a âncora do menu dele.
    *
-   * No fim, e não no topo: a tela se lê de cima para baixo como a sequência
-   * do evento, e um botão no meio disso seria um degrau.
-   *
-   * UM botão com menu, e não um por tipo: eram três botões lado a lado para
-   * uma decisão que se toma uma vez, e cada tipo novo alargava a fileira. O
-   * menu também cabe a explicação de cada um, que num botão não cabia.
+   * Mora no PÉ DO BLOCO DO REGISTRO, ao lado do «+ adicionar oscilografia»
+   * (identidade f10, 10/11/2026): os dois põem coisa nova na tela, e com o
+   * botão no fim da lista era preciso rolar a página inteira para achá-lo. O
+   * gráfico novo continua entrando no FIM da lista.
    */
-  function rodapeDosPaineis() {
-    const barra = criar("div", "novo-painel");
-    const botao = criar("button", "medida");
+  function botaoNovoGrafico() {
+    const botao = criar("button", "chave novo-grafico");
     botao.type = "button";
     botao.setAttribute("aria-haspopup", "true");
     botao.setAttribute("aria-expanded", "false");
@@ -1414,8 +1483,11 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
           // desabilitada é justamente o que ensina os dois de uma vez.
           const soNoAvancado = (tipo === "harmonicos" || tipo === "espectro")
                             && visaoDeAnalise !== "avancado";
-          const item = criar("button", "opcao",
-                             soNoAvancado ? `${rotulo} (só no avançado)` : rotulo);
+          const item = criar("button", "opcao opcao-de-tipo");
+          const caixaDoIcone = criar("span", "caixa-do-icone");
+          caixaDoIcone.append(iconeDoTipo(tipo));
+          item.append(caixaDoIcone, criar("span", "rotulo-do-tipo",
+                      soNoAvancado ? `${rotulo} (só no avançado)` : rotulo));
           item.type = "button";
           item.title = soNoAvancado
             ? explicacao + " Troque para «avançado» no cabeçalho: no modo "
@@ -1435,8 +1507,11 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         }
       });
     });
-    barra.append(botao, ancora);
-    return barra;
+    // Os dois num grupo POSICIONADO: o menu pende dele e nasce alinhado à
+    // esquerda do botão (a âncora sozinha o abriria à direita, sobre o vão).
+    const grupo = criar("span", "grupo-do-novo");
+    grupo.append(botao, ancora);
+    return grupo;
   }
 
   /** Cria um painel vazio, com nome genérico.
@@ -2507,6 +2582,56 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
    * mesmos cursores, e um cursor numerado num bloco e anônimo no outro faria
    * duvidar se são os mesmos.
    */
+  /** O PAPEL MILIMETRADO dentro da moldura de um gráfico (identidade f10).
+   *
+   * Só dentro da moldura retangular — ondas, tiras digitais, localizador —, e
+   * nunca na página: grade de página atrás de grade de gráfico ficou ruim na
+   * maquete. Fino a cada 10 px, médio a cada 50, forte a cada 100, contados
+   * do canto de cima à esquerda da MOLDURA (não da página): é o papel do
+   * registrador, e ele começa onde o desenho começa.
+   *
+   * Pintado ATRÁS de tudo e nos tokens `--milimetrado-*`, claros o bastante
+   * para não brigar com a grade de valores nem com as curvas. As linhas caem
+   * em pixel inteiro DE TELA (`devicePixelRatio`), com um pixel de espessura:
+   * meio pixel vira borrão cinza em zoom que não seja 100 %.
+   *
+   * Não é medida: o espaçamento não tem valor de eixo. A grade que tem valor
+   * continua sendo a de `painel.marcacoes` e `dados.marcacoes_tempo`.
+   */
+  function pintarMilimetrado(ctx, x0, y0, x1, y1) {
+    if (x1 - x0 < 2 || y1 - y0 < 2) return;
+    const dpr = window.devicePixelRatio || 1;
+    ctx.save();
+    ctx.fillStyle = token("--fundo");
+    ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+    ctx.beginPath();
+    ctx.rect(x0, y0, x1 - x0, y1 - y0);
+    ctx.clip();
+    ctx.lineWidth = 1 / dpr;
+    // A linha de UM pixel de tela mais perto de `v` (em pixels de CSS).
+    const px = (v) => (Math.floor(v * dpr) + 0.5) / dpr;
+    for (const [passo, nome] of [[10, "--milimetrado-fino"], [50, "--milimetrado-medio"],
+                                 [100, "--milimetrado-forte"]]) {
+      ctx.strokeStyle = token(nome);
+      ctx.beginPath();
+      for (let k = passo; x0 + k < x1; k += passo) {
+        // a mais fina não repete onde a mais forte vai passar
+        if (passo < 100 && k % (passo === 10 ? 50 : 100) === 0) continue;
+        const x = px(x0 + k);
+        ctx.moveTo(x, y0);
+        ctx.lineTo(x, y1);
+      }
+      for (let k = passo; y0 + k < y1; k += passo) {
+        if (passo < 100 && k % (passo === 10 ? 50 : 100) === 0) continue;
+        const y = px(y0 + k);
+        ctx.moveTo(x0, y);
+        ctx.lineTo(x1, y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function pintarEtiquetas(ctx, emX, x0, x1, y0) {
     cursores.forEach((t, k) => {
       if (t === null) return;
@@ -2582,6 +2707,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const y0 = MARGEM.topo;
     const y1 = y0 + Math.max(linhas.length, 1) * TIRA;
     if (x1 <= x0) return;
+    pintarMilimetrado(ctx, x0, y0, x1, y1);
 
     const tMin = dados.de;
     const tMax = dados.ate;
@@ -5703,7 +5829,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const x0 = MARGEM.esq;
     const x1 = cssLargura - MARGEM.dir;
     const y0 = MARGEM.topo;
-    const y1 = ALTURA - 4;
+    const y1 = alturaDoPainel(painel.id) - 4;
     if (x1 <= x0 || !dados.tempo.length) return null;
 
     const t = dados.de + (x - x0 - arrastoPx)
@@ -6186,7 +6312,96 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     el._canvas = canvas;
     el._painel = painel;
     el._ultimo = ultimo;
+    el.append(alcaDeAltura(el, painel));
     return el;
+  }
+
+  /** A ALÇA de esticar um gráfico na vertical (identidade f10, 10/11/2026).
+   *
+   * Uma faixa fina na borda de baixo do bloco, com três tracinhos no meio e o
+   * cursor de redimensionar. Arrastar muda a altura do DESENHO entre
+   * `ALTURA_MIN` e `ALTURA_MAX`; clique duplo volta à padrão.
+   *
+   * Enquanto a mão segura, o canvas é só ESTICADO como imagem — a prévia.
+   * Redesenhar a cada movimento repintaria as ondas a cada pixel (o fundo
+   * guardado é por tamanho de canvas), e é exatamente o custo que o fundo
+   * existe para evitar. Ao soltar, a altura vai para o painel e o desenho sai
+   * de novo na altura nova, nítido.
+   *
+   * A altura é da TELA (`alturaDoPainel`): entra no Ctrl+Z como o nome e a
+   * ordem, e não vai ao servidor. O gesto é ouvido no DOCUMENTO e o bloco é
+   * achado pelo id a cada passo, porque uma resposta atrasada do servidor
+   * pode refazer os blocos no meio do arrasto.
+   *
+   * O DIGITAL não estica: a altura dele é a soma das tiras (`TIRA` cada uma),
+   * e esticar a moldura sem mudar a tira só abriria um vazio embaixo.
+   */
+  function alcaDeAltura(secao, painel) {
+    secao.classList.add("esticavel");
+    const alca = criar("div", "alca-de-altura");
+    alca.setAttribute("role", "separator");
+    alca.setAttribute("aria-orientation", "horizontal");
+    alca.title = "Arraste para esticar ou encolher o gráfico. "
+               + "Clique duplo volta à altura padrão.";
+    alca.append(criar("span", "tracos-da-alca"));
+    const id = painel.id;
+    const blocoAtual = () => blocos.find((b) => b._painel && b._painel.id === id);
+    alca.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      // O painel inteiro escuta `pointerdown` (escolher e reordenar) e a área
+      // dos gráficos também (arrasto da onda): a alça não é nenhum dos dois.
+      e.stopPropagation();
+      e.preventDefault();
+      const inicio = alturaDoPainel(id);
+      // O que o canvas tem ALÉM da moldura (a folga de baixo e o rodapé do
+      // tempo), medido uma vez: a prévia soma isso à altura pedida.
+      const resto = Math.max(0, (parseFloat(secao._canvas?.style.height) || inicio) - inicio);
+      const y0 = e.clientY;
+      let h = inicio;
+      document.body.classList.add("esticando-grafico");
+      alca.classList.add("puxando");
+      const mover = (ev) => {
+        h = Math.round(Math.min(ALTURA_MAX, Math.max(ALTURA_MIN, inicio + ev.clientY - y0)));
+        const b = blocoAtual();
+        if (!b || !b._canvas) return;
+        b.querySelector(":scope > .alca-de-altura")?.classList.add("puxando");
+        // A prévia: a imagem esticada, o mesmo canvas.
+        b._canvas.style.height = `${h + resto}px`;
+      };
+      const soltar = () => {
+        document.removeEventListener("pointermove", mover, true);
+        document.removeEventListener("pointerup", soltar, true);
+        document.removeEventListener("pointercancel", soltar, true);
+        document.body.classList.remove("esticando-grafico");
+        blocoAtual()?.querySelector(":scope > .alca-de-altura")?.classList.remove("puxando");
+        alca.classList.remove("puxando");
+        if (h === inicio) { repintar(); return; }   // desfaz a prévia
+        mudarAltura(id, h);
+      };
+      document.addEventListener("pointermove", mover, true);
+      document.addEventListener("pointerup", soltar, true);
+      document.addEventListener("pointercancel", soltar, true);
+    });
+    alca.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      mudarAltura(id, null);
+    });
+    return alca;
+  }
+
+  /** Grava a altura de um painel (ou volta à padrão, com `null`) e repinta.
+   *
+   * Só repinta: a altura não muda número nenhum, então não há o que pedir
+   * ao servidor — mesma regra do nome. */
+  function mudarAltura(id, h) {
+    const meu = painelPorId(id);
+    if (!meu) return;
+    const antes = meu.altura || null;
+    const depois = h && h !== ALTURA ? h : null;
+    if (antes === depois) { repintar(); return; }
+    guardarParaDesfazer();
+    if (depois) meu.altura = depois; else delete meu.altura;
+    repintar();
   }
 
   /** O traço de um sinal, reto ou suavizado conforme o registro.
@@ -12682,7 +12897,18 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     parametros.title = "Os parâmetros da linha (comprimento, Z1, Z0, B1): escolher na "
                      + "base de dados ou digitar.";
     parametros.addEventListener("click", abrirParametrosLoc);
-    el.append(cabecalhoDoPainel(painel, [chave, parametros, linhaEmUsoLoc()]));
+    // O ACESSO À TELA DE LOCALIZAÇÃO mora aqui desde 10/11/2026: o botão
+    // «localizar falta» saiu da barra (que saiu inteira). A tela e este
+    // painel falam da mesma conta — a mesma linha, os mesmos métodos —, e é
+    // olhando as curvas daqui que se quer conferir o platô lá. Sem painel
+    // localizador na tela, o «+ adicionar gráfico» cria um.
+    const abreTela = criar("button", "medida abre-localizacao");
+    abreTela.type = "button";
+    abreTela.title = "Abre a tela «localizar falta»: alinhar os terminais, conferir "
+                   + "o platô e ler o resultado. Lá, «voltar às ondas» traz de volta.";
+    abreTela.append(iconeDoTipo("localizador"), criar("span", null, "abrir tela de localização"));
+    abreTela.addEventListener("click", () => abrirLocalizacao(true));
+    el.append(cabecalhoDoPainel(painel, [abreTela, chave, parametros, linhaEmUsoLoc()]));
 
     const legenda = criar("ul", "legenda");
     if (pacoteLoc) {
@@ -12761,6 +12987,9 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     el._painel = painel;
     el._ultimo = ultimo;
     el._ladoLoc = lado;
+    // Estica como o analógico: é o mesmo eixo de tempo, e com seis métodos
+    // sobrepostos a altura padrão aperta as curvas.
+    el.append(alcaDeAltura(el, painel));
     return el;
   }
 
@@ -12768,7 +12997,8 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const painel = b._painel, canvas = b._canvas, ultimo = b._ultimo;
     const meu = painelLocDe(painel.id);
     const cssLargura = canvas.parentElement.clientWidth;
-    const cssAltura = ALTURA + (ultimo ? MARGEM.baixo : 8);
+    const alto = alturaDoPainel(painel.id);
+    const cssAltura = alto + (ultimo ? MARGEM.baixo : 8);
     const dpr = window.devicePixelRatio || 1;
     canvas.style.width = `${cssLargura}px`;
     canvas.style.height = `${cssAltura}px`;
@@ -12776,8 +13006,9 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const ctx = canvas.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cssLargura, cssAltura);
-    const x0 = MARGEM.esq, x1 = cssLargura - MARGEM.dir, y0 = MARGEM.topo, y1 = ALTURA - 4;
+    const x0 = MARGEM.esq, x1 = cssLargura - MARGEM.dir, y0 = MARGEM.topo, y1 = alto - 4;
     if (x1 <= x0) return;
+    pintarMilimetrado(ctx, x0, y0, x1, y1);
     const emX = (t) => x0 + ((t - dados.de) / (dados.ate - dados.de || 1)) * (x1 - x0) + arrastoPx;
     const corLinha = token("--linha"), corSuave = token("--suave");
     const corTinta = token("--tinta"), corDestaque = token("--destaque");
@@ -15667,7 +15898,8 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
 
   function pintar(canvas, painel, ultimo) {
     const cssLargura = canvas.parentElement.clientWidth;
-    const cssAltura = ALTURA + (ultimo ? MARGEM.baixo : 8);
+    const alto = alturaDoPainel(painel.id);
+    const cssAltura = alto + (ultimo ? MARGEM.baixo : 8);
     const dpr = window.devicePixelRatio || 1;
 
     canvas.style.width = `${cssLargura}px`;
@@ -15681,7 +15913,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const x0 = MARGEM.esq;
     const x1 = cssLargura - MARGEM.dir;
     const y0 = MARGEM.topo;
-    const y1 = ALTURA - 4;
+    const y1 = alto - 4;
 
     if (x1 <= x0) return;
 
@@ -15703,6 +15935,11 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     // As PISTAS: uma por sinal no empilhado, uma só no agrupado.
     const pistas = pistasDoPainel(painel, y0, y1);
     const empilhado = pistas.length > 1;
+    // O papel vai no canvas da TELA, antes do fundo guardado e fora dele: o
+    // fundo é colado deslocado durante o arrasto, e o papel não pode andar
+    // junto — ele é a moldura, não o sinal. Um por pista: cada pista tem a
+    // sua moldura.
+    for (const pista of pistas) pintarMilimetrado(ctx, x0, pista.y0, x1, pista.y1);
     //: Onde um valor cai DENTRO de uma pista. Mesma escala em todas — ver
     //: `pistasDoPainel`.
     const naPista = (pista) => (v) =>
@@ -17084,7 +17321,9 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const bloco = blocos.find((b) => b._canvas === a.canvas);
     const embaixo = bloco && bloco._painel && bloco._painel.tipo === "digital"
       ? MARGEM.topo + Math.max(bloco._painel.tiras.length, 1) * TIRA
-      : ALTURA - 4;
+      // A MESMA altura que o desenho usou: esticado, o gráfico tem de
+      // responder à roda e ao arrasto no pedaço novo também.
+      : alturaDoPainel(bloco && bloco._painel ? bloco._painel.id : null) - 4;
     return a.y >= MARGEM.topo && a.y <= embaixo;
   }
 
@@ -17545,7 +17784,9 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
 
   // --- localizar falta: a TELA própria ------------------------------------------
   //
-  // O botão «localizar falta» troca as ondas por este painel — painel 1 da
+  // O botão «abrir tela de localização», no painel «localizador de faltas»
+  // (era o «localizar falta» da barra até 10/11/2026), troca as ondas por
+  // esta tela — painel 1 da
   // maquete, escolha dele em 23/10/2026 entre gaveta larga, tela própria e
   // gráfico na lista. Duas abas: o painel principal, em três passos (alinhar
   // A × B, conferir o platô, resultado), e as simulações, que chegam na etapa 2
@@ -18010,14 +18251,11 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
 
   function abrirLocalizacao(abrir) {
     estadoLoc.aberta = abrir;
-    document.getElementById("localizar")?.classList.toggle("escolhido", abrir);
     mostrarLocalizacao();
     if (abrir) { window.scrollTo(0, 0); pedirLocalizacao(); }
     // De volta às ondas: elas não se redesenharam enquanto estavam atrás.
     else carregar();
   }
-  document.getElementById("localizar")?.addEventListener("click",
-    () => abrirLocalizacao(!estadoLoc.aberta));
 
   carregar();
 })();

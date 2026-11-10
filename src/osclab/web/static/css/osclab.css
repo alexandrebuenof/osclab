@@ -189,6 +189,15 @@
   --papel: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cpath d='M10 0V100M20 0V100M30 0V100M40 0V100M60 0V100M70 0V100M80 0V100M90 0V100M0 10H100M0 20H100M0 30H100M0 40H100M0 60H100M0 70H100M0 80H100M0 90H100' stroke='%23e6edf6' stroke-width='.9'/%3E%3Cpath d='M50 0V100M0 50H100' stroke='%23d3dfed' stroke-width='1'/%3E%3Cpath d='M.6 0V100M0 .6H100' stroke='%23bfd0e4' stroke-width='1.1'/%3E%3C/svg%3E");
   --papel-passo: 100px;
   --pagina-lisa: #f2f5f9;
+  /* O milimetrado DENTRO da moldura dos gráficos (`pintarMilimetrado`, no
+     `onda.js`): sobre o --fundo do gráfico, mais claro que a grade de
+     valores (--linha) — ele é o papel, e a grade é a medida. */
+  --milimetrado-fino: #e6edf5;
+  --milimetrado-medio: #d6e0ec;
+  --milimetrado-forte: #c4d3e5;
+  /* A coluna da oscilografia: abas, bloco do registro e gráficos começam na
+     mesma margem. */
+  --coluna-da-onda: min(1360px, calc(100% - 40px));
 
   /* A altura de TODO controle do cabeçalho. Um número só, num lugar só: as
      chaves, o par secundário|primário e o ímã tinham cada um a sua conta de
@@ -312,6 +321,9 @@
   --papel-cor: #0b1626;
   --papel: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cpath d='M10 0V100M20 0V100M30 0V100M40 0V100M60 0V100M70 0V100M80 0V100M90 0V100M0 10H100M0 20H100M0 30H100M0 40H100M0 60H100M0 70H100M0 80H100M0 90H100' stroke='%23122139' stroke-width='.9'/%3E%3Cpath d='M50 0V100M0 50H100' stroke='%2316263f' stroke-width='1'/%3E%3Cpath d='M.6 0V100M0 .6H100' stroke='%231c304d' stroke-width='1.1'/%3E%3C/svg%3E");
   --pagina-lisa: #0d192b;
+  --milimetrado-fino: #111e30;
+  --milimetrado-medio: #17283e;
+  --milimetrado-forte: #203550;
 
   color-scheme: dark;
 }
@@ -391,20 +403,8 @@ body {
 .topo.registro .titulo-do-registro { min-width: 0; }
 .topo.registro .marca > .chave.tema { flex: none; }
 
-/* A BARRA DO APLICATIVO, acima do cabeçalho: as voltas à esquerda, o que sai
-   do registro e a base à direita. Fina e com fundo de superfície, para se ler
-   como moldura do programa, e não como parte do registro. */
-.barra-do-app {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 20px;
-  background: var(--superficie);
-  border-bottom: 1px solid var(--linha);
-  overflow-x: auto;
-}
-.barra-do-app > * { flex: none; }
-.barra-do-app .espaco-da-barra { flex: 1; }
+/* (A BARRA DO APLICATIVO saiu em 10/11/2026: ver «A OSCILOGRAFIA —
+   identidade f10», no fim desta folha.) */
 
 /* O título À ESQUERDA e as duas fileiras À DIREITA. Numa janela estreita as
    fileiras descem para baixo do título — e quem decide isso é a LARGURA DA
@@ -5467,7 +5467,7 @@ table.verbetes tr.pendente td:first-child { box-shadow: inset 3px 0 0 var(--dest
 /* Registro sem `.hdr`: não há lógica nem ajuste para mostrar. Dito na hora do
    envio, ainda dá para arrastar o arquivo que falta — no painel vazio lá
    dentro, já não. */
-.sem-logica {
+p.sem-logica {
   margin: 6px 0 0;
   font-family: var(--mono);
   font-size: 10.5px;
@@ -6424,3 +6424,347 @@ footer.rodape-da-casa a:hover { color: var(--barra-tinta); text-decoration: unde
 @media (max-width: 520px) {
   .rodape-colunas { grid-template-columns: 1fr; }
 }
+
+/* =========================================================================
+   A OSCILOGRAFIA — identidade f10 (10/11/2026)
+
+   Página LISA, e UMA coluna para tudo (`--coluna-da-onda`): as abas, o bloco
+   do registro (cabeçalho + tira + o pé com os dois «+ adicionar») e os
+   gráficos começam na mesma margem. Blocos de canto vivo, filete fino e o
+   marinho no topo; o milimetrado só dentro da moldura de cada gráfico, e quem
+   o pinta é o canvas (`pintarMilimetrado`) — fundo de CSS não acompanharia a
+   moldura, que muda com o nome digital mais largo e o segundo eixo.
+
+   Tudo aqui é preso a `body[data-sha]`, `.corpo-das-abas` ou a classes que
+   só existem na onda: a `.chave` do portal é de outra folha.
+   ========================================================================= */
+
+/* --- as abas ------------------------------------------------------------- */
+.corpo-das-abas .barra-de-abas {
+  gap: 4px;
+  /* começa onde começa o bloco do registro, dentro do quadro: quem mede é o
+     `abas.js` (`alinharAbas`); a conta abaixo é o chute até a medida. */
+  padding: 8px 20px 0 var(--esquerda-das-abas, max(20px, calc((100% - 1360px) / 2)));
+  background: var(--ceu);
+  border-bottom: 1px solid var(--ceu-borda);
+}
+.corpo-das-abas .aba-de-oscilografia {
+  height: 32px;
+  padding: 0 8px 0 14px;
+  border: 1px solid var(--ceu-borda);
+  border-bottom: 0;
+  border-radius: 2px 2px 0 0;
+  background: var(--superficie);
+  color: var(--suave);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+}
+.corpo-das-abas .aba-de-oscilografia:hover { color: var(--titulo); }
+/* A ativa tem a cor da PÁGINA de baixo e desce um pixel sobre o filete: é a
+   aba que se abre para a página, como a de um fichário. */
+.corpo-das-abas .aba-de-oscilografia.ativa {
+  position: relative;
+  top: 1px;
+  background: var(--pagina-lisa);
+  border-color: var(--borda);
+  color: var(--titulo);
+  box-shadow: inset 0 2px 0 var(--marinho);
+  font-weight: 600;
+}
+/* «+ nova aba»: uma aba a mais, sem fundo — mesma altura, mesma borda, o
+   mesmo «+» em texto dos outros botões de acrescentar. */
+.corpo-das-abas .barra-de-abas .aba-nova {
+  margin: 0;
+  padding: 0 14px;
+  background: transparent;
+  border-style: solid;
+  color: var(--titulo);
+  font-weight: 600;
+}
+.corpo-das-abas .barra-de-abas .aba-nova:hover {
+  background: var(--superficie);
+  border-color: var(--borda);
+  color: var(--titulo);
+}
+.corpo-das-abas .quadro-da-aba { background: var(--pagina-lisa); }
+
+/* --- o bloco do registro ------------------------------------------------- */
+body[data-sha] .topo.registro,
+body[data-sha] .tira,
+body[data-sha] .tira-dos-ieds {
+  width: var(--coluna-da-onda);
+  max-width: none;
+  margin-inline: auto;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+}
+body[data-sha] .topo.registro {
+  margin-top: 16px;
+  padding: 14px 20px 12px;
+  border-top: 2px solid var(--marinho);
+}
+body[data-sha] .topo.registro h1 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--titulo);
+}
+body[data-sha] .topo.registro .sub { color: var(--suave); }
+body[data-sha] .tira {
+  padding: 10px 20px;
+  border-top: 0;
+  background: var(--faixa-da-tabela);
+}
+body[data-sha] .tira .rot,
+body[data-sha] .tira .fi-js::before {
+  font-family: var(--sans);
+  font-weight: 600;
+  color: var(--suave);
+}
+/* O pé do bloco: «+ adicionar oscilografia», «+ adicionar gráfico» e, com
+   mais de um IED, o alinhamento e uma linha por IED. */
+body[data-sha] .tira-dos-ieds {
+  padding: 10px 20px;
+  border-top: 0;
+}
+body[data-sha] .tira-dos-ieds[hidden] { display: none; }
+.barra-dos-ieds { gap: 8px; }
+
+/* As chaves do registro na letra da casa: sans, canto vivo, tinta marinho. */
+.topo.registro .chave,
+.tira-dos-ieds .chave {
+  border-radius: 2px;
+  border-color: var(--borda);
+  background: var(--superficie);
+  color: var(--titulo);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.topo.registro .chave:hover:not(:disabled),
+.tira-dos-ieds .chave:hover:not(:disabled) {
+  border-color: var(--aco);
+  background: var(--destaque-fraco);
+  color: var(--titulo);
+}
+.topo.registro .chave.escolhido,
+.tira-dos-ieds .chave.escolhido {
+  background: var(--marinho);
+  border-color: var(--marinho);
+  color: #ffffff;
+}
+.topo.registro .lado button { font-family: var(--sans); font-weight: 600; }
+.topo.registro .chave.sem-logica,
+.topo.registro .chave.sem-eventos { opacity: .55; }
+
+/* Os dois «+ adicionar»: o MESMO botão — mesma altura, mesma letra, o mesmo
+   «+» em texto, cheios na tinta da casa. São os dois únicos botões cheios do
+   bloco: é por eles que entra coisa nova na tela. */
+.tira-dos-ieds .barra-dos-ieds .mais-oscilografia,
+.tira-dos-ieds .barra-dos-ieds .novo-grafico {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--marinho);
+  border-radius: 2px;
+  background: var(--marinho);
+  color: #ffffff;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.tira-dos-ieds .barra-dos-ieds .mais-oscilografia:hover:not(:disabled),
+.tira-dos-ieds .barra-dos-ieds .novo-grafico:hover,
+.tira-dos-ieds .barra-dos-ieds .novo-grafico[aria-expanded="true"] {
+  border-color: var(--marinho);
+  background: var(--marinho);
+  color: #ffffff;
+  filter: brightness(1.18);
+}
+.tira-dos-ieds .barra-dos-ieds .mais-oscilografia:disabled { opacity: .5; }
+.barra-dos-ieds .novo-grafico .seta-do-menu {
+  margin-left: 8px;
+  font-size: 10px;
+  opacity: .75;
+}
+/* A âncora do «+ adicionar oscilografia» é item do flex e cobrava o vão duas
+   vezes. */
+.barra-dos-ieds > .ancora-de-menu { margin-left: -8px; }
+/* O grupo do «+ adicionar gráfico» é de onde o menu pende, alinhado à
+   esquerda do botão: a âncora não se posiciona, o grupo sim. */
+.grupo-do-novo { position: relative; display: inline-flex; }
+.grupo-do-novo > .ancora-de-menu { position: static; }
+.rotulo-dos-ieds {
+  margin-left: 12px;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* --- o menu dos tipos de gráfico ----------------------------------------- */
+#menu-novo-painel .menu-suspenso {
+  min-width: 310px;
+  padding: 6px 0;
+  border: 1px solid var(--borda);
+  border-top: 2px solid var(--marinho);
+  border-radius: 2px;
+  box-shadow: 0 6px 6px -2px rgba(14, 28, 49, .16);
+}
+#menu-novo-painel .cabeca-menu {
+  margin: 0 0 4px;
+  padding: 4px 14px 6px;
+  border-bottom: 1px solid var(--linha);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+}
+.menu-suspenso button.opcao.opcao-de-tipo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 14px;
+  font-family: var(--sans);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--titulo);
+}
+.opcao-de-tipo .caixa-do-icone {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--borda);
+  border-radius: 2px;
+  background: var(--superficie);
+  color: var(--aco);
+}
+.icone-do-tipo {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.icone-do-tipo .cheio { fill: currentColor; stroke: none; }
+.opcao-de-tipo .rotulo-do-tipo { white-space: nowrap; }
+.opcao-de-tipo:hover:not(:disabled) .caixa-do-icone {
+  background: var(--marinho);
+  border-color: var(--marinho);
+  color: #ffffff;
+}
+/* «(só no avançado)»: desabilitado, mas LEGÍVEL — é ele que ensina que o
+   modo existe. */
+.menu-suspenso button.opcao.opcao-de-tipo.desabilitada {
+  opacity: 1;
+  color: var(--suave);
+  cursor: not-allowed;
+}
+.opcao-de-tipo.desabilitada .caixa-do-icone {
+  border-style: dashed;
+  background: transparent;
+  color: var(--suave);
+}
+
+/* --- os gráficos ----------------------------------------------------------- */
+body[data-sha] #graficos {
+  width: var(--coluna-da-onda);
+  max-width: none;
+  padding-inline: 0;
+  gap: 18px;
+}
+body[data-sha] .marca-de-solta { left: 0; right: 0; }
+body[data-sha] .grafico {
+  position: relative;
+  border: 1px solid var(--borda);
+  border-top: 2px solid var(--marinho);
+  border-radius: 0;
+  padding: 0 14px 12px;
+}
+body[data-sha] .grafico.painel-escolhido { border-color: var(--aco); }
+/* O título do painel como CABEÇALHO do bloco. Só fundo e margem: ele tem os
+   botões dentro, e o `display` dele é o do flex de sempre. */
+body[data-sha] .grafico-titulo {
+  margin: 0 -14px 10px;
+  padding: 7px 14px;
+  background: var(--faixa-da-tabela);
+  border-bottom: 1px solid var(--cartao-borda);
+}
+body[data-sha] .grafico-titulo .nome-painel {
+  font-family: var(--sans);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--titulo);
+}
+/* «abrir tela de localização», no cabeçalho do localizador: é o caminho
+   para uma TELA, e por isso é o único botão cheio do cabeçalho. */
+.grafico-titulo .medida.abre-localizacao {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px 0 6px;
+  border-color: var(--marinho);
+  border-radius: 2px;
+  background: var(--marinho);
+  color: #ffffff;
+  font-family: var(--sans);
+  font-weight: 600;
+}
+.grafico-titulo .medida.abre-localizacao:hover { color: #ffffff; filter: brightness(1.18); }
+.abre-localizacao .icone-do-tipo { width: 15px; height: 15px; }
+
+/* A tela de localização na coluna, como bloco da página. */
+body[data-sha] .tela-localizar {
+  width: var(--coluna-da-onda);
+  max-width: none;
+  margin: 18px auto 30px;
+  border: 1px solid var(--borda);
+  border-top: 2px solid var(--marinho);
+  border-radius: 0;
+}
+body[data-sha] .tela-localizar[hidden] { display: none; }
+body[data-sha] .aviso-do-pe { width: var(--coluna-da-onda); max-width: none; padding-inline: 0; }
+
+/* --- a alça de esticar ------------------------------------------------------
+ * Uma faixa fina na borda de baixo do bloco, três tracinhos no meio, cursor
+ * de redimensionar. Quem faz o gesto é o `onda.js` (`alcaDeAltura`). */
+.alca-de-altura {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 10px;
+  display: grid;
+  place-items: center;
+  cursor: ns-resize;
+  touch-action: none;
+  z-index: 3;
+}
+.tracos-da-alca {
+  position: relative;
+  width: 22px;
+  height: 5px;
+  border-top: 1px solid var(--suave);
+  border-bottom: 1px solid var(--suave);
+  opacity: .7;
+}
+.tracos-da-alca::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 1px;
+  border-top: 1px solid var(--suave);
+}
+.alca-de-altura:hover,
+.alca-de-altura.puxando { background: var(--destaque-fraco); }
+.alca-de-altura:hover .tracos-da-alca,
+.alca-de-altura.puxando .tracos-da-alca { opacity: 1; }
+/* Enquanto se puxa, o cursor é o da alça em qualquer lugar da tela, e nada
+   se seleciona: a mão sai da faixa de 10 px no primeiro movimento. */
+body.esticando-grafico,
+body.esticando-grafico * { cursor: ns-resize !important; user-select: none; }

@@ -129,7 +129,9 @@
     }
     // «+ adicionar oscilografia» NÃO mora aqui: esteve, e ele preferiu no
     // lugar de antes, dentro da página (22/10/2026). Mudou só a cara.
-    const nova = criar("button", "chave aba-nova", "+ nova aba");
+    // «+ nova aba» é uma ABA a mais — mesma altura, mesma borda —, e não uma
+    // caixa tracejada solta (identidade f10, 10/11/2026).
+    const nova = criar("button", "aba-de-oscilografia aba-nova", "+ nova aba");
     nova.type = "button";
     nova.title = "Abrir outro registro do acervo numa aba nova, independente desta.";
     nova.addEventListener("click", () => abrirMenu(nova, "abrir numa aba nova:",
@@ -145,11 +147,42 @@
         quadro.id = `quadro-${aba.id}`;
         quadro.title = (nomes.get(aba.sha) || {}).nome || "oscilografia";
         quadro.src = `/onda/${encodeURIComponent(aba.sha)}?aba=${aba.id}`;
+        quadro.addEventListener("load", () => vigiarColuna(quadro));
         quadros.append(quadro);
       }
       quadro.hidden = aba.id !== estado.ativa;
     }
+    alinharAbas();
   }
+
+  /** As abas começam na MESMA margem dos blocos de dentro do quadro.
+   *
+   * A coluna da onda (registro e gráficos) é centrada DENTRO do quadro, e o
+   * quadro tem barra de rolagem própria: a mesma conta de CSS feita aqui fora
+   * erraria pela largura dessa barra, e as abas ficariam alguns pixels fora da
+   * coluna. Então se MEDE onde o bloco do registro começou, no quadro visível,
+   * e as abas passam a começar ali. Sem medida (quadro carregando), vale a
+   * conta do CSS, que erra por pouco.
+   */
+  function alinharAbas() {
+    const quadro = estado.ativa && document.getElementById(`quadro-${estado.ativa}`);
+    let bloco = null;
+    try { bloco = quadro && quadro.contentDocument
+      && quadro.contentDocument.querySelector(".topo.registro"); } catch (_e) { /* ok */ }
+    if (!bloco) return;
+    const esq = bloco.getBoundingClientRect().left + quadro.getBoundingClientRect().left;
+    if (esq > 0) barra.style.setProperty("--esquerda-das-abas", `${Math.round(esq)}px`);
+  }
+
+  /** Mede de novo quando o conteúdo do quadro muda de largura — a barra de
+   *  rolagem aparece quando os gráficos chegam, e some quando saem. */
+  function vigiarColuna(quadro) {
+    alinharAbas();
+    try {
+      new ResizeObserver(alinharAbas).observe(quadro.contentDocument.documentElement);
+    } catch (_e) { /* sem observador: vale a medida da carga */ }
+  }
+  window.addEventListener("resize", alinharAbas);
 
   // As teclas do gráfico (1 e 2 põem o cursor, setas, Esc, Delete, Ctrl+Z)
   // moram DENTRO do quadro da aba, e o navegador só entrega a tecla ao quadro

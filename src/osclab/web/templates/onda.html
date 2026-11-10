@@ -19,34 +19,12 @@
   {%- if not em_aba %}
   {{ barra(atual="oscilografia", tema=False) }}
   {%- endif %}
-  {#- A BARRA DO APLICATIVO: o que leva para FORA deste registro. À esquerda
-      as duas voltas (ao acervo e à tela inicial), à direita o que sai daqui
-      (exportar) e o que vale para o programa inteiro (a base de dados). O
-      cabeçalho de baixo fica só com o registro. Maquete 9 de «cabecalho-10»,
-      escolha dele em 22/10/2026. #}
-  <nav class="barra-do-app" aria-label="Navegação">
-    {#- «arquivos» ganhou a seta para a esquerda: é o «voltar à tela
-        anterior». O «menu», que é o começo de tudo, ficou com a casa. #}
-    <a class="chave com-icone" style="--ic: var(--ic-voltar)"
-       href="/arquivos" target="_top"
-       title="Voltar ao acervo de arquivos">arquivos</a>
-    <a class="chave com-icone" style="--ic: var(--ic-casa)"
-       href="/" target="_top" title="Voltar à tela inicial">menu</a>
-    <span class="espaco-da-barra"></span>
-    {#- LOCALIZAR FALTA troca as ondas por uma tela própria (painel 1 da
-        maquete, escolha dele em 23/10/2026); clicar de novo volta às ondas.
-        O cursor 1 é o mesmo nas duas. #}
-    <button type="button" class="chave com-icone" id="localizar"
-            style="--ic: var(--ic-localizar)"
-            title="Localização de falta: a LDL no tempo pela sequência negativa (com a oscilografia do outro terminal na aba) e pelo laço da falta. Clique de novo para voltar às ondas.">localizar falta</button>
-    <a class="chave com-icone" id="exportar" style="--ic: var(--ic-exportar)"
-       href="/api/acervo/{{ item.sha }}/exportar"
-       download
-       title="Baixa os arquivos deste registro com o nome que está no título. Mais de um arquivo sai em .zip, porque o leitor acha o .dat a partir do nome do .cfg — renomear um sem o outro entregaria um par que não abre.">exportar</a>
-    <a class="chave com-icone" id="base-de-dados"
-       style="--ic: var(--ic-base)" href="/base"
-       title="A base de dados: o dicionário dos sinais e os parâmetros das linhas.">base de dados</a>
-  </nav>
+  {#- A BARRA DO APLICATIVO saiu em 10/11/2026 (identidade f10). Ela tinha
+      «arquivos», «menu», «localizar falta», «exportar» e «base de dados»; a
+      barra de cima — que está sempre à vista, aqui ou na janela das abas —
+      já leva ao acervo, ao início e à base. O «exportar» desceu para a
+      segunda fileira do cabeçalho, e o «localizar falta» mora no painel
+      «localizador de faltas» (botão «abrir tela de localização»). #}
   <header class="topo registro">
     <div class="marca">
       <div class="titulo-do-registro">
@@ -167,6 +145,12 @@
       <button type="button" class="chave com-icone" id="dicionario"
               style="--ic: var(--ic-dicionario)"
               title="Procurar o significado de um sinal digital deste relé.">dicionário</button>
+      {#- EXPORTAR veio da barra do aplicativo, que saiu em 10/11/2026: é o
+          que se faz com o registro, e esta é a fileira disso. #}
+      <a class="chave com-icone" id="exportar" style="--ic: var(--ic-exportar)"
+         href="/api/acervo/{{ item.sha }}/exportar"
+         download
+         title="Baixa os arquivos deste registro com o nome que está no título. Mais de um arquivo sai em .zip, porque o leitor acha o .dat a partir do nome do .cfg — renomear um sem o outro entregaria um par que não abre.">exportar</a>
       {#- O «ajuda» PERDEU a classe `ajuda`: ela já existia na folha para o
           parágrafo de explicação da tela de arquivos (`margin: 0 0 16px`), e o
           botão herdava aquela margem de baixo -- era o que o deixava 16 px
@@ -404,7 +388,8 @@
         <b>exportar</b> baixa os arquivos deste registro com o nome que está
         no título; mais de um arquivo sai em <code>.zip</code>, porque o leitor
         acha o <code>.dat</code> a partir do nome do <code>.cfg</code>.
-        <b>arquivos</b> volta ao acervo, e <b>menu</b>, lá, à tela inicial.
+        O acervo, a tela inicial e a base de dados estão na barra de cima
+        (<b>Arquivos</b>, <b>Início</b>, <b>Base de dados</b>).
       </p>
     </div>
 
@@ -509,8 +494,14 @@
     <div class="folha-da-ajuda" data-folha="graficos" hidden>
       <h4>Criar, mover e fechar</h4>
       <ul class="lista-da-ajuda">
-        <li><b>+ adicionar gráfico</b>, no fim da tela, cria analógico,
-          digital, fasorial, harmônicos ou triângulo de tensões</li>
+        <li><b>+ adicionar gráfico</b>, ao lado de «+ adicionar
+          oscilografia», abre a lista dos tipos (analógico, digital, fasorial,
+          harmônicos, localizador…); o gráfico novo entra no fim da tela</li>
+        <li>a <b>alça</b> na borda de baixo de um gráfico analógico estica ou
+          encolhe o desenho · <b>clique duplo</b> nela volta à altura padrão</li>
+        <li>a <b>tela de localização</b> abre pelo botão <b>abrir tela de
+          localização</b>, no cabeçalho do gráfico «localizador de faltas» —
+          sem ele na tela, crie um pelo «+ adicionar gráfico»</li>
         <li><b>clique no título</b> escolhe o gráfico; <b>arrastando</b> pelo
           título dele muda a ordem</li>
         <li>soltar um <b>diagrama fasorial sobre outro</b> põe os dois lado a

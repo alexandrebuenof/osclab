@@ -1491,7 +1491,7 @@ def test_o_PAR_de_fasoriais_tem_UMA_moldura_de_cada_lado():
     js = _onda_js()
     assert "comMolduraDoPar(linha, lista[i], lista[i + 1])" in js
     trecho = js[js.index("function comMolduraDoPar("):]
-    trecho = trecho[:trecho.index("/** Os botões que criam um painel novo")]
+    trecho = trecho[:trecho.index("//: Os tipos de gráfico que se pode acrescentar")]
     assert "b._molduras = [];" in trecho          # os filhos devolvem as suas
     assert "topo.flutua = true;" in trecho
     assert "esquerdo._molduras = [topo, rodape];" in trecho
@@ -1771,15 +1771,12 @@ def test_a_chave_do_MENU_tem_a_seta_para_a_esquerda_nas_duas_telas():
     assert ">menu</a>" not in (paths.TEMPLATES_DIR / "index.html").read_text(encoding="utf-8")
 
     onda = (paths.TEMPLATES_DIR / "onda.html").read_text(encoding="utf-8")
-    # Na tela da onda são DUAS navegações, na barra do aplicativo, e desde
-    # 22/10/2026 a seta é do «arquivos» (voltar à tela anterior) e a casa é
-    # do «menu» (o começo de tudo).
-    barra = onda[onda.index('<nav class="barra-do-app"'):onda.index("</nav>")]
-    assert ('<a class="chave com-icone" style="--ic: var(--ic-voltar)"\n'
-            '       href="/arquivos" target="_top"') in barra
-    assert 'style="--ic: var(--ic-casa)"' in barra
-    assert 'href="/" target="_top" title="Voltar à tela inicial">menu</a>' in barra
-    assert "--ic-casa: url(" in css
+    # Na tela da onda a barra do aplicativo saiu em 10/11/2026 (identidade
+    # f10): «arquivos» e «menu» repetiam o «Arquivos» e o «Início» da barra
+    # de cima, que está sempre à vista — aqui ou na janela das abas.
+    assert '<nav class="barra-do-app"' not in onda
+    assert ">menu</a>" not in onda and ">arquivos</a>" not in onda
+    assert 'barra(atual="oscilografia"' in onda
 
 
 def test_a_chave_AJUDA_e_a_ULTIMA_e_nao_herda_a_margem_do_paragrafo():
@@ -1797,16 +1794,16 @@ def test_a_chave_AJUDA_e_a_ULTIMA_e_nao_herda_a_margem_do_paragrafo():
 
     # A ORDEM da fileira, ditada por ele em 22/10/2026: depois do par
     # secundário/primário vêm lógica, (eventos), dicionário, ajuda e, por
-    # último, o tema. Exportar, arquivos e menu subiram para a barra do
-    # aplicativo, ACIMA do cabeçalho.
+    # último, o tema. Em 10/11/2026 a barra do aplicativo saiu: arquivos e
+    # menu ficaram com a barra de cima, e o EXPORTAR desceu para esta fileira,
+    # entre o dicionário e a ajuda.
     acoes = onda[onda.index('<div class="acoes">'):onda.index("</header>")]
     assert acoes.index('data-lado="primario"') < acoes.index('id="logica"')
     assert acoes.index('id="logica"') < acoes.index('id="dicionario"')
-    assert acoes.index('id="dicionario"') < acoes.index('id="ajuda"')
-    for fora in ('id="exportar"', ">arquivos</a>", ">menu</a>"):
-        assert fora not in acoes
-        assert onda.index('<nav class="barra-do-app"') < onda.index(fora) \
-            < onda.index("</nav>")
+    assert acoes.index('id="dicionario"') < acoes.index('id="exportar"')
+    assert acoes.index('id="exportar"') < acoes.index('id="ajuda"')
+    for fora in (">arquivos</a>", ">menu</a>"):
+        assert fora not in onda
     # O tema voltou para o fim da fileira em 19/10/2026; quem foi para a linha
     # do título foi a BASE DE DADOS, que vale para o programa inteiro.
     assert acoes.rindex('id="ajuda"') < acoes.rindex('id="tema"')
@@ -2669,19 +2666,90 @@ def test_sem_ajustes_o_painel_nao_mostra_campo_de_busca():
     assert "if (!campo.hidden) { campo.focus(); campo.select(); }" in js
 
 
-def test_a_BASE_DE_DADOS_fica_na_barra_do_aplicativo_e_nao_na_fileira():
+def test_a_BASE_DE_DADOS_fica_na_barra_de_cima_e_nao_na_fileira():
     """A fileira é do REGISTRO — modo, filtro, ímã, lado, lógica, dicionário.
     A base vale para o programa inteiro: subiu para a linha do título em
-    19/10/2026 e, em 22/10/2026, para a barra do aplicativo, à direita, junto
-    do exportar."""
+    19/10/2026, para a barra do aplicativo em 22/10/2026 e, desde 10/11/2026
+    (identidade f10), é o «Base de dados» da barra de cima — que está à vista
+    na onda solta e na janela das abas. A barra do aplicativo saiu."""
     onda = _template("onda.html")
-    assert 'id="base-de-dados"' in onda
-    assert "--ic-base" in onda
-    barra = onda[onda.index('<nav class="barra-do-app"'):onda.index("</nav>")]
-    assert 'id="base-de-dados"' in barra
-    assert barra.index('id="exportar"') < barra.index('id="base-de-dados"')
-    assert onda.index("</nav>") < onda.index('<header class="topo registro">')
-    assert 'href="/base"' in onda
+    assert 'id="base-de-dados"' not in onda
+    assert '<nav class="barra-do-app"' not in onda
+    barra_de_cima = _template("_barra.html")
+    assert '("base", "/base", "Base de dados")' in barra_de_cima
+
+
+def test_LOCALIZAR_FALTA_mora_no_painel_localizador():
+    """O botão «localizar falta» saiu da barra (10/11/2026): o acesso à tela é
+    o «abrir tela de localização» no cabeçalho do painel «localizador de
+    faltas». Sem painel na tela, o «+ adicionar gráfico» cria um — e o menu
+    tem de continuar oferecendo o tipo, senão a tela fica sem caminho."""
+    onda = _template("onda.html")
+    js = _onda_js()
+    assert 'id="localizar"' not in onda
+    assert 'getElementById("localizar")' not in js
+    assert 'id="tela-localizar"' in onda
+    assert '"abrir tela de localização"' in js
+    assert "abrirLocalizacao(true)" in js
+    assert '["localizador", "localizador de faltas",' in js
+
+
+def test_ADICIONAR_GRAFICO_mora_ao_lado_do_adicionar_oscilografia():
+    """Os dois «+ adicionar» no pé do bloco do registro, mesmo botão, mesma
+    letra (identidade f10, 10/11/2026); o menu de tipos traz um ícone por
+    tipo, e todo tipo da lista tem o seu desenho."""
+    import re
+    js = _onda_js()
+    assert "barra.append(mais, ancora, botaoNovoGrafico());" in js
+    assert "rodapeDosPaineis" not in js
+    lista = js[js.index("const TIPOS_DE_PAINEL"):]
+    lista = lista[:lista.index("\n  ];")]
+    tipos = re.findall(r'^    \["([a-z]+)", "', lista, re.M)
+    assert len(tipos) == 11, tipos
+    tracos = js[js.index("const TRACOS_DOS_TIPOS"):]
+    tracos = tracos[:tracos.index("\n  };")]
+    for tipo in tipos:
+        assert f"    {tipo}: " in tracos, tipo
+    css = _osclab_css()
+    assert ".tira-dos-ieds .barra-dos-ieds .mais-oscilografia,\n" \
+           ".tira-dos-ieds .barra-dos-ieds .novo-grafico {" in css
+
+
+def test_a_ALTURA_esticavel_e_da_TELA_e_o_gesto_usa_a_mesma_conta():
+    """A altura do gráfico é do arranjo da tela, como o nome: entra no Ctrl+Z
+    e não vai ao servidor. Quem desenha e quem mede o gesto (roda, arrasto,
+    clique no traço) chamam a MESMA `alturaDoPainel` — com contas diferentes,
+    o pedaço esticado não responderia à roda."""
+    js = _onda_js()
+    assert "function alturaDoPainel(id)" in js
+    pedido = js[js.index("function pedidoComLayout()"):]
+    pedido = pedido[:pedido.index("\n  }\n")]
+    assert "altura" not in pedido                     # não vai ao servidor
+    corpo = js[js.index("function mudarAltura(id, h)"):]
+    corpo = corpo[:corpo.index("\n  }\n")]
+    assert "guardarParaDesfazer();" in corpo          # entra no Ctrl+Z
+    assert "carregar(" not in corpo                   # e não pede nada
+    no_desenho = js[js.index("function noDesenho(a)"):]
+    no_desenho = no_desenho[:no_desenho.index("\n  }\n")]
+    assert "alturaDoPainel(" in no_desenho
+    perto = js[js.index("function sinalPerto("):]
+    perto = perto[:perto.index("\n  }\n")]
+    assert "alturaDoPainel(painel.id)" in perto
+    assert "ALTURA - 4" not in js
+
+
+def test_o_MILIMETRADO_so_dentro_da_moldura_e_atras_das_curvas():
+    """A página da onda é LISA; o papel mora dentro da moldura de cada gráfico
+    retangular (ondas, digitais, localizador), pintado pelo canvas antes do
+    resto, e nos dois temas."""
+    js = _onda_js()
+    assert js.count("pintarMilimetrado(ctx, ") >= 3
+    css = _osclab_css()
+    corte = css.index('\n:root[data-tema="escuro"] {')
+    for tema in (css[:corte], css[corte:]):
+        for nome in ("fino", "medio", "forte"):
+            assert f"--milimetrado-{nome}:" in tema
+    assert "body.corpo-das-abas,\nbody[data-sha] { background: var(--pagina-lisa); }" in css
 
 
 def test_a_tela_de_arquivos_diz_o_MINIMO_e_o_que_traz_a_logica():

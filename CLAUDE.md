@@ -487,6 +487,32 @@ osclab/
   no botão «tema» da barra de cima, e a escolha de quem já escolheu fica
   guardada no navegador. Na folha, o claro é o `:root` e o escuro vive sob
   `[data-tema="escuro"]`.
+- **A altura de um gráfico é da TELA** *(10/11/2026)*. A alça na borda de
+  baixo do analógico (e do localizador) estica de metade a três vezes a
+  padrão; clique duplo volta. Como o nome e a ordem, ela mora no painel
+  (`altura`), entra no Ctrl+Z e não vai ao servidor — não muda número
+  nenhum. Quem desenha e quem mede o gesto (`noDesenho`, `sinalPerto`) chamam
+  a MESMA `alturaDoPainel`: com duas contas, o pedaço esticado deixaria de
+  responder à roda. Durante o arrasto o canvas só estica como imagem; o
+  desenho de verdade sai ao soltar. O digital não estica: a altura dele é a
+  soma das tiras.
+- **O milimetrado mora SÓ dentro da moldura** *(10/11/2026)*. A página da
+  oscilografia é lisa (`--pagina-lisa`); o papel é pintado pelo CANVAS
+  (`pintarMilimetrado`), atrás de tudo, só nos gráficos com moldura
+  retangular — ondas, tiras digitais, localizador —, ancorado no canto da
+  moldura e fora do fundo guardado: o arrasto desloca o sinal, não o papel.
+  Grade de página atrás de grade de gráfico ficou ruim na maquete. Os
+  gráficos sem moldura retangular (fasorial, planos) ficam lisos.
+- **«Localizar falta» mora no painel localizador** *(10/11/2026)*. A barra
+  do aplicativo saiu (arquivos, menu e base são da barra de cima; o exportar
+  desceu para a fileira do registro), e o acesso à tela de localização é o
+  «abrir tela de localização» no cabeçalho do painel «localizador de
+  faltas». Sem painel desses na tela, o «+ adicionar gráfico» cria um — tirar
+  o tipo do menu deixaria a tela sem caminho.
+- **«+ adicionar gráfico» fica ao lado de «+ adicionar oscilografia»**, no pé
+  do bloco do registro, o mesmo botão nos dois; o gráfico novo continua
+  entrando no FIM da lista. O menu de tipos tem um ícone de traço por tipo
+  (`TRACOS_DOS_TIPOS`), e há teste que exige um desenho para cada tipo.
 - **Nada de CDN.** Toda biblioteca de front-end — e as FONTES — viaja dentro
   do pacote: uma subestação sem internet não pode depender de um
   `<script src="https://...">`.
