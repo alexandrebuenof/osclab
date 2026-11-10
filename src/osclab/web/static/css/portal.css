@@ -1,0 +1,602 @@
+/* PORTAL — o miolo das páginas do portal (início, arquivos, base).
+ * A moldura (barra, rodapé, papel, tokens) mora no fim do osclab.css.
+ * Ver docs/identidade-visual.md.
+ *
+ * Esta folha vem DEPOIS do osclab.css (ver `_cabeca.html`): as regras daqui
+ * que repetem um seletor de lá ganham pela ordem, sem `!important`. Tudo é
+ * escopado nas páginas do portal (`body.portal`, `.tela-do-menu`,
+ * `.tela-de-arquivos`, `.tela-da-base`), para nada daqui vazar para a
+ * oscilografia.
+ */
+
+/* --- tokens do portal ----------------------------------------------------
+ * Os da moldura (--titulo, --marinho, --aco, --papel-cor…) vêm do osclab.css.
+ * Aqui só o que é do miolo, nos dois temas. */
+:root {
+  /* a linha de chão: o pé da vitrine e da faixa de título */
+  --portal-chao: var(--marinho);
+  /* o botão cheio no hover */
+  --portal-cheio-hover: var(--marinho-medio);
+  /* filetes e bordas de segunda ordem */
+  --portal-filete-apagado: #9aabc1;     /* topo do cartão futuro, gaveta desligada */
+  --portal-borda-icone: #b4c3d5;
+  --portal-borda-hover: #a9bad0;
+  --portal-filete-passo: #9fb1c7;
+  --portal-solta-borda: #98adc6;
+  --portal-solta-fundo: #f6f9fc;
+  --portal-selo-bom-borda: #9fcdb8;
+  --portal-selo-bom-fundo: #eef7f2;
+
+  /* O DESENHO DA SUBESTAÇÃO (static/se3d/LEIA.md).
+     No início, em TRAÇO, apagado: ≈ 45 % da força de uma tinta cheia. A
+     face é a cor do papel, senão cada peça vira um recorte opaco de outra
+     cor sobre o milimetrado. O aceso é o azul-aço. */
+  --se-tinta: #8a9bb1;
+  --se-tinta-longe: #c2ccd9;
+  --se-papel: var(--papel-cor);
+  --se-tela: #8a9bb1;
+  --se-destaque: var(--aco);
+
+  /* Em arquivos e base, a casa de comando do SÓLIDO: mais escura, e faces no
+     tom do papel — nada de branco puro, o milimetrado atravessa a casca. */
+  --casa-tinta: #42597a;
+  --casa-tinta-longe: #7d8fa8;
+  --casa-papel: #eef2f7;
+  --casa-face-1: #e3e9f0;
+  --casa-face-2: #c9d3df;
+  --casa-face-3: #a7b5c6;
+}
+
+:root[data-tema="escuro"] {
+  /* No escuro o marinho de botão (#2f5885) é escuro demais para ser linha
+     de chão sobre o papel #0b1626; um tom acima, ainda quieto. */
+  --portal-chao: #3d5a80;
+  --portal-cheio-hover: #3a6a9e;
+  --portal-filete-apagado: #3a5070;
+  --portal-borda-icone: #34496a;
+  --portal-borda-hover: #4a6488;
+  --portal-filete-passo: #3a5070;
+  --portal-solta-borda: #3d5578;
+  --portal-solta-fundo: #0e1b2d;
+  --portal-selo-bom-borda: #1f5e48;
+  --portal-selo-bom-fundo: #0f2a22;
+
+  /* traço claro e apagado sobre o marinho; o aceso, o aço claro */
+  --se-tinta: #5b7193;
+  --se-tinta-longe: #2e4260;
+  --se-tela: #5b7193;
+
+  --casa-tinta: #a9bbd3;
+  --casa-tinta-longe: #6d83a3;
+  --casa-papel: #0b1626;
+  --casa-face-1: #2b3f5c;
+  --casa-face-2: #1f314b;
+  --casa-face-3: #16253b;
+}
+
+/* --- botões do portal ---------------------------------------------------- */
+.botao-da-casa {
+  display: inline-flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 18px;
+  border: 1px solid var(--titulo);
+  border-radius: 2px;
+  background: var(--superficie);
+  color: var(--titulo);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background-color .15s, border-color .15s, color .15s;
+}
+body.portal main a.botao-da-casa,
+.botao-da-casa { color: var(--titulo); }
+.botao-da-casa:hover { background: var(--destaque-fraco); }
+.botao-da-casa.cheio,
+body.portal .botao-da-casa.cheio {
+  background: var(--marinho);
+  border-color: var(--marinho);
+  color: #fff;
+}
+.botao-da-casa.cheio:hover {
+  background: var(--portal-cheio-hover);
+  border-color: var(--portal-cheio-hover);
+}
+
+/* --- o desenho (as duas caixas) ------------------------------------------ */
+.se3d-caixa svg { display: block; width: 100%; height: auto; }
+
+/* =========================================================================
+   INÍCIO
+   ========================================================================= */
+.palco { position: relative; }
+
+.vitrine {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+/* A LINHA DE CHÃO: o título e o desenho pousam nela, e os cartões descem
+   dela. */
+.vitrine-miolo {
+  display: flex;
+  align-items: flex-end;
+  gap: 40px;
+  padding-top: 44px;
+  border-bottom: 1px solid var(--portal-chao);
+}
+.vitrine-texto {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 560px;
+  padding-bottom: 30px;
+}
+.chapeu {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--marinho-medio);
+}
+.vitrine-titulo {
+  margin: 0 0 12px;
+  font-size: 30px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -.005em;
+  color: var(--titulo);
+}
+.vitrine-frase {
+  margin: 0 0 20px;
+  max-width: 50ch;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--suave);
+}
+.vitrine-botoes { display: flex; gap: 10px; flex-wrap: wrap; margin: 0; }
+
+/* O desenho: detalhe à direita, sem caixa, desenhado no papel. */
+.vitrine-desenho { flex: 0 0 46%; min-width: 0; }
+.vitrine-desenho svg [data-grupo]:not([data-grupo="fundo"]) { cursor: pointer; }
+/* A casa de comando fica ao fundo do pátio, e o desenho a pinta com a tinta
+   «de longe», mais apagada — no início ela parecia desligada. Ela usa a
+   MESMA tinta dos outros equipamentos (pedido de 10/11/2026). */
+.palco .vitrine-desenho svg.se3d [data-grupo="oscilografia"],
+.palco .vitrine-desenho svg.se3d [data-grupo="base"] { --_longe: var(--_tinta); }
+
+/* As linhas de chamada: só a do serviço aceso aparece. */
+.chamadas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 2;
+}
+.linha-de-chamada { opacity: 0; transition: opacity .15s; }
+.linha-de-chamada path { fill: none; }
+.linha-de-chamada .chamada-halo { stroke: var(--papel-cor); stroke-width: 4; }
+.linha-de-chamada .chamada-traco { stroke: var(--aco); stroke-width: 1.2; }
+.linha-de-chamada .chamada-ancora { fill: var(--papel-cor); stroke: var(--aco); stroke-width: 1.4; }
+.palco.liga-linhas .linha-de-chamada[data-liga="linhas"],
+.palco.liga-viajantes .linha-de-chamada[data-liga="viajantes"],
+.palco.liga-trafo .linha-de-chamada[data-liga="trafo"],
+.palco.liga-oscilografia .linha-de-chamada[data-liga="oscilografia"] { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .linha-de-chamada { transition: none; }
+}
+
+/* --- os serviços --------------------------------------------------------- */
+.tela-do-menu main.menu {
+  position: relative;
+  z-index: 3;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 44px 20px 40px;
+  display: block;
+}
+/* «Escolha o que você vai analisar.» mora no vão entre o chão e os cartões. */
+.tela-do-menu main.menu .chamada {
+  position: absolute;
+  top: 13px;
+  left: 20px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--suave);
+}
+.tela-do-menu .mosaico {
+  max-width: none;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.tela-do-menu .modulo {
+  grid-template-rows: auto auto 1fr auto auto;
+  gap: 9px;
+  min-height: 224px;
+  padding: 20px 18px 16px;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-top: 2px solid var(--marinho);
+  border-radius: 0;
+  transition: border-color .15s;
+}
+.tela-do-menu .modulo.futuro { opacity: 1; border-top-color: var(--portal-filete-apagado); }
+.tela-do-menu .modulo .icone-do-modulo {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  background: var(--superficie);
+  border: 1px solid var(--portal-borda-icone);
+  color: var(--marinho-medio);
+  transition: background-color .15s, color .15s, border-color .15s;
+}
+.tela-do-menu .modulo .icone-do-modulo svg { width: 32px; height: 32px; stroke-width: 1.5; }
+.tela-do-menu .modulo.pronto .icone-do-modulo {
+  background: var(--marinho);
+  border-color: var(--marinho);
+  color: #fff;
+}
+.tela-do-menu .modulo .nome-do-modulo { font-size: 16.5px; font-weight: 600; color: var(--titulo); }
+.tela-do-menu .modulo .dizer-do-modulo { font-size: 13.5px; color: var(--suave); }
+.tela-do-menu .modulo .selo {
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  border-radius: 2px;
+  color: var(--suave);
+  background: var(--cartao);
+}
+.tela-do-menu .modulo.pronto .selo {
+  color: var(--bom);
+  border-color: var(--portal-selo-bom-borda);
+  background: var(--portal-selo-bom-fundo);
+}
+.tela-do-menu .modulo .acessar {
+  padding-top: 9px;
+  border-top: 1px solid var(--linha);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--destaque);
+}
+.tela-do-menu .modulo.futuro .acessar { color: var(--suave); font-weight: 500; }
+/* Aceso: pelo mouse no cartão OU no equipamento do desenho (`.aceso`, posta
+   pelo vitrine.js). O filete de cima vira azul-aço — o mesmo do desenho. */
+.tela-do-menu .modulo:hover,
+.tela-do-menu .modulo.aceso {
+  border-color: var(--portal-borda-hover);
+  border-top-color: var(--aco);
+}
+.tela-do-menu .modulo.futuro:hover { opacity: 1; }
+.tela-do-menu .modulo:hover .icone-do-modulo,
+.tela-do-menu .modulo.aceso .icone-do-modulo { border-color: var(--titulo); color: var(--titulo); }
+.tela-do-menu .modulo.pronto:hover .icone-do-modulo,
+.tela-do-menu .modulo.pronto.aceso .icone-do-modulo { border-color: var(--marinho); color: #fff; }
+.tela-do-menu .modulo:hover .acessar,
+.tela-do-menu .modulo.aceso .acessar {
+  color: var(--titulo);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* --- a base de dados, como bloco abaixo dos serviços --------------------- */
+.tela-do-menu .linha-da-base,
+.tela-do-menu .aviso-da-base {
+  max-width: none;
+  margin: 18px 0 0;
+  padding: 14px 18px;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-left: 3px solid var(--marinho);
+  border-radius: 0;
+  font-family: var(--sans);
+  font-size: 13.5px;
+  transition: border-color .15s;
+}
+.tela-do-menu .aviso-da-base { border-left-color: var(--atencao); }
+.tela-do-menu .linha-da-base.aceso { border-left-color: var(--aco); }
+.tela-do-menu .linha-da-base .cont {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--ceu);
+  padding: 1px 7px;
+  border-radius: 2px;
+}
+
+/* --- como funciona ------------------------------------------------------- */
+.passos {
+  background: var(--superficie);
+  border-top: 1px solid var(--linha);
+  border-bottom: 1px solid var(--linha);
+}
+/* o rodapé já tem a sua margem de cima; aqui a seção branca encosta nele */
+.passos + dialog + footer.rodape-da-casa { margin-top: 0; }
+.passos-miolo { max-width: 1240px; margin: 0 auto; padding: 30px 20px 34px; }
+.passos-titulo { margin: 0; font-size: 20px; font-weight: 600; color: var(--titulo); line-height: 1.25; }
+.passos-lista {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.passo { position: relative; padding: 0 34px 0 0; }
+/* A reta que liga os círculos, 1 — 2 — 3: do círculo deste passo (26 px +
+   10 de folga) até 10 px antes do círculo do seguinte, que começa onde esta
+   coluna termina. Na altura do centro deles. */
+.passo:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: 13px;
+  left: 36px;
+  right: 10px;
+  border-top: 1px solid var(--portal-filete-passo);
+}
+.passo-n {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--titulo);
+  border-radius: 50%;
+  background: var(--superficie);
+  color: var(--titulo);
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1;
+}
+.passo-titulo { margin: 10px 0 4px; font-weight: 600; font-size: 15.5px; color: var(--titulo); }
+.passo-frase { margin: 0 0 8px; color: var(--suave); font-size: 13.5px; line-height: 1.55; max-width: 42ch; }
+.passo-link { font-weight: 600; font-size: 13.5px; text-decoration: none; color: var(--destaque); }
+.passo-link:hover { text-decoration: underline; }
+
+/* =========================================================================
+   ARQUIVOS E BASE: a faixa de título
+   ========================================================================= */
+/* A linha de chão atravessa a página inteira, de borda a borda. */
+.faixa-de-titulo { border-bottom: 1px solid var(--portal-chao); }
+.faixa-miolo {
+  position: relative;
+  max-width: 1240px;
+  min-height: 104px;
+  margin: 0 auto;
+  padding: 18px 20px;
+}
+.migalha { margin: 0 0 6px; font-size: 12.5px; color: var(--suave); }
+.migalha a { color: var(--suave); text-decoration: none; }
+.migalha a:hover { color: var(--titulo); text-decoration: underline; }
+.migalha-sep { margin: 0 6px; }
+.faixa-titulo {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--titulo);
+}
+.faixa-frase { margin: 4px 0 0; color: var(--suave); font-size: 14px; }
+
+/* A casa de comando, pousada no chão à direita, em raio-x. */
+.casa-da-faixa {
+  position: absolute;
+  right: 20px;
+  bottom: 0;
+  width: 190px;
+  height: 108px;
+  pointer-events: none;
+  --se-tinta: var(--casa-tinta);
+  --se-tinta-longe: var(--casa-tinta-longe);
+  --se-papel: var(--casa-papel);
+  --se-face-1: var(--casa-face-1);
+  --se-face-2: var(--casa-face-2);
+  --se-face-3: var(--casa-face-3);
+  --se-tela: var(--casa-tinta);
+  --se-destaque: var(--aco);
+}
+.casa-da-faixa svg { height: 100%; }
+/* Sem esmaecer: a casa É o assunto aqui, não o que está em volta dela. */
+.faixa-de-titulo .casa-da-faixa svg.se3d { --_tinta: var(--se-tinta); --_longe: var(--se-tinta-longe); }
+.faixa-de-titulo .casa-da-faixa svg.se3d .f1 { fill: var(--se-face-1); }
+.faixa-de-titulo .casa-da-faixa svg.se3d .f2 { fill: var(--se-face-2); }
+.faixa-de-titulo .casa-da-faixa svg.se3d .f3 { fill: var(--se-face-3); }
+.faixa-de-titulo .casa-da-faixa svg.se3d [data-camada="casa-casca"] .f { fill-opacity: .55; }
+.faixa-de-titulo .casa-da-faixa svg.se3d [data-camada="casa-casca"] .a { stroke-width: 1; }
+/* O armário do servidor é pequeno (≈ 9 × 19 px): o aceso padrão (55 % do
+   destaque misturado à face) se lia cinza. Na Base ele vai no azul cheio, e
+   o véu do telhado que o cobre fica mais leve. */
+.faixa-de-titulo .casa-da-faixa.se-aceso-base svg.se3d [data-grupo="base"] .f:not(.tela) {
+  fill: color-mix(in srgb, var(--se-destaque) 85%, var(--se-face-1));
+}
+.faixa-de-titulo .casa-da-faixa.se-aceso-base svg.se3d [data-camada="casa-casca"] .f { fill-opacity: .22; }
+
+/* =========================================================================
+   ARQUIVOS: blocos com cabeçalho
+   ========================================================================= */
+.tela-de-arquivos > main {
+  max-width: 1240px;
+  padding-block: 26px 34px;
+  gap: 22px;
+}
+.tela-de-arquivos > main > section:not([hidden]) {
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-top: 2px solid var(--marinho);
+  padding: 0 22px 22px;
+}
+.tela-de-arquivos > main > section > h2:first-child,
+.tela-de-arquivos > main > section > .titulo-linha {
+  margin: 0 -22px 18px;
+  padding: 11px 22px;
+  background: var(--faixa-da-tabela);
+  border-bottom: 1px solid var(--cartao-borda);
+  color: var(--titulo);
+  font-size: 15.5px;
+  font-weight: 600;
+}
+.tela-de-arquivos .titulo-linha { align-items: center; }
+.tela-de-arquivos .titulo-linha h2 { margin: 0; font-size: 15.5px; font-weight: 600; color: var(--titulo); }
+.tela-de-arquivos .contagem:not(:empty) {
+  font-family: var(--sans);
+  font-weight: 500;
+  color: var(--titulo);
+  background: var(--superficie);
+  border: 1px solid var(--cartao-borda);
+  padding: 0 8px;
+  border-radius: 2px;
+}
+.tela-de-arquivos p.ajuda { max-width: 80ch; }
+
+.tela-de-arquivos .solta {
+  border: 1px dashed var(--portal-solta-borda);
+  border-radius: 2px;
+  background: var(--portal-solta-fundo);
+  padding: 30px 20px 28px;
+}
+/* a seta de enviar, num quadrado marinho */
+.tela-de-arquivos .solta::before {
+  content: "";
+  display: block;
+  width: 40px;
+  height: 40px;
+  margin: 0 auto 10px;
+  background: var(--marinho) center / 22px no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 16V4M7 9l5-5 5 5M4 16v4h16v-4'/%3E%3C/svg%3E");
+  border-radius: 2px;
+}
+.tela-de-arquivos .solta.sobre { border-color: var(--titulo); background: var(--destaque-fraco); }
+.tela-de-arquivos .solta-titulo { color: var(--titulo); font-size: 16.5px; }
+.tela-de-arquivos .recado { border-radius: 2px; }
+
+.tela-de-arquivos .lista { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+.tela-de-arquivos .registro {
+  border: 1px solid var(--borda);
+  border-left: 3px solid var(--marinho);
+  border-radius: 0;
+  padding: 14px 16px;
+  transition: border-color .15s;
+}
+.tela-de-arquivos .registro:hover { border-color: var(--portal-borda-hover); border-left-color: var(--aco); }
+.tela-de-arquivos .registro h3 { font-size: 15px; font-weight: 600; color: var(--titulo); }
+.tela-de-arquivos .selo-da-falta { border-radius: 2px; }
+/* a antessala, também como bloco */
+.tela-de-arquivos .espera-lista li { border-radius: 0; }
+
+/* --- o progresso do envio ------------------------------------------------ */
+.progresso {
+  margin: 14px 0 0;
+  padding: 10px 14px;
+  border: 1px solid var(--borda);
+  border-left: 3px solid var(--marinho);
+  background: var(--superficie);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.progresso-titulo { display: flex; gap: 10px; align-items: baseline; margin-bottom: 6px; }
+.progresso-fase { color: var(--titulo); font-family: var(--sans); font-weight: 600; font-size: 12.5px; }
+.progresso-detalhe { color: var(--suave); font-size: 11px; }
+.progresso-linha {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(80px, 220px) 200px 44px;
+  gap: 10px;
+  align-items: center;
+  padding: 2px 0;
+  color: var(--suave);
+}
+.progresso-linha.feito { color: var(--tinta); }
+.progresso-nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.progresso-barra { height: 6px; background: var(--ceu); border-radius: 1px; overflow: hidden; }
+.progresso-cheio { display: block; height: 100%; width: 0; background: var(--marinho); }
+.progresso-numeros,
+.progresso-pct { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.progresso-pct { color: var(--titulo); font-weight: 600; }
+.progresso-total { border-top: 1px solid var(--linha); margin-top: 4px; padding-top: 5px; color: var(--tinta); }
+.progresso[data-fase="lendo"] { border-left-color: var(--aco); }
+.progresso[data-fase="lendo"] .progresso-total .progresso-cheio {
+  background: var(--aco);
+  animation: progresso-lendo 1s linear infinite;
+}
+.progresso[data-fase="lido"] { border-left-color: var(--bom); }
+.progresso[data-fase="erro"] { border-left-color: var(--ruim); }
+@keyframes progresso-lendo { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) {
+  .progresso[data-fase="lendo"] .progresso-total .progresso-cheio { animation: none; }
+}
+@media (max-width: 620px) {
+  .progresso-linha { grid-template-columns: minmax(0, 1fr) 60px 44px; }
+  .progresso-numeros { display: none; }
+}
+
+/* =========================================================================
+   BASE: um bloco com cabeçalho
+   ========================================================================= */
+.tela-da-base main.base {
+  max-width: 1200px;
+  width: calc(100% - 40px);
+  margin: 26px auto 34px;
+  padding: 0 22px 22px;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-top: 2px solid var(--marinho);
+}
+.tela-da-base .base-topo {
+  margin: 0 -22px;
+  padding: 14px 22px;
+  background: var(--faixa-da-tabela);
+  border-bottom: 1px solid var(--cartao-borda);
+}
+.tela-da-base .base-topo h2 { color: var(--titulo); font-weight: 600; }
+.tela-da-base .base-topo .ic { color: var(--titulo); }
+.tela-da-base .gavetas { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 20px; }
+.tela-da-base .gaveta {
+  border: 1px solid var(--borda);
+  border-top: 2px solid var(--portal-filete-apagado);
+  border-radius: 0;
+  padding: 16px;
+}
+.tela-da-base .gaveta.ligada { border-top-color: var(--marinho); }
+.tela-da-base .gaveta h3 { color: var(--titulo); font-size: 15.5px; font-weight: 600; }
+@media (max-width: 760px) {
+  .tela-da-base .gavetas { grid-template-columns: 1fr; }
+}
+
+/* =========================================================================
+   ESTREITO: o desenho é detalhe — abaixo de 1000 px ele some, e o layout
+   continua de pé sem ele.
+   ========================================================================= */
+@media (max-width: 999px) {
+  .vitrine-desenho,
+  .casa-da-faixa,
+  .chamadas { display: none; }
+  .vitrine-texto { max-width: 680px; }
+  .tela-do-menu .mosaico { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 620px) {
+  .vitrine-titulo { font-size: 25px; }
+  .tela-do-menu .mosaico { grid-template-columns: 1fr; }
+  .tela-do-menu .modulo { min-height: 0; }
+  .passos-lista { grid-template-columns: 1fr; gap: 18px; }
+  .passo:not(:last-child)::before { display: none; }
+  .tela-de-arquivos .lista { grid-template-columns: 1fr; }
+}
+
+/* =========================================================================
+   AS CHAVES DENTRO DO MIOLO DO PORTAL
+   «editar database», «trocar de base», «abrir»: no portal elas são botão de
+   página, em sans e de canto quase reto, como os botões da vitrine. Só aqui
+   dentro (`body.portal main`, as janelas da base e a linha da base): a
+   chave da oscilografia, mono e miúda, é outra conversa.
+   ========================================================================= */
+body.portal main .chave,
+body.portal dialog .chave {
+  border-radius: 2px;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+body.portal main .chave:not(.escolhido):not(:disabled) { color: var(--titulo); }
+.tela-do-menu .linha-da-base > span:not(.cont) { font-family: var(--sans); }
+.tela-de-arquivos .solta .link { font-weight: 600; color: var(--titulo); }

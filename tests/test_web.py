@@ -452,12 +452,12 @@ def _tokens_do_css() -> dict[str, dict[str, str]]:
 
     from osclab import paths
     texto = (paths.STATIC_DIR / "css" / "osclab.css").read_text(encoding="utf-8")
-    # O tema claro vive sob `[data-tema="claro"]`; o escuro é o `:root`. O
-    # corte é no SELETOR, em começo de linha — o comentário do topo do arquivo
-    # também cita `[data-tema="claro"]`, e cortar ali deixava o tema escuro
-    # com zero cores e o teste passando por vacuidade.
-    corte = texto.index(':root[data-tema="claro"]')
-    pedacos = {"escuro": texto[:corte], "claro": texto[corte:]}
+    # Desde 10/11/2026 o claro é o `:root` e o escuro vive sob
+    # `[data-tema="escuro"]`. O corte é no SELETOR, em começo de linha — o
+    # comentário do topo do arquivo também cita o atributo, e cortar ali
+    # deixava um dos temas com zero cores e o teste passando por vacuidade.
+    corte = texto.index('\n:root[data-tema="escuro"] {')
+    pedacos = {"claro": texto[:corte], "escuro": texto[corte:]}
     padrao = re.compile(r"(--(?:fase-[abcn]|calculado-[123]|traco-[123]))\s*:\s*(#[0-9a-f]{6})")
     return {tema: dict(padrao.findall(pedaco)) for tema, pedaco in pedacos.items()}
 
@@ -497,7 +497,7 @@ def _convencoes_do_css() -> dict[tuple[str, str], dict[str, str]]:
 
     from osclab import paths
     texto = (paths.STATIC_DIR / "css" / "fases.css").read_text(encoding="utf-8")
-    seletor = r'(:root(?:\[data-tema="claro"\])?\[data-fases="([a-z0-9]+)"\])'
+    seletor = r'(:root\[data-tema="(?:claro|escuro)"\]\[data-fases="([a-z0-9]+)"\])'
     blocos = re.findall(seletor + r"\s*\{([^}]*)\}", texto)
     cor = re.compile(r"(--(?:fase-[abcn]|traco-[123]))\s*:\s*(#[0-9a-f]{6})")
     return {(ident, "claro" if "claro" in sel else "escuro"): dict(cor.findall(corpo))
@@ -1491,7 +1491,7 @@ def test_o_PAR_de_fasoriais_tem_UMA_moldura_de_cada_lado():
     js = _onda_js()
     assert "comMolduraDoPar(linha, lista[i], lista[i + 1])" in js
     trecho = js[js.index("function comMolduraDoPar("):]
-    trecho = trecho[:trecho.index("/** Os botões que criam um painel novo")]
+    trecho = trecho[:trecho.index("//: Os tipos de gráfico que se pode acrescentar")]
     assert "b._molduras = [];" in trecho          # os filhos devolvem as suas
     assert "topo.flutua = true;" in trecho
     assert "esquerdo._molduras = [topo, rodape];" in trecho
@@ -1552,17 +1552,21 @@ def test_a_janelinha_SOBRE_diz_licenca_e_titularidade():
     from osclab.web.server import create_app
     app = create_app()
     app.config.update(TESTING=True)
-    #: Na TELA INICIAL, que é onde o «sobre» mora: a tela de arquivos é de um
-    #: módulo, e a licença é do programa.
-    pagina = app.test_client().get("/").get_data(as_text=True)
-    assert 'id="janela-sobre"' in pagina
-    assert 'class="versao" id="sobre"' in pagina
-    assert "AGPL-3.0-or-later" in pagina
-    assert "servi-lo pela rede" in pagina
-    assert "direitos patrimoniais" in pagina
+    #: Desde 10/11/2026 a versão mora na BARRA DE CIMA, que é a mesma em todo
+    #: o portal — e o «sobre» vai junto: a licença é do programa, e quem
+    #: clica na versão na tela de arquivos faz a mesma pergunta.
+    cli = app.test_client()
+    for rota in ("/", "/arquivos", "/base"):
+        pagina = cli.get(rota).get_data(as_text=True)
+        assert 'id="janela-sobre"' in pagina, rota
+        assert 'class="versao" id="sobre"' in pagina, rota
+        assert "AGPL-3.0-or-later" in pagina, rota
+        assert "servi-lo pela rede" in pagina, rota
+        assert "direitos patrimoniais" in pagina, rota
+        assert "js/barra.js" in pagina, rota
 
     from osclab import paths
-    js = (paths.STATIC_DIR / "js" / "menu.js").read_text(encoding="utf-8")
+    js = (paths.STATIC_DIR / "js" / "barra.js").read_text(encoding="utf-8")
     assert "sobre.showModal()" in js
     # Clique no escuro em volta fecha: o `<dialog>` entrega o clique do fundo
     # como se fosse dele, então quem decide é a POSIÇÃO.
@@ -1744,7 +1748,8 @@ def test_o_botao_do_TEMA_e_uma_chave_nas_TRES_telas():
     solto: herdava só o `min-width` do `#tema` e saía um retângulo sem moldura
     nem ícone, mais alto que o vizinho. Chave igual às outras nas três."""
     from osclab import paths
-    for nome in ("menu.html", "index.html", "onda.html"):
+    # Desde 10/11/2026 o do portal mora na barra de cima (`_barra.html`).
+    for nome in ("_barra.html", "onda.html"):
         tela = (paths.TEMPLATES_DIR / nome).read_text(encoding="utf-8")
         assert 'class="chave tema com-icone" id="tema"' in tela, nome
         assert "--ic: var(--ic-tema)" in tela, nome
@@ -1759,21 +1764,19 @@ def test_a_chave_do_MENU_tem_a_seta_para_a_esquerda_nas_duas_telas():
     css = _osclab_css()
     assert "--ic-arquivos: url(" in css
 
-    arquivos = (paths.TEMPLATES_DIR / "index.html").read_text(encoding="utf-8")
-    assert ('<a class="chave voltar com-icone" style="--ic: var(--ic-voltar)"'
-            in arquivos)
-    assert 'href="/" title="Voltar à tela inicial">menu</a>' in arquivos
+    # No portal a chave «menu» virou o «Início» do menu da barra de cima
+    # (10/11/2026): o mesmo destino, um item à esquerda, em toda página.
+    barra_de_cima = (paths.TEMPLATES_DIR / "_barra.html").read_text(encoding="utf-8")
+    assert '("inicio", "/", "Início")' in barra_de_cima
+    assert ">menu</a>" not in (paths.TEMPLATES_DIR / "index.html").read_text(encoding="utf-8")
 
     onda = (paths.TEMPLATES_DIR / "onda.html").read_text(encoding="utf-8")
-    # Na tela da onda são DUAS navegações, na barra do aplicativo, e desde
-    # 22/10/2026 a seta é do «arquivos» (voltar à tela anterior) e a casa é
-    # do «menu» (o começo de tudo).
-    barra = onda[onda.index('<nav class="barra-do-app"'):onda.index("</nav>")]
-    assert ('<a class="chave com-icone" style="--ic: var(--ic-voltar)"\n'
-            '       href="/arquivos" target="_top"') in barra
-    assert 'style="--ic: var(--ic-casa)"' in barra
-    assert 'href="/" target="_top" title="Voltar à tela inicial">menu</a>' in barra
-    assert "--ic-casa: url(" in css
+    # Na tela da onda a barra do aplicativo saiu em 10/11/2026 (identidade
+    # f10): «arquivos» e «menu» repetiam o «Arquivos» e o «Início» da barra
+    # de cima, que está sempre à vista — aqui ou na janela das abas.
+    assert '<nav class="barra-do-app"' not in onda
+    assert ">menu</a>" not in onda and ">arquivos</a>" not in onda
+    assert 'barra(atual="oscilografia"' in onda
 
 
 def test_a_chave_AJUDA_e_a_ULTIMA_e_nao_herda_a_margem_do_paragrafo():
@@ -1791,16 +1794,16 @@ def test_a_chave_AJUDA_e_a_ULTIMA_e_nao_herda_a_margem_do_paragrafo():
 
     # A ORDEM da fileira, ditada por ele em 22/10/2026: depois do par
     # secundário/primário vêm lógica, (eventos), dicionário, ajuda e, por
-    # último, o tema. Exportar, arquivos e menu subiram para a barra do
-    # aplicativo, ACIMA do cabeçalho.
+    # último, o tema. Em 10/11/2026 a barra do aplicativo saiu: arquivos e
+    # menu ficaram com a barra de cima, e o EXPORTAR desceu para esta fileira,
+    # entre o dicionário e a ajuda.
     acoes = onda[onda.index('<div class="acoes">'):onda.index("</header>")]
     assert acoes.index('data-lado="primario"') < acoes.index('id="logica"')
     assert acoes.index('id="logica"') < acoes.index('id="dicionario"')
-    assert acoes.index('id="dicionario"') < acoes.index('id="ajuda"')
-    for fora in ('id="exportar"', ">arquivos</a>", ">menu</a>"):
-        assert fora not in acoes
-        assert onda.index('<nav class="barra-do-app"') < onda.index(fora) \
-            < onda.index("</nav>")
+    assert acoes.index('id="dicionario"') < acoes.index('id="exportar"')
+    assert acoes.index('id="exportar"') < acoes.index('id="ajuda"')
+    for fora in (">arquivos</a>", ">menu</a>"):
+        assert fora not in onda
     # O tema voltou para o fim da fileira em 19/10/2026; quem foi para a linha
     # do título foi a BASE DE DADOS, que vale para o programa inteiro.
     assert acoes.rindex('id="ajuda"') < acoes.rindex('id="tema"')
@@ -2474,7 +2477,9 @@ def test_VOLTAR_mora_no_cabecalho_ao_lado_de_MENU():
     assert 'id="voltar-passo"' in html
     # nasce escondido: só há o que voltar quando há painel aberto
     assert "hidden" in html.split('id="voltar-passo"')[1].split(">")[0]
-    assert html.index('id="voltar-passo"') < html.index('href="/" title="Voltar à tela inicial"')
+    # e mora NA BARRA de cima (o `call` dela), onde fica o «Início»
+    assert html.index('{% call barra(atual="base") %}') < html.index('id="voltar-passo"') \
+        < html.index("{%- endcall %}")
 
     js = _base_js()
     assert 'document.getElementById("voltar-passo")' in js
@@ -2661,19 +2666,90 @@ def test_sem_ajustes_o_painel_nao_mostra_campo_de_busca():
     assert "if (!campo.hidden) { campo.focus(); campo.select(); }" in js
 
 
-def test_a_BASE_DE_DADOS_fica_na_barra_do_aplicativo_e_nao_na_fileira():
+def test_a_BASE_DE_DADOS_fica_na_barra_de_cima_e_nao_na_fileira():
     """A fileira é do REGISTRO — modo, filtro, ímã, lado, lógica, dicionário.
     A base vale para o programa inteiro: subiu para a linha do título em
-    19/10/2026 e, em 22/10/2026, para a barra do aplicativo, à direita, junto
-    do exportar."""
+    19/10/2026, para a barra do aplicativo em 22/10/2026 e, desde 10/11/2026
+    (identidade f10), é o «Base de dados» da barra de cima — que está à vista
+    na onda solta e na janela das abas. A barra do aplicativo saiu."""
     onda = _template("onda.html")
-    assert 'id="base-de-dados"' in onda
-    assert "--ic-base" in onda
-    barra = onda[onda.index('<nav class="barra-do-app"'):onda.index("</nav>")]
-    assert 'id="base-de-dados"' in barra
-    assert barra.index('id="exportar"') < barra.index('id="base-de-dados"')
-    assert onda.index("</nav>") < onda.index('<header class="topo registro">')
-    assert 'href="/base"' in onda
+    assert 'id="base-de-dados"' not in onda
+    assert '<nav class="barra-do-app"' not in onda
+    barra_de_cima = _template("_barra.html")
+    assert '("base", "/base", "Base de dados")' in barra_de_cima
+
+
+def test_LOCALIZAR_FALTA_mora_no_painel_localizador():
+    """O botão «localizar falta» saiu da barra (10/11/2026): o acesso à tela é
+    o «abrir tela de localização» no cabeçalho do painel «localizador de
+    faltas». Sem painel na tela, o «+ adicionar gráfico» cria um — e o menu
+    tem de continuar oferecendo o tipo, senão a tela fica sem caminho."""
+    onda = _template("onda.html")
+    js = _onda_js()
+    assert 'id="localizar"' not in onda
+    assert 'getElementById("localizar")' not in js
+    assert 'id="tela-localizar"' in onda
+    assert '"abrir tela de localização"' in js
+    assert "abrirLocalizacao(true)" in js
+    assert '["localizador", "localizador de faltas",' in js
+
+
+def test_ADICIONAR_GRAFICO_mora_ao_lado_do_adicionar_oscilografia():
+    """Os dois «+ adicionar» no pé do bloco do registro, mesmo botão, mesma
+    letra (identidade f10, 10/11/2026); o menu de tipos traz um ícone por
+    tipo, e todo tipo da lista tem o seu desenho."""
+    import re
+    js = _onda_js()
+    assert "barra.append(mais, ancora, botaoNovoGrafico());" in js
+    assert "rodapeDosPaineis" not in js
+    lista = js[js.index("const TIPOS_DE_PAINEL"):]
+    lista = lista[:lista.index("\n  ];")]
+    tipos = re.findall(r'^    \["([a-z]+)", "', lista, re.M)
+    assert len(tipos) == 11, tipos
+    tracos = js[js.index("const TRACOS_DOS_TIPOS"):]
+    tracos = tracos[:tracos.index("\n  };")]
+    for tipo in tipos:
+        assert f"    {tipo}: " in tracos, tipo
+    css = _osclab_css()
+    assert ".tira-dos-ieds .barra-dos-ieds .mais-oscilografia,\n" \
+           ".tira-dos-ieds .barra-dos-ieds .novo-grafico {" in css
+
+
+def test_a_ALTURA_esticavel_e_da_TELA_e_o_gesto_usa_a_mesma_conta():
+    """A altura do gráfico é do arranjo da tela, como o nome: entra no Ctrl+Z
+    e não vai ao servidor. Quem desenha e quem mede o gesto (roda, arrasto,
+    clique no traço) chamam a MESMA `alturaDoPainel` — com contas diferentes,
+    o pedaço esticado não responderia à roda."""
+    js = _onda_js()
+    assert "function alturaDoPainel(id)" in js
+    pedido = js[js.index("function pedidoComLayout()"):]
+    pedido = pedido[:pedido.index("\n  }\n")]
+    assert "altura" not in pedido                     # não vai ao servidor
+    corpo = js[js.index("function mudarAltura(id, h)"):]
+    corpo = corpo[:corpo.index("\n  }\n")]
+    assert "guardarParaDesfazer();" in corpo          # entra no Ctrl+Z
+    assert "carregar(" not in corpo                   # e não pede nada
+    no_desenho = js[js.index("function noDesenho(a)"):]
+    no_desenho = no_desenho[:no_desenho.index("\n  }\n")]
+    assert "alturaDoPainel(" in no_desenho
+    perto = js[js.index("function sinalPerto("):]
+    perto = perto[:perto.index("\n  }\n")]
+    assert "alturaDoPainel(painel.id)" in perto
+    assert "ALTURA - 4" not in js
+
+
+def test_o_MILIMETRADO_so_dentro_da_moldura_e_atras_das_curvas():
+    """A página da onda é LISA; o papel mora dentro da moldura de cada gráfico
+    retangular (ondas, digitais, localizador), pintado pelo canvas antes do
+    resto, e nos dois temas."""
+    js = _onda_js()
+    assert js.count("pintarMilimetrado(ctx, ") >= 3
+    css = _osclab_css()
+    corte = css.index('\n:root[data-tema="escuro"] {')
+    for tema in (css[:corte], css[corte:]):
+        for nome in ("fino", "medio", "forte"):
+            assert f"--milimetrado-{nome}:" in tema
+    assert "body.corpo-das-abas,\nbody[data-sha] { background: var(--pagina-lisa); }" in css
 
 
 def test_a_tela_de_arquivos_diz_o_MINIMO_e_o_que_traz_a_logica():
@@ -2745,3 +2821,102 @@ def test_a_simulacao_de_daltonismo_deixa_o_cinza_cinza():
         for visao in ("protanopia", "deuteranopia", "tritanopia"):
             r, g, b = paleta.como_daltonico(paleta.de_hex(cinza), visao)
             assert max(r, g, b) - min(r, g, b) < 0.01, (cinza, visao, (r, g, b))
+
+
+# ---------------------------------------------------------------------------
+# A moldura da casa (identidade f10, 10/11/2026)
+# ---------------------------------------------------------------------------
+
+def test_a_BARRA_DE_CIMA_e_a_mesma_em_todo_o_portal_e_marca_onde_se_esta(cliente):
+    """Uma barra só, presa ao rolar, com o item atual marcado. Página que
+    escrevesse a própria barra à mão seria a primeira a ficar diferente."""
+    for rota, atual in (("/", "Início"), ("/arquivos", "Arquivos"),
+                        ("/base", "Base de dados")):
+        html = cliente.get(rota).get_data(as_text=True)
+        assert html.count('id="barra-de-cima"') == 1, rota
+        assert f'aria-current="page">{atual}</a>' in html, rota
+        # «Oscilografia» só aparece no menu de quem está nela
+        assert 'class="item-da-casa atual" aria-current="page">Oscilografia' not in html, rota
+        assert html.count('id="tema"') == 1, rota
+        assert 'rel="icon"' in html and "favicon-mono.svg" in html, rota
+        assert 'class="rodape-da-casa"' in html, rota
+        # o papel e a moldura vêm da classe `portal` no <body>; a página pode
+        # ter a sua junto (`tela-do-menu`, `tela-de-arquivos`, `tela-da-base`)
+        import re
+        assert re.search(r'<body class="(?:[^"]* )?portal(?: [^"]*)?"', html), rota
+    abas = cliente.get("/abas").get_data(as_text=True)
+    assert 'aria-current="page">Oscilografia</span>' in abas
+    assert 'class="rodape-da-casa"' not in abas
+    assert "position: sticky" in _osclab_css().split(".barra-de-cima {")[1][:80]
+
+
+def test_DENTRO_de_uma_aba_a_onda_nao_repete_a_barra(cliente):
+    """A barra já está na janela de fora; dentro do quadro ela seria a segunda.
+    Fora de uma aba ela aparece SEM o tema, que a onda tem no cabeçalho dela —
+    dois `#tema` na página e só um funcionaria."""
+    onda = _template("onda.html")
+    assert "{%- if not em_aba %}" in onda
+    assert 'barra(atual="oscilografia", tema=False)' in onda
+    import inspect
+
+    from osclab.web import server
+    assert 'em_aba="aba" in request.args' in inspect.getsource(server)
+
+
+def test_as_FONTES_viajam_no_pacote_com_a_licenca():
+    """Nada de CDN, e a OFL exige que a licença vá junto com as fontes."""
+    fontes = paths.STATIC_DIR / "fontes"
+    for nome in ("public-sans-400", "public-sans-700",
+                 "ibm-plex-mono-400", "ibm-plex-mono-600"):
+        assert (fontes / f"{nome}.woff2").is_file(), nome
+        assert f"../fontes/{nome}.woff2" in _osclab_css(), nome
+    licenca = (fontes / "OFL.txt").read_text(encoding="utf-8")
+    assert "SIL OPEN FONT LICENSE Version 1.1" in licenca
+    assert '--sans: "Public Sans"' in _osclab_css()
+    assert '--mono: "IBM Plex Mono"' in _osclab_css()
+
+
+def test_o_TEMA_padrao_e_o_claro_e_o_escuro_vive_no_atributo():
+    js = (paths.STATIC_DIR / "js" / "tema.js").read_text(encoding="utf-8")
+    assert 'const PADRAO = "claro";' in js
+    # o quadro de uma aba acompanha a troca feita na barra de fora
+    assert "if (e.key === CHAVE) aplicar(ler());" in js
+    css = _osclab_css()
+    assert '\n:root[data-tema="escuro"] {' in css
+    assert ':root[data-tema="claro"] {' not in css
+
+
+# ---------------------------------------------------------------------------
+# Enviar oscilografia pelos menus da tela de oscilografia (10/11/2026)
+# ---------------------------------------------------------------------------
+
+def test_o_envio_e_UM_caminho_so_e_o_accept_sai_do_acervo(cliente):
+    """A página Arquivos e os menus da oscilografia mandam pelo MESMO
+    `envio.js`, e o `accept` do campo sai de `acervo.EXTENSOES`: duas regras
+    divergiriam na primeira mudança, como «num lugar sobe, no outro não»."""
+    from osclab.library import acervo
+    html = cliente.get("/arquivos").get_data(as_text=True)
+    for e in acervo.EXTENSOES:
+        assert e in html and e.upper() in html
+    for pagina in ("index.html", "onda.html", "abas.html"):
+        corpo = _template(pagina)
+        assert "js/envio.js" in corpo and "aceita_no_acervo" in corpo
+        # carregado ANTES de quem o usa
+        quem = {"index.html": "js/acervo.js", "onda.html": "js/onda.js",
+                "abas.html": "js/abas.js"}[pagina]
+        assert corpo.index("js/envio.js") < corpo.index(quem)
+    acervo_js = (paths.STATIC_DIR / "js" / "acervo.js").read_text(encoding="utf-8")
+    assert "new XMLHttpRequest" not in acervo_js
+    assert "osclabEnvio.enviar" in acervo_js
+    for js in ("onda.js", "abas.js"):
+        texto = (paths.STATIC_DIR / "js" / js).read_text(encoding="utf-8")
+        assert "osclabEnvio.itemDeEnvio" in texto
+
+
+def test_o_botao_do_texto_cru_diz_texto():
+    """«como veio» virou «texto» (pedido dele, 10/11/2026); o `title` diz
+    que é o texto como veio no arquivo."""
+    onda = _template("onda.html")
+    assert ">como veio</button>" not in onda
+    assert onda.count(">texto</button>") == 2
+    assert "como veio no arquivo" in onda

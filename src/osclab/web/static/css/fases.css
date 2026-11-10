@@ -11,8 +11,11 @@
    `tests/test_web.py` passa cada bloco por ele de novo: no escuro, zero
    reprovações; no claro, só a que o tema claro já tem hoje.
 
-   O seletor do claro leva DOIS atributos, para ganhar do `:root[data-tema]`
-   do `osclab.css` sem depender da ordem dos arquivos. */
+   Os dois temas levam DOIS atributos (`data-tema` e `data-fases`), para
+   ganhar do `:root[data-tema="escuro"]` do `osclab.css` sem depender da ordem
+   dos arquivos. Desde 10/11/2026 o claro é o padrão do `:root`; o `tema.js`
+   escreve o `data-tema` antes do primeiro desenho, então os dois seletores
+   sempre têm em que pegar. */
 
 /* A engrenagem do botão: oito dentes em volta de um anel. */
 :root {
@@ -20,7 +23,7 @@
 }
 
 /* IEC 60445 / NBR 5410 (escuro): marrom, preto, cinza, azul-claro */
-:root[data-fases="iec60445"] {
+:root[data-tema="escuro"][data-fases="iec60445"] {
   --fase-a: #99511b;
   --fase-b: #516375;
   --fase-c: #808080;
@@ -40,7 +43,7 @@
   --traco-3: #bd00fc;
 }
 /* Vermelho-amarelo-azul (escuro): vermelho, amarelo, azul, preto */
-:root[data-fases="ryb"] {
+:root[data-tema="escuro"][data-fases="ryb"] {
   --fase-a: #d42a2a;
   --fase-b: #b4ab00;
   --fase-c: #3f63bd;
@@ -60,7 +63,7 @@
   --traco-3: #a20012;
 }
 /* EUA 208/120 V (escuro): preto, vermelho, azul, branco */
-:root[data-fases="eua208"] {
+:root[data-tema="escuro"][data-fases="eua208"] {
   --fase-a: #5a6363;
   --fase-b: #d42a2a;
   --fase-c: #3f63bd;
@@ -80,7 +83,7 @@
   --traco-3: #a20012;
 }
 /* EUA 480/277 V (escuro): marrom, laranja, amarelo, cinza */
-:root[data-fases="eua480"] {
+:root[data-tema="escuro"][data-fases="eua480"] {
   --fase-a: #99511b;
   --fase-b: #f07f13;
   --fase-c: #fcfc1b;
@@ -100,7 +103,7 @@
   --traco-3: #fc00c6;
 }
 /* Canadá (escuro): vermelho, preto, azul, branco */
-:root[data-fases="canada"] {
+:root[data-tema="escuro"][data-fases="canada"] {
   --fase-a: #d42a2a;
   --fase-b: #5a6363;
   --fase-c: #3f63bd;
@@ -120,7 +123,7 @@
   --traco-3: #a20012;
 }
 /* Austrália / NZ (escuro): vermelho, branco, azul, preto */
-:root[data-fases="aunz"] {
+:root[data-tema="escuro"][data-fases="aunz"] {
   --fase-a: #d42a2a;
   --fase-b: #bdc6d8;
   --fase-c: #3f63bd;
@@ -140,7 +143,7 @@
   --traco-3: #a20012;
 }
 /* China (GB) (escuro): amarelo, verde, vermelho, azul-claro */
-:root[data-fases="china"] {
+:root[data-tema="escuro"][data-fases="china"] {
   --fase-a: #b4ab00;
   --fase-b: #2e9e3e;
   --fase-c: #cf001b;

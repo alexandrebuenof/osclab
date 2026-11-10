@@ -37,7 +37,7 @@
   let assinatura = null;      /* os registros da aba na última pergunta */
   const escondidos = new Set();   /* letras de IED desligadas no filtro */
   let linhas = [];            /* [{ tr, t, fora }] na ordem da tabela */
-  let verCru = false;         /* o botão «como veio» aceso */
+  let verCru = false;         /* o botão «texto» aceso */
 
   const criar = (tag, classe, texto) => {
     const el = document.createElement(tag);
@@ -129,7 +129,7 @@
 
   /* O ARQUIVO COMO VEIO, de cada registro que trouxe um. É o que aparece
      quando a tabela não foi reconhecida — relé que nunca vimos, colunas em
-     outra ordem — e quando se pede pelo botão «como veio». Texto cru não
+     outra ordem — e quando se pede pelo botão «texto». Texto cru não
      liga ao cursor, mas também não mente: tabela lida errado mentiria. */
   function pintarCru(pedido) {
     for (const lista of listas()) {

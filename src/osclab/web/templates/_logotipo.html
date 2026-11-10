@@ -1,0 +1,54 @@
+{#- O LOGOTIPO — o ponto de troca do programa inteiro.
+
+    "amostras" = 16 · Amostras, PADRÃO desde 10/11/2026: um ciclo apagado ao
+                 fundo e 13 amostras em hastes na cor da fase A — o sinal como
+                 o relé grava. Ver `docs/decisoes-de-estetica.md`.
+    "trinca"   = L4 · Trinca, RESERVA: não apagar. Três ondas defasadas de
+                 120°, nas cores de fase.
+
+    Trocar a palavra abaixo troca o desenho da barra E o favicon da aba do
+    navegador. Uso: `{% import "_logotipo.html" as marca %}` e depois
+    `{{ marca.desenho() }}` / `{{ marca.favicon() }}`. -#}
+{%- set logotipo = "amostras" -%}
+
+{%- macro favicon() -%}
+  {#- A aplicação MONOCROMÁTICA do 16 (escura na aba clara, clara na escura):
+      variável CSS não chega num favicon, então as cores vivem no arquivo. #}
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='logotipo/favicon-' ~ ('trinca' if logotipo == 'trinca' else 'mono') ~ '.svg') }}">
+{%- endmacro -%}
+
+{%- macro desenho(classe="logotipo") -%}
+{%- if logotipo == "trinca" %}
+      <svg class="{{ classe }}" viewBox="0 0 56 32" width="56" height="32"
+           role="img" aria-label="OscLab">
+        <path d="M2 16 C7 2, 13 2, 18 16 S29 30, 34 16 S45 2, 50 16"
+              fill="none" stroke="var(--fase-a)" stroke-width="2.4"
+              stroke-linecap="round"/>
+        <path d="M2 16 C7 30, 13 30, 18 16 S29 2, 34 16 S45 30, 50 16"
+              fill="none" stroke="var(--fase-c)" stroke-width="2.4"
+              stroke-linecap="round" opacity=".92"/>
+        <path d="M6 16 C11 4, 17 28, 22 16 S33 4, 38 16 S49 28, 54 16"
+              fill="none" stroke="var(--fase-b)" stroke-width="2.4"
+              stroke-linecap="round" opacity=".85"/>
+      </svg>
+{%- else %}
+      <svg class="{{ classe }}" viewBox="0 0 48 48" width="32" height="32"
+           role="img" aria-label="OscLab">
+        <path d="M4 24H44" stroke="var(--tinta)" stroke-width="1" opacity=".35"/>
+        <path d="M4.0 24.0L4.6 22.5L5.3 21.1L5.9 19.6L6.5 18.3L7.1 16.9L7.8 15.7L8.4 14.5L9.0 13.4L9.6 12.4L10.3 11.5L10.9 10.8L11.5 10.1L12.1 9.6L12.8 9.3L13.4 9.1L14.0 9.0L14.6 9.1L15.3 9.3L15.9 9.6L16.5 10.1L17.1 10.8L17.8 11.5L18.4 12.4L19.0 13.4L19.6 14.5L20.3 15.7L20.9 16.9L21.5 18.3L22.1 19.6L22.8 21.1L23.4 22.5L24.0 24.0L24.6 25.5L25.3 26.9L25.9 28.4L26.5 29.7L27.1 31.1L27.8 32.3L28.4 33.5L29.0 34.6L29.6 35.6L30.3 36.5L30.9 37.2L31.5 37.9L32.1 38.4L32.8 38.7L33.4 38.9L34.0 39.0L34.6 38.9L35.3 38.7L35.9 38.4L36.5 37.9L37.1 37.2L37.8 36.5L38.4 35.6L39.0 34.6L39.6 33.5L40.3 32.3L40.9 31.1L41.5 29.7L42.1 28.4L42.8 26.9L43.4 25.5L44.0 24.0" fill="none" stroke="var(--tinta)" stroke-width="1.3" opacity=".35"/>
+        <path d="M4.0 24V24.0" stroke="var(--fase-a)" stroke-width="1.6" stroke-linecap="round"/><circle cx="4.0" cy="24.0" r="2.3" fill="var(--fase-a)"/>
+        <path d="M7.3 24V16.5" stroke="var(--fase-a)" stroke-width="1.6" stroke-linecap="round"/><circle cx="7.3" cy="16.5" r="2.3" fill="var(--fase-a)"/>
+        <path d="M10.7 24V11.0" stroke="var(--fase-a)" stroke-width="1.6" stroke-linecap="round"/><circle cx="10.7" cy="11.0" r="2.3" fill="var(--fase-a)"/>
+        <path d="M14.0 24V9.0" stroke="var(--fase-a)" stroke-width="1.6" stroke-linecap="round"/><circle cx="14.0" cy="9.0" r="2.3" fill="var(--fase-a)"/>
+        <path d="M17.3 24V11.0" stroke="var(--fase-a)" stroke-width="1.6" stroke-linecap="round"/><circle cx="17.3" cy="11.0" r="2.3" fill="var(--fase-a)"/>
+        <path d="M20.7 24V16.5" stroke="var(--fase-a)" stroke-width="1.6" stroke-linecap="round"/><circle cx="20.7" cy="16.5" r="2.3" fill="var(--fase-a)"/>
+        <path d="M24.0 24V24.0" stroke="var(--fase-a)" stroke-width="1.6" stroke-linecap="round"/><circle cx="24.0" cy="24.0" r="2.3" fill="var(--fase-a)"/>
+        <path d="M27.3 24V31.5" stroke="var(--fase-a)" stroke-width="1.6" stroke-linecap="round"/><circle cx="27.3" cy="31.5" r="2.3" fill="var(--fase-a)"/>
+        <path d="M30.7 24V37.0" stroke="var(--fase-a)" stroke-width="1.6" stroke-linecap="round"/><circle cx="30.7" cy="37.0" r="2.3" fill="var(--fase-a)"/>
+        <path d="M34.0 24V39.0" stroke="var(--fase-a)" stroke-width="1.6" stroke-linecap="round"/><circle cx="34.0" cy="39.0" r="2.3" fill="var(--fase-a)"/>
+        <path d="M37.3 24V37.0" stroke="var(--fase-a)" stroke-width="1.6" stroke-linecap="round"/><circle cx="37.3" cy="37.0" r="2.3" fill="var(--fase-a)"/>
+        <path d="M40.7 24V31.5" stroke="var(--fase-a)" stroke-width="1.6" stroke-linecap="round"/><circle cx="40.7" cy="31.5" r="2.3" fill="var(--fase-a)"/>
+        <path d="M44.0 24V24.0" stroke="var(--fase-a)" stroke-width="1.6" stroke-linecap="round"/><circle cx="44.0" cy="24.0" r="2.3" fill="var(--fase-a)"/>
+      </svg>
+{%- endif %}
+{%- endmacro -%}

@@ -1,0 +1,48 @@
+{#- O RODAPÉ MARINHO das páginas de portal (início, arquivos, base) — não da
+    oscilografia, onde a tela acaba no «+ adicionar gráfico».
+
+    Quatro colunas, como na f10: o que é o programa, o que ele lê, sob que
+    licença e qual versão está rodando. Tudo vem do servidor (versão, formatos
+    lidos POR ESTA INSTALAÇÃO, contagem do acervo): nada aqui é escrito à mão
+    que possa ficar velho. Uso: `{% include "_rodape.html" %}`. -#}
+{%- set n = contar_acervo() %}
+  <footer class="rodape-da-casa">
+    <div class="rodape-colunas">
+      <div class="rodape-coluna">
+        <p class="rodape-titulo">O programa</p>
+        <p>OscLab lê, desenha e mede oscilografias de qualquer relé. O que o
+          arquivo não disser vira campo para digitar.</p>
+        <ul class="rodape-links">
+          <li><a href="/">Início</a></li>
+          <li><a href="/arquivos">Arquivos</a></li>
+          <li><a href="/base">Base de dados</a></li>
+        </ul>
+      </div>
+      <div class="rodape-coluna">
+        <p class="rodape-titulo">Formatos lidos</p>
+        <ul class="rodape-lista">
+          {%- for f in formatos_lidos %}
+          <li>{{ f }}</li>
+          {%- else %}
+          <li>nenhum leitor carregado</li>
+          {%- endfor %}
+        </ul>
+      </div>
+      <div class="rodape-coluna">
+        <p class="rodape-titulo">Licença</p>
+        <p>AGPL-3.0-or-later. Quem distribuir o programa, ou servi-lo pela
+          rede, entrega o código-fonte junto.</p>
+        <p class="rodape-nota">Direitos patrimoniais da distribuidora de
+          energia para a qual foi desenvolvido.</p>
+      </div>
+      <div class="rodape-coluna">
+        <p class="rodape-titulo">Versão</p>
+        <p class="rodape-versao">v{{ versao }}</p>
+        <p>{{ n|milhar }} {{ 'registro' if n == 1 else 'registros' }} no acervo</p>
+        <p><a href="/saude">/saude</a> — o que esta instalação está enxergando.</p>
+      </div>
+    </div>
+    <div class="rodape-pe">
+      <span>OscLab · interface local, tudo roda nesta máquina</span>
+    </div>
+  </footer>

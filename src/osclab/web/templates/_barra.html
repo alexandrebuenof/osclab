@@ -1,0 +1,110 @@
+{#- A BARRA DE CIMA — uma só, igual em todas as páginas, presa ao rolar.
+
+    Identidade f10 (10/11/2026, `docs/identidade-visual.md`): faixa marinho
+    profundo; logotipo + «OscLab»; o menu em TEXTO, sem caixas nem divisórias,
+    com o item atual em peso 600 e filete branco de 2 px; à direita, controles
+    quietos, sem moldura.
+
+    Uso — o `with context` é obrigatório, porque a barra lê a versão e a
+    contagem do acervo que o servidor põe em toda página:
+
+        {% from "_barra.html" import barra with context %}
+        {{ barra(atual="arquivos") }}
+
+    `atual`: "inicio", "arquivos", "base" ou "oscilografia" (este último só
+    aparece no menu quando se está nele — não é um lugar para onde se vá
+    sem escolher um registro). `subtitulo`: linha miúda opcional embaixo do
+    nome. `tema`: False na página que já tem o botão do tema em outro lugar
+    (a da onda, fora de uma aba) — dois `#tema` na mesma página, só um
+    funcionaria.
+
+    O que for da PÁGINA e precisar morar na barra (o «voltar» da base) vem
+    pelo `{% call %}` e entra à esquerda dos controles da casa.
+
+    Os links levam `target="_top"`: a barra não aparece dentro de uma aba,
+    mas se um dia aparecer, sair do registro tem de sair do quadro junto. -#}
+{%- import "_logotipo.html" as marca -%}
+
+{%- macro barra(atual=None, subtitulo=None, tema=True) -%}
+  <header class="barra-de-cima" id="barra-de-cima">
+    <a class="marca-da-casa" href="/" target="_top" title="OscLab — início">
+      {{- marca.desenho("logotipo logotipo-da-barra") }}
+      <span class="nome-da-casa">
+        <b>OscLab</b>
+        {%- if subtitulo %}<small>{{ subtitulo }}</small>{% endif %}
+      </span>
+    </a>
+
+    <nav class="menu-da-casa" aria-label="Portal">
+      {%- for chave, href, nome in [("inicio", "/", "Início"),
+                                    ("arquivos", "/arquivos", "Arquivos"),
+                                    ("base", "/base", "Base de dados")] %}
+      <a class="item-da-casa{{ ' atual' if chave == atual }}" href="{{ href }}" target="_top"
+         {%- if chave == atual %} aria-current="page"{% endif %}>{{ nome }}</a>
+      {%- endfor %}
+      {%- if atual == "oscilografia" %}
+      <span class="item-da-casa atual" aria-current="page">Oscilografia</span>
+      {%- endif %}
+    </nav>
+
+    <div class="controles-da-casa">
+      {%- if caller %}{{ caller() }}{% endif %}
+      {#- Quantos registros há no acervo: o texto quieto da direita, e link
+          para onde eles estão. #}
+      {%- set n = contar_acervo() %}
+      <a class="info-da-casa" id="acervo-da-barra" href="/arquivos" target="_top"
+         title="Abrir o acervo de arquivos">{{ n|milhar }} {{ 'registro' if n == 1 else 'registros' }} no acervo</a>
+      {%- if tema %}
+      <button type="button" class="chave tema com-icone" id="tema"
+              style="--ic: var(--ic-tema)" title="Alternar tema">tema</button>
+      {%- endif %}
+      {#- A versao e' BOTAO: quem olha para ela esta' perguntando «que programa
+          e' este, e de quem» -- e a resposta inteira (licenca, titularidade,
+          formatos) nao cabe num canto do cabecalho. Abre a janela abaixo. #}
+      <button type="button" class="versao" id="sobre"
+              title="Sobre o OscLab: versão, licença e titularidade">v{{ versao }}</button>
+    </div>
+  </header>
+
+  {#- A janelinha «sobre». O texto mora aqui, com o resto das palavras da
+      barra, e nao dentro do JavaScript: quem for pôr a razão social no lugar
+      da frase genérica procura por ela num template. #}
+  <dialog class="busca janela-sobre" id="janela-sobre">
+    <div class="cabeca">
+      <h3>Sobre o OscLab</h3>
+      <button type="button" class="fechar" id="fechar-sobre"
+              title="fechar">×</button>
+    </div>
+
+    <p class="sobre-linha">Leitor e analisador de oscilografia</p>
+
+    <dl class="sobre-fatos">
+      <dt>versão</dt>
+      <dd>{{ versao }}</dd>
+
+      <dt>formatos</dt>
+      <dd>{{ formatos_lidos|join(' · ') if formatos_lidos else 'nenhum' }}</dd>
+
+      <dt>licença</dt>
+      <dd>
+        <b>AGPL-3.0-or-later</b> — permite uso comercial. O que ela exige é
+        outra coisa: quem distribuir o programa, <b>ou servi-lo pela rede</b>,
+        entrega o código-fonte junto, sob esta mesma licença, incluindo as
+        modificações.
+      </dd>
+
+      <dt>titularidade</dt>
+      <dd>
+        Os direitos patrimoniais pertencem à distribuidora de energia para a
+        qual o programa foi desenvolvido.
+      </dd>
+    </dl>
+
+    <p class="sobre-rodape">
+      <a href="/saude">/saude</a> diz o que esta instalação está enxergando —
+      pastas, formatos e versão — quando houver dúvida sobre qual cópia está
+      rodando.
+    </p>
+  </dialog>
+  <script src="{{ url_for('static', filename='js/barra.js') }}" defer></script>
+{%- endmacro -%}

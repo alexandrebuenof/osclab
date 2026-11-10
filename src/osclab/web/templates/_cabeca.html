@@ -1,0 +1,11 @@
+{#- O que TODA página põe no <head>: as duas folhas, o favicon e o tema.
+
+    Num lugar só para uma página nova não nascer sem favicon ou com o tema
+    piscando. O `tema.js` vem por último e SEM `defer`: ele escreve o
+    `data-tema` antes do primeiro desenho (ver o comentário dele). -#}
+{%- import "_logotipo.html" as marca %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/osclab.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fases.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/portal.css') }}">   {#- início, arquivos e base: o miolo das páginas do portal #}
+  {{ marca.favicon() }}
+  <script src="{{ url_for('static', filename='js/tema.js') }}"></script>

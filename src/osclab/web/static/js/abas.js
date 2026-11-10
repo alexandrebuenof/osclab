@@ -68,7 +68,7 @@
    * Fica no CORPO da página, com posição fixa: a barra rola na horizontal
    * (`overflow-x`), e um menu dentro dela sairia cortado na borda de baixo. */
   let fecharMenu = null;
-  function abrirMenu(botao, cabeca, quais, escolher) {
+  function abrirMenu(botao, cabeca, quais, escolher, extra) {
     const tinhaEste = fecharMenu && fecharMenu.botao === botao;
     if (fecharMenu) fecharMenu();
     if (tinhaEste) return;
@@ -92,6 +92,7 @@
       b.addEventListener("click", () => { fecharMenu(); escolher(s); });
       caixa.append(b);
     }
+    if (extra) caixa.append(extra());
     document.body.append(caixa);
     const fora = (e) => { if (!caixa.contains(e.target) && e.target !== botao) fecharMenu(); };
     const tecla = (e) => { if (e.key === "Escape") fecharMenu(); };
@@ -104,6 +105,31 @@
     fecharMenu.botao = botao;
     document.addEventListener("pointerdown", fora, true);
     document.addEventListener("keydown", tecla);
+  }
+
+  /** «enviar do computador…» no fim do menu do «+ nova aba».
+   *
+   * O envio é o da página Arquivos (`envio.js`); o que chega abre numa aba
+   * nova — uma para cada registro, a primeira à vista. Registro que já estava
+   * no acervo abre o que existe. */
+  function itemDeEnvio() {
+    return window.osclabEnvio.itemDeEnvio({
+      explicacao: "sobe ao acervo e abre numa aba nova",
+      aoChegar: (itens) => {
+        if (fecharMenu) fecharMenu();
+        for (const x of itens) nomes.set(x.sha, x);
+        const primeira = `a${estado.proximo}`;
+        for (const x of itens) {
+          estado.abas.push({ id: `a${estado.proximo++}`, sha: x.sha });
+        }
+        estado.ativa = primeira;
+        guardar();
+        desenhar();
+        return [itens.length > 1
+          ? `Abertos em ${itens.length} abas novas.`
+          : `Aberto numa aba nova: ${itens[0].nome}.`];
+      },
+    });
   }
 
   function desenhar() {
@@ -129,11 +155,13 @@
     }
     // «+ adicionar oscilografia» NÃO mora aqui: esteve, e ele preferiu no
     // lugar de antes, dentro da página (22/10/2026). Mudou só a cara.
-    const nova = criar("button", "chave aba-nova", "+ nova aba");
+    // «+ nova aba» é uma ABA a mais — mesma altura, mesma borda —, e não uma
+    // caixa tracejada solta (identidade f10, 10/11/2026).
+    const nova = criar("button", "aba-de-oscilografia aba-nova", "+ nova aba");
     nova.type = "button";
     nova.title = "Abrir outro registro do acervo numa aba nova, independente desta.";
     nova.addEventListener("click", () => abrirMenu(nova, "abrir numa aba nova:",
-      () => [...nomes.keys()], abrir));
+      () => [...nomes.keys()], abrir, itemDeEnvio));
     // Sem «arquivos» aqui: a barra do aplicativo, dentro de cada aba, já tem
     // o «← arquivos», e o daqui ficou repetido. Pedido dele, 22/10/2026.
     barra.append(nova);
@@ -145,10 +173,76 @@
         quadro.id = `quadro-${aba.id}`;
         quadro.title = (nomes.get(aba.sha) || {}).nome || "oscilografia";
         quadro.src = `/onda/${encodeURIComponent(aba.sha)}?aba=${aba.id}`;
+        quadro.addEventListener("load", () => vigiarColuna(quadro));
         quadros.append(quadro);
       }
       quadro.hidden = aba.id !== estado.ativa;
     }
+    alinharAbas();
+  }
+
+  /** As abas começam na MESMA margem dos blocos de dentro do quadro.
+   *
+   * A coluna da onda (registro e gráficos) é centrada DENTRO do quadro, e o
+   * quadro tem barra de rolagem própria: a mesma conta de CSS feita aqui fora
+   * erraria pela largura dessa barra, e as abas ficariam alguns pixels fora da
+   * coluna. Então se MEDE onde o bloco do registro começou, no quadro visível,
+   * e as abas passam a começar ali. Sem medida (quadro carregando), vale a
+   * conta do CSS, que erra por pouco.
+   */
+  function alinharAbas() {
+    const quadro = estado.ativa && document.getElementById(`quadro-${estado.ativa}`);
+    let bloco = null;
+    try { bloco = quadro && quadro.contentDocument
+      && quadro.contentDocument.querySelector(".topo.registro"); } catch (_e) { /* ok */ }
+    if (!bloco) return;
+    const esq = bloco.getBoundingClientRect().left + quadro.getBoundingClientRect().left;
+    if (esq > 0) barra.style.setProperty("--esquerda-das-abas", `${Math.round(esq)}px`);
+  }
+
+  /** Mede de novo quando o conteúdo do quadro muda de largura — a barra de
+   *  rolagem aparece quando os gráficos chegam, e some quando saem. */
+  function vigiarColuna(quadro) {
+    alinharAbas();
+    ouvirQuadro(quadro);
+    try {
+      new ResizeObserver(alinharAbas).observe(quadro.contentDocument.documentElement);
+    } catch (_e) { /* sem observador: vale a medida da carga */ }
+  }
+  window.addEventListener("resize", alinharAbas);
+
+  /* CLICAR FORA FECHA, dos dois lados do quadro (10/11/2026).
+   *
+   * Cada aba é outro documento, e um clique num documento não chega ao outro:
+   * o menu do «+ nova aba» (aqui fora) ficava aberto com o clique no gráfico,
+   * e o do «+ adicionar oscilografia» (lá dentro) com o clique na barra das
+   * abas. Então o clique de VERDADE de um lado é repassado ao outro como um
+   * `pointerdown` no documento — alvo o próprio documento, que está fora de
+   * qualquer menu, e cada menu se fecha pela regra que já tinha. Só os
+   * ouvintes do documento o recebem: seleção e gestos do gráfico ouvem os
+   * elementos e não veem nada. `isTrusted` impede o eco de voltar. */
+  const repassar = (doc) => {
+    try { doc.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); } catch (_e) { /* ok */ }
+  };
+  document.addEventListener("pointerdown", (e) => {
+    if (!e.isTrusted) return;
+    for (const q of quadros.querySelectorAll("iframe")) {
+      try { if (q.contentDocument) repassar(q.contentDocument); } catch (_e) { /* ok */ }
+    }
+  }, true);
+  function ouvirQuadro(quadro) {
+    let doc = null;
+    try { doc = quadro.contentDocument; } catch (_e) { return; }
+    if (!doc) return;
+    doc.addEventListener("pointerdown", (e) => {
+      if (!e.isTrusted) return;
+      if (fecharMenu) fecharMenu();
+      repassar(document);
+    }, true);
+    // O Esc com o foco dentro do quadro fecha o menu daqui de fora.
+    doc.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && fecharMenu) { e.preventDefault(); e.stopPropagation(); fecharMenu(); }
+    }, true);
   }
 
   // As teclas do gráfico (1 e 2 põem o cursor, setas, Esc, Delete, Ctrl+Z)

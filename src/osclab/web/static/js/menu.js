@@ -1,6 +1,6 @@
-/* A tela inicial: escolher o módulo, e as duas janelinhas dela.
+/* A tela inicial: escolher o módulo, e a nota dos módulos futuros.
  *
- * Sem biblioteca nenhuma, como o resto do programa — esta tela abre dois
+ * Sem biblioteca nenhuma, como o resto do programa — esta tela abre um
  * `<dialog>` e navega; uma dependência aqui viajaria dentro do pacote offline
  * para não fazer nada.
  */
@@ -22,15 +22,8 @@
     });
   };
 
-  // --- «sobre» -------------------------------------------------------------
-  const sobre = document.getElementById("janela-sobre");
-  const botaoSobre = document.getElementById("sobre");
-  if (sobre && botaoSobre) {
-    botaoSobre.addEventListener("click", () => sobre.showModal());
-    document.getElementById("fechar-sobre")
-      ?.addEventListener("click", () => sobre.close());
-    fecharNoFundo(sobre);
-  }
+  // O «sobre» saiu daqui em 10/11/2026: a versão foi para a barra de cima,
+  // que existe em toda página, e quem a abre é o `barra.js`.
 
   // --- os módulos que ainda não existem ------------------------------------
   //

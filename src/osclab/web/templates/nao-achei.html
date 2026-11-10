@@ -4,18 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Não achei — OscLab</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/osclab.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/fases.css') }}">
-  <script src="{{ url_for('static', filename='js/tema.js') }}"></script>
+  {% include "_cabeca.html" %}
+{%- from "_barra.html" import barra with context %}
 </head>
-<body>
-  <header class="topo">
-    <div class="marca">
-      <h1>OscLab</h1>
-      <p class="sub">Leitor e analisador de oscilografia</p>
-    </div>
-    <span class="versao">v{{ versao }}</span>
-  </header>
+<body class="portal">
+  {{ barra() }}
   <main>
     <section>
       <h2>Este registro não está no acervo</h2>
@@ -25,7 +18,7 @@
         outra máquina tem o mesmo endereço, mas só se tiver sido enviado lá
         também.
       </p>
-      <p><a href="/">Voltar aos arquivos</a></p>
+      <p><a href="/arquivos">Voltar aos arquivos</a></p>
     </section>
   </main>
 </body>

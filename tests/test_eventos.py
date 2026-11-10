@@ -161,7 +161,7 @@ def test_tabela_lida_pela_metade_tambem_vira_texto_cru():
 
 
 def test_mesmo_reconhecida_a_lista_leva_o_arquivo_como_veio():
-    """O botão «como veio» é a saída para quando o programa ACHA que leu."""
+    """O botão «texto» (o arquivo como veio) é a saída para quando o programa ACHA que leu."""
     lista = eventos.de_texto(EASERGY, "x.hdr")
     assert lista.cru.startswith("File type")
     assert eventos_plot.lista("A", "s", "", lista)["cru"] == lista.cru

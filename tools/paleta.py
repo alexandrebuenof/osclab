@@ -43,7 +43,7 @@ import math
 #: A paleta de traço de cada tema, como está no `osclab.css`.
 TEMAS = {
     "escuro": {
-        "fundo": "#0e1415",
+        "fundo": "#09131f",
         "cores": {
             "--fase-a": "#4b83d6",
             "--fase-b": "#b8860b",

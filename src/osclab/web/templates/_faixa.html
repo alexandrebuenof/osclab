@@ -1,0 +1,29 @@
+{#- A FAIXA DE TÍTULO das páginas internas do portal (arquivos, base).
+
+    Identidade f10 (`docs/identidade-visual.md`): migalha, título e frase
+    direto no papel, e a LINHA DE CHÃO atravessando a página no pé da faixa.
+    À direita, só a casa de comando do desenho sólido, em raio-x, com o
+    equipamento da página aceso em azul-aço — `acende` é o grupo do desenho:
+    "oscilografia" (os IEDs) em Arquivos, "base" (o armário do servidor) na
+    Base. Quem busca e põe o desenho é o `vitrine.js`; sem ele, a faixa
+    continua inteira.
+
+    Uso:
+        {% from "_faixa.html" import faixa %}
+        {{ faixa("Arquivos", "Envie oscilografias…", acende="oscilografia") }}
+-#}
+{%- macro faixa(titulo, frase, acende=None) -%}
+  <div class="faixa-de-titulo">
+    <div class="faixa-miolo">
+      <nav class="migalha" aria-label="Você está em">
+        <a href="/">Início</a><span class="migalha-sep" aria-hidden="true">›</span><span aria-current="page">{{ titulo }}</span>
+      </nav>
+      <h1 class="faixa-titulo">{{ titulo }}</h1>
+      <p class="faixa-frase">{{ frase }}</p>
+      {%- if acende %}
+      <div class="se3d-caixa casa-da-faixa se-aceso-{{ acende }}"
+           data-desenho="casa" aria-hidden="true"></div>
+      {%- endif %}
+    </div>
+  </div>
+{%- endmacro %}

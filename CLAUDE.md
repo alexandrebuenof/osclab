@@ -282,6 +282,19 @@ osclab/
   o nome na legenda está sempre no mesmo lugar e não se move. Os dois gestos
   fazem a mesma coisa, e **Ctrl** em qualquer um deles acumula a seleção —
   comparar duas fases é o gesto mais comum do ofício.
+- **Menu aberto fecha no clique em QUALQUER lugar fora dele e no Esc — dos
+  dois lados do quadro da aba** *(10/11/2026)*. Cada aba é um `<iframe>`, e
+  clique num documento não chega ao outro: o `abas.js` repassa o clique de
+  verdade de um lado como `pointerdown` no DOCUMENTO do outro (alvo fora de
+  todo menu, e só os ouvintes do documento o veem). Menu novo que se fecha
+  por `pointerdown` no documento ganha isso de graça. Janela com edição
+  (lógica, «+ sinal», calculadora) fecha só pelo ×: fechar no clique fora
+  perderia o que se digitava.
+- **Enviar oscilografia é UM caminho só** (`static/js/envio.js`): a página
+  Arquivos e o «enviar do computador…» dos menus da oscilografia usam o
+  mesmo pedido e a mesma leitura da resposta, e o `accept` sai de
+  `acervo.EXTENSOES`. Quem pareia, guarda na antessala e reconhece repetido
+  é o servidor.
 - **Ctrl+Z desfaz o que está na TELA, não o que foi decidido.** Sinal tirado,
   acrescentado, digital escondido: tudo volta. Correção de fase não, porque
   aquilo é dado gravado ao lado do registro e se desfaz no próprio lápis —
@@ -482,10 +495,40 @@ osclab/
   sai disso é `plot/navegacao.py` — inclusive o piso de amostras e as bordas.
 - **A escala vertical se ajusta à janela visível**, por grupo. Ampliar a
   pré-falta tem que mostrar a corrente de carga, não um fio reto no zero.
-- **Tema escuro é o padrão**, por escolha do projeto; o claro é um botão no
-  cabeçalho, guardado no navegador.
-- **Nada de CDN.** Toda biblioteca de front-end viaja dentro do pacote: uma
-  subestação sem internet não pode depender de um `<script src="https://...">`.
+- **Tema claro é o padrão desde 10/11/2026** — o da identidade nova (f10),
+  que foi escolhida olhando o claro; até ali era o escuro. O escuro continua
+  no botão «tema» da barra de cima, e a escolha de quem já escolheu fica
+  guardada no navegador. Na folha, o claro é o `:root` e o escuro vive sob
+  `[data-tema="escuro"]`.
+- **A altura de um gráfico é da TELA** *(10/11/2026)*. A alça na borda de
+  baixo do analógico (e do localizador) estica de metade a três vezes a
+  padrão; clique duplo volta. Como o nome e a ordem, ela mora no painel
+  (`altura`), entra no Ctrl+Z e não vai ao servidor — não muda número
+  nenhum. Quem desenha e quem mede o gesto (`noDesenho`, `sinalPerto`) chamam
+  a MESMA `alturaDoPainel`: com duas contas, o pedaço esticado deixaria de
+  responder à roda. Durante o arrasto o canvas só estica como imagem; o
+  desenho de verdade sai ao soltar. O digital não estica: a altura dele é a
+  soma das tiras.
+- **O milimetrado mora SÓ dentro da moldura** *(10/11/2026)*. A página da
+  oscilografia é lisa (`--pagina-lisa`); o papel é pintado pelo CANVAS
+  (`pintarMilimetrado`), atrás de tudo, só nos gráficos com moldura
+  retangular — ondas, tiras digitais, localizador —, ancorado no canto da
+  moldura e fora do fundo guardado: o arrasto desloca o sinal, não o papel.
+  Grade de página atrás de grade de gráfico ficou ruim na maquete. Os
+  gráficos sem moldura retangular (fasorial, planos) ficam lisos.
+- **«Localizar falta» mora no painel localizador** *(10/11/2026)*. A barra
+  do aplicativo saiu (arquivos, menu e base são da barra de cima; o exportar
+  desceu para a fileira do registro), e o acesso à tela de localização é o
+  «abrir tela de localização» no cabeçalho do painel «localizador de
+  faltas». Sem painel desses na tela, o «+ adicionar gráfico» cria um — tirar
+  o tipo do menu deixaria a tela sem caminho.
+- **«+ adicionar gráfico» fica ao lado de «+ adicionar oscilografia»**, no pé
+  do bloco do registro, o mesmo botão nos dois; o gráfico novo continua
+  entrando no FIM da lista. O menu de tipos tem um ícone de traço por tipo
+  (`TRACOS_DOS_TIPOS`), e há teste que exige um desenho para cada tipo.
+- **Nada de CDN.** Toda biblioteca de front-end — e as FONTES — viaja dentro
+  do pacote: uma subestação sem internet não pode depender de um
+  `<script src="https://...">`.
 - **Cores de fase são token CSS** (`--fase-a/b/c/n`), validadas para daltonismo
   e contraste nos dois temas. A identidade nunca é so' a cor: legenda e leitura
   do cursor sempre nomeiam o canal.

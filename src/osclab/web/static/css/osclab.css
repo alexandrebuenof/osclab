@@ -1,6 +1,12 @@
 /* Estilo do OscLab.
  *
- * Tokens no :root e um bloco para o tema escuro — a mesma folha serve os dois.
+ * Tokens no :root (o tema CLARO, padrão desde 10/11/2026) e um bloco para o
+ * escuro, sob [data-tema="escuro"] — a mesma folha serve os dois.
+ *
+ * A identidade é a «f10» da rodada de maquetes de 10/11/2026 (ver
+ * `docs/identidade-visual.md`): marinho profundo na barra e no rodapé, papel,
+ * tinta, azul-aço como destaque único e filetes finos. Nada de gradiente,
+ * sombra ou cartão arredondado: portal de produto de engenharia.
  *
  * As cores de fase (--fase-a/b/c/n) não foram escolhidas por gosto: passaram
  * pelo validador de paleta nos dois temas (faixa de luminosidade, saturação
@@ -10,61 +16,98 @@
  * cor sozinha carregando a identidade.
  */
 
+/* --- as fontes -------------------------------------------------------------
+ * Public Sans (texto) e IBM Plex Mono (números), as duas sob a SIL OFL 1.1 e
+ * EMBUTIDAS no pacote (ver `static/fontes/LEIA.md`): uma subestação sem
+ * internet não pode depender de CDN para a tela ter a cara que tem.
+ *
+ * Só há dois pesos de cada arquivo. A faixa de pesos declarada diz ao
+ * navegador qual arquivo serve cada peso pedido pela folha — sem ela, o 600
+ * de um título seria NEGRITO SINTÉTICO por cima do 400, que borra a letra. */
+@font-face {
+  font-family: "Public Sans";
+  src: url("../fontes/public-sans-400.woff2") format("woff2");
+  font-weight: 300 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Public Sans";
+  src: url("../fontes/public-sans-700.woff2") format("woff2");
+  font-weight: 600 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("../fontes/ibm-plex-mono-400.woff2") format("woff2");
+  font-weight: 300 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("../fontes/ibm-plex-mono-600.woff2") format("woff2");
+  font-weight: 600 800;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
-  /* O ESCURO é o padrão do projeto. O claro está abaixo, sob
-     [data-tema="claro"], e é escolhido no botão do cabeçalho — não pelo
-     sistema operacional. */
-  --fundo: #0e1415;
-  --superficie: #171f21;
-  --tinta: #e6ecec;
-  --suave: #98a8aa;
-  --linha: #2e3c3e;
-  --destaque: #58c6d6;
-  --destaque-fraco: #123036;
+  /* O CLARO é o padrão desde 10/11/2026: a identidade nova foi escolhida
+     olhando o claro. O escuro está abaixo, sob [data-tema="escuro"], e é
+     escolhido no botão «tema» da barra — não pelo sistema operacional. */
+  /* O fundo dos GRÁFICOS é branco puro, e não o #fbfdff do papel: medido no
+     `tools/paleta.py`, o verde de sobra (--traco-1) cai para 2,96:1 de
+     contraste no papel — abaixo do piso de 3:1 que um traço de 1,4 px pede.
+     A página usa o --papel-cor; o gráfico, este. */
+  --fundo: #ffffff;
+  --superficie: #ffffff;
+  --tinta: #13233a;
+  --suave: #55677f;
+  --linha: #cdd8e5;
+  /* O destaque ÚNICO da casa: o azul-aço. Não há segundo acento — laranja,
+     âmbar e vermelhão ficam para o que é dado (fases, cursores, avisos). */
+  --destaque: #24406a;
+  --destaque-fraco: #e3eaf3;
 
-  /* O azul das tiras digitais. Mais escuro que o --destaque de propósito: uma
-     tela com duas dúzias de tiras acesas no azul dos botões virava um bloco
-     luminoso, e as ondas — que são o assunto — ficavam em segundo plano. */
-  /* As tiras digitais. Mais claro que o tom antigo (#2f8da1) — escolha dele,
-     entre sete modelos: a tira estava fina e apagada demais no meio de 76
-     linhas. O preço está medido: sob deuteranopia este tom fica a ΔE 1,8 do
-     azul da fase A, contra 14,6 do antigo. Não é colisão DENTRO de um
-     gráfico — digital e analógico nunca dividem painel —, mas na mesma tela
-     são duas coisas da mesma cor para quem não distingue verde e vermelho.
-     Por isso a engrenagem do painel deixa trocar. */
-  --digital: #45b8cf;
+  /* As tiras digitais. Um tom só, mais escuro que o --destaque: uma tela com
+     duas dúzias de tiras acesas na cor dos botões virava um bloco luminoso, e
+     as ondas — que são o assunto — ficavam em segundo plano. Sob deuteranopia
+     o tom do escuro fica perto do azul da fase A; digital e analógico nunca
+     dividem painel, e a engrenagem do painel deixa trocar. */
+  --digital: #0a4b54;
 
-  /* Os sinais CALCULADOS (3I0, I1, I2...). Ficam fora da paleta de fases de
-     propósito: pintar 3I0 com a cor da fase A o faria passar por IA no
-     gráfico de correntes, e ninguém olharia duas vezes. */
-  /* As três fatias da barra de energia de um sinal — e as mesmas cores das
-   * marcas em subscrito do nome. Uma cor, um significado: turquesa é 60 Hz,
-   * roxo é harmônico, rosa é contínua. Passaram pelos mesmos testes de
-   * separação das cores de fase. */
-  /* O fundo de um cartão de sinal. Mais ESCURO que o da janela, e não mais
-   * claro: o cartão não é um objeto pousado em cima da lista, é um
-   * compartimento aberto nela. Afundar lê-se como «aqui dentro tem coisa»,
-   * levantar lê-se como «isto está selecionado». */
-  --cartao: #0a1011;
-  --cartao-borda: #253032;
+  /* O fundo de um cartão de sinal. Afundado, e não levantado: o cartão não é
+   * um objeto pousado em cima da lista, é um compartimento aberto nela.
+   * Afundar lê-se como «aqui dentro tem coisa», levantar lê-se como «isto
+   * está selecionado». */
+  --cartao: #f5f8fc;
+  --cartao-borda: #d3dde9;
 
   /* A faixa alternada da tabelinha do cursor. Discreta de propósito:
      o assunto são os números, não a tabela — ela existe só para o olho
      não trocar de linha atravessando quatro colunas. */
-  --faixa-da-tabela: #202b2d;
+  --faixa-da-tabela: #edf2f8;
 
   /* A faixa alternada das LISTAS DE SINAL (os três catálogos). Mais discreta
      que a da tabela do cursor: ali ela guia o olho por quatro colunas de
      números; aqui a linha é curta e a faixa só precisa marcar o passo. */
-  --faixa-da-lista: #121a1b;
+  --faixa-da-lista: #f3f6fa;
 
-  --energia-60: #2fb3bd;
-  --energia-harm: #8a72d8;
-  --energia-dc: #cc6a7a;
+  /* As três fatias da barra de energia de um sinal — e as mesmas cores das
+   * marcas em subscrito do nome. Uma cor, um significado: turquesa é 60 Hz,
+   * roxo é harmônico, rosa é contínua. */
+  --energia-60: #0e6e7a;
+  --energia-harm: #5b43a8;
+  --energia-dc: #a8304a;
 
-  --calculado-1: #c499ff;
-  --calculado-2: #ff70ac;
-  --calculado-3: #7c1fff;
+  /* Os sinais CALCULADOS (3I0, I1, I2...). Ficam fora da paleta de fases de
+     propósito: pintar 3I0 com a cor da fase A o faria passar por IA no
+     gráfico de correntes, e ninguém olharia duas vezes. */
+  --calculado-1: #6b3fa0;
+  --calculado-2: #a8306a;
+  --calculado-3: #57696b;
 
   /* As cores de SOBRA. Entram quando um gráfico tem mais sinais do que as
      nomeadas acima — e um gráfico nunca repete cor: duas curvas da mesma cor
@@ -72,39 +115,89 @@
      `Current IA` e `Voltage A-G` juntos, porque as duas são fase A.
 
      Escolhidas com `tools/paleta.py`, não a olho: ΔE2000 mínimo de 15 na visão
-     normal e de 9 sob protanopia e deuteranopia, contra TODAS as cores acima,
-     Escolhidas de novo em 25/10/2026, olhando, depois que o validador passou
-     a simular o daltonismo do jeito certo (no espaço LMS): o laranja de antes
-     ficava IDÊNTICO ao âmbar da fase B sob deuteranopia. O tema claro tem as
-     suas, no bloco dele. */
-  --traco-1: #49760a;
-  --traco-2: #e2128c;
-  --traco-3: #1fecff;
+     normal e de 9 sob protanopia e deuteranopia, contra TODAS as cores acima.
+     O escuro tem as suas, no bloco dele. */
+  --traco-1: #50a824;
+  --traco-2: #e65d19;
+  --traco-3: #75783a;
 
-  --bom: #2c9b75;
+  --bom: #157f5c;
   --atencao: #b8860b;
-  --ruim: #d45560;
+  --ruim: #96172b;
 
   /* Azul-A / branco-B / vermelho-C é a convenção de campo da distribuidora.
      O branco da fase B some no fundo claro e cansa no escuro, então B fica no
-     âmbar. As cores são as mesmas de antes, só trocadas de fase: a validação
-     de daltonismo e contraste vale igual. */
-  --fase-a: #4b83d6;
+     âmbar. */
+  --fase-a: #3574de;
   --fase-b: #b8860b;
-  --fase-c: #d45560;
-  --fase-n: #2c9b75;
+  --fase-c: #96172b;
+  --fase-n: #157f5c;
 
   /* As MISTURAS do selo da falta: média RGB das duas fases. Ver
      `.selo-da-falta.fase-ab`. */
-  --falta-ab: #828571;
-  --falta-bc: #c66e36;
-  --falta-ca: #906c9b;
+  --falta-ab: #777d75;
+  --falta-bc: #a74f1b;
+  --falta-ca: #664685;
 
   /* Os dois cursores de medição. Escolhidos com o validador de paleta, não a
      olho: o roxo que parecia óbvio ficava a ΔE 3,6 do azul da fase A sob
      protanopia — um daltônico confundiria o cursor com a própria corrente. */
-  --cursor-1: #ffffff;
-  --cursor-2: #ffd166;
+  --cursor-1: #111a1b;
+  --cursor-2: #b34700;
+
+  /* --- a MOLDURA da casa (identidade f10) ---------------------------------
+   * A barra de cima e o rodapé são marinho profundo NOS DOIS TEMAS: são a
+   * moldura do programa, não parte da página. Por isso o texto deles tem
+   * tokens próprios — o --tinta da página não serve sobre o marinho. */
+  --barra: #0e1c31;
+  --barra-borda: #070f1c;
+  --barra-tinta: #ffffff;       /* o nome, o item atual, o hover */
+  --barra-texto: #c3cedc;       /* os itens do menu e os controles */
+  --barra-apagado: #8798af;     /* a contagem do acervo, a versão */
+  /* O logotipo sobre o marinho: a senoide clara e as amostras num azul que
+     se lê no escuro. São as MESMAS variáveis do desenho (`--tinta` e
+     `--fase-a`), redefinidas só dentro da barra. */
+  --barra-logo-tinta: #d5deea;
+  --barra-logo-amostra: #7fb1f0;
+
+  --rodape-texto: #9fb0c6;
+  --rodape-lista: #c9d4e2;
+  --rodape-link: #dfe7f1;
+  --rodape-nota: #7d8fa8;
+  --rodape-filete: #1d2c44;
+
+  /* O marinho da PÁGINA: título, filete de chão e o botão cheio. Dois tokens
+     porque no escuro eles se separam — o título fica claro e o botão
+     continua um bloco de cor com texto branco. */
+  --titulo: #12233d;
+  --marinho: #12233d;
+  --marinho-medio: #2a4468;
+  /* O azul-aço ACESO: equipamento do desenho, linha de chamada, filete do
+     cartão no hover. Mais claro que o --destaque, que é cor de texto. */
+  --aco: #34618f;
+  /* A faixa clara sob a barra (a barra do aplicativo na oscilografia) e o
+     filete dos blocos. */
+  --ceu: #e8eef5;
+  --ceu-borda: #cfd9e5;
+  --borda: #c8d3e0;
+
+  /* O PAPEL MILIMETRADO: textura do início, de arquivos e da base. Ladrilho
+     de 100 px — linha fina a cada 10, média a cada 50, forte a cada 100 —,
+     ancorado no canto da página. A oscilografia fica LISA (`--pagina-lisa`):
+     grade de página atrás de grade de gráfico ficou ruim na maquete. */
+  --papel-cor: #fbfdff;
+  --papel: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cpath d='M10 0V100M20 0V100M30 0V100M40 0V100M60 0V100M70 0V100M80 0V100M90 0V100M0 10H100M0 20H100M0 30H100M0 40H100M0 60H100M0 70H100M0 80H100M0 90H100' stroke='%23e6edf6' stroke-width='.9'/%3E%3Cpath d='M50 0V100M0 50H100' stroke='%23d3dfed' stroke-width='1'/%3E%3Cpath d='M.6 0V100M0 .6H100' stroke='%23bfd0e4' stroke-width='1.1'/%3E%3C/svg%3E");
+  --papel-passo: 100px;
+  --pagina-lisa: #f2f5f9;
+  /* O milimetrado DENTRO da moldura dos gráficos (`pintarMilimetrado`, no
+     `onda.js`): sobre o --fundo do gráfico, mais claro que a grade de
+     valores (--linha) — ele é o papel, e a grade é a medida. */
+  --milimetrado-fino: #e6edf5;
+  --milimetrado-medio: #d6e0ec;
+  --milimetrado-forte: #c4d3e5;
+  /* A coluna da oscilografia: abas, bloco do registro e gráficos começam na
+     mesma margem. */
+  --coluna-da-onda: min(1360px, calc(100% - 40px));
 
   /* A altura de TODO controle do cabeçalho. Um número só, num lugar só: as
      chaves, o par secundário|primário e o ímã tinham cada um a sua conta de
@@ -115,6 +208,10 @@
      em todos os zooms que aparecem (×1,25 = 35; ×1,5 = 42; ×1,75 = 49) — a
      mesma razão do passo da lista de sinais. */
   --alto-da-chave: 28px;
+
+  /* A altura da BARRA de cima. Em variável porque quem fica preso embaixo
+     dela (`position: sticky`) precisa saber quanto descer. */
+  --alto-da-barra-de-cima: 56px;
 
   /* A TABELINHA do cursor: a largura dela e o vão até a onda.
    *
@@ -136,64 +233,99 @@
   --miolo-do-cartao: 20px;
   --alto-da-barra: 4px;
 
-  --sans: "Segoe UI", system-ui, -apple-system, sans-serif;
-  --mono: "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
-
-  color-scheme: dark;
-}
-
-:root[data-tema="claro"] {
-  --fundo: #f5f7f7;
-  --superficie: #ffffff;
-  --tinta: #141c1d;
-  --suave: #57696b;
-  --linha: #c6d2d3;
-  --destaque: #0e6e7a;
-  --destaque-fraco: #dfeff1;
-  --digital: #0a4b54;
-  --cartao: #edf1f1;
-  --cartao-borda: #d2dcdd;
-  --faixa-da-tabela: #e7edee;
-  --faixa-da-lista: #f2f6f7;
-
-  --energia-60: #0e6e7a;
-  --energia-harm: #5b43a8;
-  --energia-dc: #a8304a;
-
-  --calculado-1: #6b3fa0;
-  --calculado-2: #a8306a;
-  --calculado-3: #57696b;
-
-  /* As cores de SOBRA. Entram quando um gráfico tem mais sinais do que as
-     nomeadas acima — e um gráfico nunca repete cor: duas curvas da mesma cor
-     no mesmo eixo não se distinguem, e era exatamente o que acontecia ao pôr
-     `Current IA` e `Voltage A-G` juntos, porque as duas são fase A.
-
-     Escolhidas com `tools/paleta.py`, não a olho: ΔE2000 mínimo de 15 na visão
-     normal e de 9 sob protanopia e deuteranopia, contra TODAS as cores acima,
-     nos DOIS temas — e o mesmo código serve os dois, porque passou no
-     contraste contra os dois fundos. */
-  --traco-1: #50a824;
-  --traco-2: #e65d19;
-  --traco-3: #75783a;
-
-  --bom: #157f5c;
-  --atencao: #b8860b;
-  --ruim: #96172b;
-
-  --fase-a: #3574de;
-  --fase-b: #b8860b;
-  --fase-c: #96172b;
-  --fase-n: #157f5c;
-
-  --falta-ab: #777d75;
-  --falta-bc: #a74f1b;
-  --falta-ca: #664685;
-
-  --cursor-1: #111a1b;
-  --cursor-2: #b34700;
+  /* As fontes da identidade, com as do sistema atrás: se o arquivo não
+     carregar, a tela continua legível em vez de cair numa serifa. */
+  --sans: "Public Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
 
   color-scheme: light;
+}
+
+:root[data-tema="escuro"] {
+  /* O escuro da identidade nova: o mesmo marinho profundo da barra, aberto
+     um pouco para a página. As cores de TRAÇO são as que já estavam
+     validadas no escuro; o fundo novo passou de novo pelo `tools/paleta.py`.
+
+     O fundo dos GRÁFICOS é #09131f, e não o #0b1626 do papel: com o tom mais
+     aberto, o cinza-azulado das convenções IEC, RYB, EUA 208, Canadá e
+     AU/NZ (#516375, #5a6363) caía abaixo de 3:1 de contraste — o teste
+     `test_toda_convencao_de_cores_das_fases_passa_no_validador` pegou. */
+  --fundo: #09131f;
+  --superficie: #112035;
+  --tinta: #e4eaf2;
+  --suave: #95a5ba;
+  --linha: #2a3b54;
+  --destaque: #8fb4e0;
+  --destaque-fraco: #172d4a;
+
+  /* As tiras digitais. Mais claro que o tom antigo (#2f8da1) — escolha dele,
+     entre sete modelos: a tira estava fina e apagada demais no meio de 76
+     linhas. O preço está medido: sob deuteranopia este tom fica a ΔE 1,8 do
+     azul da fase A, contra 14,6 do antigo. Não é colisão DENTRO de um
+     gráfico — digital e analógico nunca dividem painel —, mas na mesma tela
+     são duas coisas da mesma cor para quem não distingue verde e vermelho.
+     Por isso a engrenagem do painel deixa trocar. */
+  --digital: #45b8cf;
+
+  --cartao: #0a1422;
+  --cartao-borda: #22344d;
+  --faixa-da-tabela: #172740;
+  --faixa-da-lista: #0e1b2d;
+
+  --energia-60: #2fb3bd;
+  --energia-harm: #8a72d8;
+  --energia-dc: #cc6a7a;
+
+  --calculado-1: #c499ff;
+  --calculado-2: #ff70ac;
+  --calculado-3: #7c1fff;
+
+  /* As cores de SOBRA do escuro. Escolhidas de novo em 25/10/2026, olhando,
+     depois que o validador passou a simular o daltonismo do jeito certo (no
+     espaço LMS): o laranja de antes ficava IDÊNTICO ao âmbar da fase B sob
+     deuteranopia. */
+  --traco-1: #49760a;
+  --traco-2: #e2128c;
+  --traco-3: #1fecff;
+
+  --bom: #2c9b75;
+  --atencao: #b8860b;
+  --ruim: #d45560;
+
+  --fase-a: #4b83d6;
+  --fase-b: #b8860b;
+  --fase-c: #d45560;
+  --fase-n: #2c9b75;
+
+  --falta-ab: #828571;
+  --falta-bc: #c66e36;
+  --falta-ca: #906c9b;
+
+  --cursor-1: #ffffff;
+  --cursor-2: #ffd166;
+
+  /* A moldura fica um tom ABAIXO da página: no escuro, a barra que tivesse
+     a cor da página deixaria de ser moldura. */
+  --barra: #060d18;
+  --barra-borda: #02060c;
+  --rodape-filete: #16233a;
+
+  --titulo: #eef3f9;
+  --marinho: #2f5885;
+  --marinho-medio: #9fb8d6;
+  --aco: #6f9bd0;
+  --ceu: #0f1d31;
+  --ceu-borda: #22344d;
+  --borda: #2a3b54;
+
+  --papel-cor: #0b1626;
+  --papel: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cpath d='M10 0V100M20 0V100M30 0V100M40 0V100M60 0V100M70 0V100M80 0V100M90 0V100M0 10H100M0 20H100M0 30H100M0 40H100M0 60H100M0 70H100M0 80H100M0 90H100' stroke='%23122139' stroke-width='.9'/%3E%3Cpath d='M50 0V100M0 50H100' stroke='%2316263f' stroke-width='1'/%3E%3Cpath d='M.6 0V100M0 .6H100' stroke='%231c304d' stroke-width='1.1'/%3E%3C/svg%3E");
+  --pagina-lisa: #0d192b;
+  --milimetrado-fino: #111e30;
+  --milimetrado-medio: #17283e;
+  --milimetrado-forte: #203550;
+
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -271,20 +403,8 @@ body {
 .topo.registro .titulo-do-registro { min-width: 0; }
 .topo.registro .marca > .chave.tema { flex: none; }
 
-/* A BARRA DO APLICATIVO, acima do cabeçalho: as voltas à esquerda, o que sai
-   do registro e a base à direita. Fina e com fundo de superfície, para se ler
-   como moldura do programa, e não como parte do registro. */
-.barra-do-app {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 20px;
-  background: var(--superficie);
-  border-bottom: 1px solid var(--linha);
-  overflow-x: auto;
-}
-.barra-do-app > * { flex: none; }
-.barra-do-app .espaco-da-barra { flex: 1; }
+/* (A BARRA DO APLICATIVO saiu em 10/11/2026: ver «A OSCILOGRAFIA —
+   identidade f10», no fim desta folha.) */
 
 /* O título À ESQUERDA e as duas fileiras À DIREITA. Numa janela estreita as
    fileiras descem para baixo do título — e quem decide isso é a LARGURA DA
@@ -1979,6 +2099,8 @@ a.chave, .tema, .voltar, #exportar { text-decoration: none; }
   --ic-avancado: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M1.5 8.5l1-3.5 1 5.5 1-6.5 1 7.5 1-5 1 3.5 1-6 1 7 1-4.5 1 2.5 1-2'/></svg>");
   --ic-filtro: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linejoin='round'><path d='M2 3h12l-4.6 5.2v5.3L6.6 12V8.2z'/></svg>");
   --ic-tema: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5'><circle cx='8' cy='8' r='4.2'/><path d='M8 3.8a4.2 4.2 0 0 0 0 8.4z' fill='black' stroke='none'/><path d='M8 .8v1.4M8 13.8v1.4M.8 8h1.4M13.8 8h1.4M2.9 2.9l1 1M12.1 12.1l1 1M13.1 2.9l-1 1M3.9 12.1l-1 1' stroke-linecap='round'/></svg>");
+  /* Enviar: a seta SOBE para fora da bandeja — o contrário do exportar. */
+  --ic-enviar: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M8 10.5V3M5 6l3-3 3 3M2.5 10v3.2h11V10'/></svg>");
   --ic-exportar: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M8 2v7.5M5 7l3 3 3-3M2.5 13.2h11'/></svg>");
   /* A pasta do acervo. A seta para a esquerda ficou com o «menu», que é quem
      volta ao começo -- duas chaves com a mesma seta não diriam qual é qual. */
@@ -5347,7 +5469,7 @@ table.verbetes tr.pendente td:first-child { box-shadow: inset 3px 0 0 var(--dest
 /* Registro sem `.hdr`: não há lógica nem ajuste para mostrar. Dito na hora do
    envio, ainda dá para arrastar o arquivo que falta — no painel vazio lá
    dentro, já não. */
-.sem-logica {
+p.sem-logica {
   margin: 6px 0 0;
   font-family: var(--mono);
   font-size: 10.5px;
@@ -5777,10 +5899,31 @@ table.verbetes tr.pendente td:first-child { box-shadow: inset 3px 0 0 var(--dest
   white-space: nowrap;
 }
 .opcao-de-registro:hover .nome-do-registro { color: var(--destaque); }
-/* «subir outra no acervo» é um CAMINHO, não um registro: fica no fim, depois
-   de um fio, e na cor de ação. */
-.opcao-de-registro.subir-no-acervo { border-top: 1px solid var(--linha); margin-top: 6px; }
-.opcao-de-registro.subir-no-acervo .nome-do-registro { color: var(--destaque); }
+/* «enviar do computador…» é um CAMINHO, não um registro: fica no fim, depois
+   de um fio, e na cor de ação. Enquanto sobe, a linha de baixo é o
+   progresso, e o item não aceita outro clique. */
+.opcao-de-registro.enviar-do-computador { border-top: 1px solid var(--linha); margin-top: 6px; border-radius: 0 0 5px 5px; }
+.opcao-de-registro.enviar-do-computador .nome-do-registro { color: var(--destaque); display: flex; align-items: center; gap: 6px; }
+.opcao-de-registro.enviar-do-computador .icone-de-envio { --ic: var(--ic-enviar); width: 13px; height: 13px; flex: none; }
+.opcao-de-registro.enviar-do-computador.enviando { cursor: progress; }
+.opcao-de-registro.enviar-do-computador.enviando .sub-do-registro { color: var(--destaque); }
+
+/* O recado do envio feito por um menu: o menu já fechou (ou vai fechar), e o
+   que entrou, o que ficou na antessala e o que não era oscilografia
+   precisam ficar escritos em algum lugar. Canto de baixo, some sozinho. */
+.recado-do-envio {
+  position: fixed; right: 16px; bottom: 16px; z-index: 60;
+  max-width: min(460px, calc(100vw - 32px));
+  padding: 10px 14px; font-size: 13px;
+  background: var(--superficie); color: var(--tinta);
+  border: 1px solid var(--linha); border-left: 4px solid var(--bom);
+  border-radius: 4px; box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+  cursor: pointer;
+}
+.recado-do-envio p { margin: 0 0 4px; }
+.recado-do-envio p:last-child { margin-bottom: 0; }
+.recado-do-envio.atencao { border-left-color: var(--atencao); }
+.recado-do-envio.ruim { border-left-color: var(--ruim); }
 
 /* A vista do plano de impedância, dentro da caixa de ajustes: um rótulo
    curto e as chaves dele na mesma linha. */
@@ -6087,3 +6230,564 @@ table.verbetes tr.pendente td:first-child { box-shadow: inset 3px 0 0 var(--dest
   border-radius: 4px; font: inherit;
 }
 .pl-linha-em-uso .marca-3t { margin-left: 6px; }
+
+/* =========================================================================
+   A MOLDURA DA CASA — identidade f10 (10/11/2026)
+
+   A barra de cima, o rodapé e o papel. Ficam no FIM da folha de propósito:
+   são as regras que mandam no `footer`, no `.versao` e no `.chave` quando
+   estão dentro da moldura, e no fim elas ganham sem precisar de `!important`.
+   Ver `docs/identidade-visual.md` e os partials `_barra.html`,
+   `_rodape.html` e `_logotipo.html`.
+   ========================================================================= */
+
+/* --- a página ------------------------------------------------------------
+ * PORTAL (início, arquivos, base): o papel milimetrado, ancorado no canto da
+ * página, e uma coluna que empurra o rodapé para o pé da janela quando o
+ * conteúdo é curto — rodapé no meio da tela parece página quebrada.
+ *
+ * OSCILOGRAFIA: página LISA. O milimetrado mora dentro da moldura de cada
+ * gráfico (grade de página atrás de grade de gráfico ficou ruim). */
+body.portal {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--papel-cor) var(--papel) 0 0 / var(--papel-passo) var(--papel-passo);
+}
+/* `align-content: start`: o `main` é grade, e esticado pelo flex ele
+   repartiria a sobra de altura ENTRE as linhas — buracos no meio da página. */
+body.portal > main { flex: 1 0 auto; width: 100%; align-content: start; }
+/* O azul-arroxeado do navegador não é cor desta casa. */
+body.portal main a:not(.chave) { color: var(--destaque); }
+body.corpo-das-abas,
+body[data-sha] { background: var(--pagina-lisa); }
+
+/* --- a barra de cima ----------------------------------------------------- */
+.barra-de-cima {
+  position: sticky;
+  top: 0;
+  z-index: 900;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0 40px;
+  height: var(--alto-da-barra-de-cima);
+  /* a mesma coluna de 1200 px do conteúdo, e 20 px de respiro no estreito */
+  padding: 0 max(20px, calc((100% - 1200px) / 2));
+  background: var(--barra);
+  border-bottom: 1px solid var(--barra-borda);
+  color: var(--barra-tinta);
+  font-family: var(--sans);
+  line-height: 1.2;
+}
+
+.marca-da-casa {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  color: var(--barra-tinta);
+  text-decoration: none;
+}
+/* O logotipo é desenhado com `--tinta` e `--fase-a`; sobre o marinho as duas
+   viram as versões claras, só aqui dentro. */
+.barra-de-cima .logotipo-da-barra {
+  --tinta: var(--barra-logo-tinta);
+  --fase-a: var(--barra-logo-amostra);
+  width: 32px;
+  height: 32px;
+}
+.nome-da-casa { display: flex; flex-direction: column; }
+.nome-da-casa b { font-size: 18px; font-weight: 600; line-height: 1; }
+.nome-da-casa small {
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--barra-apagado);
+}
+
+/* O menu: texto, sem caixas nem divisórias. O atual em 600 e um filete
+   branco de 2 px no pé da barra — a marca do lugar, não um botão aceso. */
+.menu-da-casa {
+  display: flex;
+  align-self: stretch;
+  gap: 6px;
+  min-width: 0;
+}
+.item-da-casa {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  color: var(--barra-texto);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color .15s;
+}
+a.item-da-casa:hover { color: var(--barra-tinta); }
+.item-da-casa.atual { color: var(--barra-tinta); font-weight: 600; }
+.item-da-casa.atual::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 0;
+  height: 2px;
+  background: var(--barra-tinta);
+}
+
+/* À direita, o que é da casa e não da página: texto pequeno e quieto, sem
+   moldura. O «voltar» da base, quando aparece, entra à esquerda destes. */
+.controles-da-casa {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex: none;
+}
+.controles-da-casa [hidden] { display: none; }
+.info-da-casa {
+  color: var(--barra-apagado);
+  font-size: 12.5px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+a.info-da-casa:hover { color: var(--barra-tinta); }
+.controles-da-casa .chave,
+.controles-da-casa .versao {
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 2px 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  color: var(--barra-texto);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+.controles-da-casa .versao { color: var(--barra-apagado); }
+.controles-da-casa .chave:hover:not(:disabled),
+.controles-da-casa .versao:hover { color: var(--barra-tinta); background: none; }
+.controles-da-casa .chave.com-icone::before { width: 13px; height: 13px; margin-right: 6px; }
+/* «tema claro» × «tema escuro» trocam uma letra de tamanho: a largura fixa
+   impede a versão, ao lado, de andar a cada clique. */
+.controles-da-casa #tema { min-width: 92px; justify-content: flex-start; }
+
+@media (max-width: 900px) {
+  .barra-de-cima { gap: 0 16px; }
+  .info-da-casa, .nome-da-casa small { display: none; }
+  .item-da-casa { padding: 0 8px; }
+  .item-da-casa.atual::after { left: 8px; right: 8px; }
+}
+@media (max-width: 620px) {
+  .nome-da-casa { display: none; }
+  .menu-da-casa { overflow-x: auto; scrollbar-width: none; }
+}
+
+/* --- o rodapé marinho (portal) -------------------------------------------
+ * `footer.rodape-da-casa`, e não `.rodape-da-casa` solta: a regra `footer`
+ * lá de cima (coluna de 980 px, fonte mono) é a do rodapé antigo, e tem de
+ * perder para esta sem `!important`. */
+footer.rodape-da-casa {
+  flex: none;
+  max-width: none;
+  margin: 40px 0 0;
+  padding: 0;
+  background: var(--barra);
+  color: var(--rodape-texto);
+  font-family: var(--sans);
+  font-size: 13px;
+}
+.rodape-colunas {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 32px 20px 24px;
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1.3fr .9fr;
+  gap: 32px;
+}
+.rodape-coluna p { margin: 0 0 8px; line-height: 1.55; }
+.rodape-coluna .rodape-titulo {
+  margin-bottom: 12px;
+  color: var(--barra-tinta);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.rodape-links,
+.rodape-lista { list-style: none; margin: 0; padding: 0; }
+.rodape-links li,
+.rodape-lista li { padding: 3px 0; }
+.rodape-lista li { color: var(--rodape-lista); }
+footer.rodape-da-casa a { color: var(--rodape-link); text-decoration: none; }
+footer.rodape-da-casa a:hover { color: var(--barra-tinta); text-decoration: underline; }
+.rodape-coluna .rodape-versao {
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--barra-tinta);
+}
+.rodape-coluna .rodape-nota { font-size: 12px; color: var(--rodape-nota); }
+.rodape-pe {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--rodape-filete);
+  font-size: 12px;
+  color: var(--rodape-nota);
+}
+@media (max-width: 900px) {
+  .rodape-colunas { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 520px) {
+  .rodape-colunas { grid-template-columns: 1fr; }
+}
+
+/* =========================================================================
+   A OSCILOGRAFIA — identidade f10 (10/11/2026)
+
+   Página LISA, e UMA coluna para tudo (`--coluna-da-onda`): as abas, o bloco
+   do registro (cabeçalho + tira + o pé com os dois «+ adicionar») e os
+   gráficos começam na mesma margem. Blocos de canto vivo, filete fino e o
+   marinho no topo; o milimetrado só dentro da moldura de cada gráfico, e quem
+   o pinta é o canvas (`pintarMilimetrado`) — fundo de CSS não acompanharia a
+   moldura, que muda com o nome digital mais largo e o segundo eixo.
+
+   Tudo aqui é preso a `body[data-sha]`, `.corpo-das-abas` ou a classes que
+   só existem na onda: a `.chave` do portal é de outra folha.
+   ========================================================================= */
+
+/* --- as abas ------------------------------------------------------------- */
+.corpo-das-abas .barra-de-abas {
+  gap: 4px;
+  /* começa onde começa o bloco do registro, dentro do quadro: quem mede é o
+     `abas.js` (`alinharAbas`); a conta abaixo é o chute até a medida. */
+  padding: 8px 20px 0 var(--esquerda-das-abas, max(20px, calc((100% - 1360px) / 2)));
+  background: var(--ceu);
+  border-bottom: 1px solid var(--ceu-borda);
+}
+.corpo-das-abas .aba-de-oscilografia {
+  height: 32px;
+  padding: 0 8px 0 14px;
+  border: 1px solid var(--ceu-borda);
+  border-bottom: 0;
+  border-radius: 2px 2px 0 0;
+  background: var(--superficie);
+  color: var(--suave);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+}
+.corpo-das-abas .aba-de-oscilografia:hover { color: var(--titulo); }
+/* A ativa tem a cor da PÁGINA de baixo e desce um pixel sobre o filete: é a
+   aba que se abre para a página, como a de um fichário. */
+.corpo-das-abas .aba-de-oscilografia.ativa {
+  position: relative;
+  top: 1px;
+  background: var(--pagina-lisa);
+  border-color: var(--borda);
+  color: var(--titulo);
+  box-shadow: inset 0 2px 0 var(--marinho);
+  font-weight: 600;
+}
+/* «+ nova aba»: uma aba a mais, sem fundo — mesma altura, mesma borda, o
+   mesmo «+» em texto dos outros botões de acrescentar. */
+.corpo-das-abas .barra-de-abas .aba-nova {
+  margin: 0;
+  padding: 0 14px;
+  background: transparent;
+  border-style: solid;
+  color: var(--titulo);
+  font-weight: 600;
+}
+.corpo-das-abas .barra-de-abas .aba-nova:hover {
+  background: var(--superficie);
+  border-color: var(--borda);
+  color: var(--titulo);
+}
+.corpo-das-abas .quadro-da-aba { background: var(--pagina-lisa); }
+
+/* --- o bloco do registro ------------------------------------------------- */
+body[data-sha] .topo.registro,
+body[data-sha] .tira,
+body[data-sha] .tira-dos-ieds {
+  width: var(--coluna-da-onda);
+  max-width: none;
+  margin-inline: auto;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+}
+body[data-sha] .topo.registro {
+  margin-top: 16px;
+  padding: 14px 20px 12px;
+  border-top: 2px solid var(--marinho);
+}
+body[data-sha] .topo.registro h1 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--titulo);
+}
+body[data-sha] .topo.registro .sub { color: var(--suave); }
+body[data-sha] .tira {
+  padding: 10px 20px;
+  border-top: 0;
+  background: var(--faixa-da-tabela);
+}
+body[data-sha] .tira .rot,
+body[data-sha] .tira .fi-js::before {
+  font-family: var(--sans);
+  font-weight: 600;
+  color: var(--suave);
+}
+/* O pé do bloco: «+ adicionar oscilografia», «+ adicionar gráfico» e, com
+   mais de um IED, o alinhamento e uma linha por IED. */
+body[data-sha] .tira-dos-ieds {
+  padding: 10px 20px;
+  border-top: 0;
+}
+body[data-sha] .tira-dos-ieds[hidden] { display: none; }
+.barra-dos-ieds { gap: 8px; }
+
+/* As chaves do registro na letra da casa: sans, canto vivo, tinta marinho. */
+.topo.registro .chave,
+.tira-dos-ieds .chave {
+  border-radius: 2px;
+  border-color: var(--borda);
+  background: var(--superficie);
+  color: var(--titulo);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.topo.registro .chave:hover:not(:disabled),
+.tira-dos-ieds .chave:hover:not(:disabled) {
+  border-color: var(--aco);
+  background: var(--destaque-fraco);
+  color: var(--titulo);
+}
+.topo.registro .chave.escolhido,
+.tira-dos-ieds .chave.escolhido {
+  background: var(--marinho);
+  border-color: var(--marinho);
+  color: #ffffff;
+}
+.topo.registro .lado button { font-family: var(--sans); font-weight: 600; }
+.topo.registro .chave.sem-logica,
+.topo.registro .chave.sem-eventos { opacity: .55; }
+
+/* Os dois «+ adicionar»: o MESMO botão — mesma altura, mesma letra, o mesmo
+   «+» em texto, cheios na tinta da casa. São os dois únicos botões cheios do
+   bloco: é por eles que entra coisa nova na tela. */
+.tira-dos-ieds .barra-dos-ieds .mais-oscilografia,
+.tira-dos-ieds .barra-dos-ieds .novo-grafico {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--marinho);
+  border-radius: 2px;
+  background: var(--marinho);
+  color: #ffffff;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.tira-dos-ieds .barra-dos-ieds .mais-oscilografia:hover:not(:disabled),
+.tira-dos-ieds .barra-dos-ieds .novo-grafico:hover,
+.tira-dos-ieds .barra-dos-ieds .novo-grafico[aria-expanded="true"] {
+  border-color: var(--marinho);
+  background: var(--marinho);
+  color: #ffffff;
+  filter: brightness(1.18);
+}
+.tira-dos-ieds .barra-dos-ieds .mais-oscilografia:disabled { opacity: .5; }
+.barra-dos-ieds .novo-grafico .seta-do-menu {
+  margin-left: 8px;
+  font-size: 10px;
+  opacity: .75;
+}
+/* A âncora do «+ adicionar oscilografia» é item do flex e cobrava o vão duas
+   vezes. */
+.barra-dos-ieds > .ancora-de-menu { margin-left: -8px; }
+/* O grupo do «+ adicionar gráfico» é de onde o menu pende, alinhado à
+   esquerda do botão: a âncora não se posiciona, o grupo sim. */
+.grupo-do-novo { position: relative; display: inline-flex; }
+.grupo-do-novo > .ancora-de-menu { position: static; }
+.rotulo-dos-ieds {
+  margin-left: 12px;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* --- o menu dos tipos de gráfico ----------------------------------------- */
+#menu-novo-painel .menu-suspenso {
+  min-width: 310px;
+  padding: 6px 0;
+  border: 1px solid var(--borda);
+  border-top: 2px solid var(--marinho);
+  border-radius: 2px;
+  box-shadow: 0 6px 6px -2px rgba(14, 28, 49, .16);
+}
+#menu-novo-painel .cabeca-menu {
+  margin: 0 0 4px;
+  padding: 4px 14px 6px;
+  border-bottom: 1px solid var(--linha);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+}
+.menu-suspenso button.opcao.opcao-de-tipo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 14px;
+  font-family: var(--sans);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--titulo);
+}
+.opcao-de-tipo .caixa-do-icone {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--borda);
+  border-radius: 2px;
+  background: var(--superficie);
+  color: var(--aco);
+}
+.icone-do-tipo {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.icone-do-tipo .cheio { fill: currentColor; stroke: none; }
+.opcao-de-tipo .rotulo-do-tipo { white-space: nowrap; }
+.opcao-de-tipo:hover:not(:disabled) .caixa-do-icone {
+  background: var(--marinho);
+  border-color: var(--marinho);
+  color: #ffffff;
+}
+/* «(só no avançado)»: desabilitado, mas LEGÍVEL — é ele que ensina que o
+   modo existe. */
+.menu-suspenso button.opcao.opcao-de-tipo.desabilitada {
+  opacity: 1;
+  color: var(--suave);
+  cursor: not-allowed;
+}
+.opcao-de-tipo.desabilitada .caixa-do-icone {
+  border-style: dashed;
+  background: transparent;
+  color: var(--suave);
+}
+
+/* --- os gráficos ----------------------------------------------------------- */
+body[data-sha] #graficos {
+  width: var(--coluna-da-onda);
+  max-width: none;
+  padding-inline: 0;
+  gap: 18px;
+}
+body[data-sha] .marca-de-solta { left: 0; right: 0; }
+body[data-sha] .grafico {
+  position: relative;
+  border: 1px solid var(--borda);
+  border-top: 2px solid var(--marinho);
+  border-radius: 0;
+  padding: 0 14px 12px;
+}
+body[data-sha] .grafico.painel-escolhido { border-color: var(--aco); }
+/* O título do painel como CABEÇALHO do bloco. Só fundo e margem: ele tem os
+   botões dentro, e o `display` dele é o do flex de sempre. */
+body[data-sha] .grafico-titulo {
+  margin: 0 -14px 10px;
+  padding: 7px 14px;
+  background: var(--faixa-da-tabela);
+  border-bottom: 1px solid var(--cartao-borda);
+}
+body[data-sha] .grafico-titulo .nome-painel {
+  font-family: var(--sans);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--titulo);
+}
+/* «abrir tela de localização», no cabeçalho do localizador: é o caminho
+   para uma TELA, e por isso é o único botão cheio do cabeçalho. */
+.grafico-titulo .medida.abre-localizacao {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px 0 6px;
+  border-color: var(--marinho);
+  border-radius: 2px;
+  background: var(--marinho);
+  color: #ffffff;
+  font-family: var(--sans);
+  font-weight: 600;
+}
+.grafico-titulo .medida.abre-localizacao:hover { color: #ffffff; filter: brightness(1.18); }
+.abre-localizacao .icone-do-tipo { width: 15px; height: 15px; }
+
+/* A tela de localização na coluna, como bloco da página. */
+body[data-sha] .tela-localizar {
+  width: var(--coluna-da-onda);
+  max-width: none;
+  margin: 18px auto 30px;
+  border: 1px solid var(--borda);
+  border-top: 2px solid var(--marinho);
+  border-radius: 0;
+}
+body[data-sha] .tela-localizar[hidden] { display: none; }
+body[data-sha] .aviso-do-pe { width: var(--coluna-da-onda); max-width: none; padding-inline: 0; }
+
+/* --- a alça de esticar ------------------------------------------------------
+ * Uma faixa fina na borda de baixo do bloco, três tracinhos no meio, cursor
+ * de redimensionar. Quem faz o gesto é o `onda.js` (`alcaDeAltura`). */
+.alca-de-altura {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 10px;
+  display: grid;
+  place-items: center;
+  cursor: ns-resize;
+  touch-action: none;
+  z-index: 3;
+}
+.tracos-da-alca {
+  position: relative;
+  width: 22px;
+  height: 5px;
+  border-top: 1px solid var(--suave);
+  border-bottom: 1px solid var(--suave);
+  opacity: .7;
+}
+.tracos-da-alca::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 1px;
+  border-top: 1px solid var(--suave);
+}
+.alca-de-altura:hover,
+.alca-de-altura.puxando { background: var(--destaque-fraco); }
+.alca-de-altura:hover .tracos-da-alca,
+.alca-de-altura.puxando .tracos-da-alca { opacity: 1; }
+/* Enquanto se puxa, o cursor é o da alça em qualquer lugar da tela, e nada
+   se seleciona: a mão sai da faixa de 10 px no primeiro movimento. */
+body.esticando-grafico,
+body.esticando-grafico * { cursor: ns-resize !important; user-select: none; }
