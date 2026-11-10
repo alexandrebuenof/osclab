@@ -6,9 +6,11 @@
   <title>OscLab — Arquivos</title>
   {% include "_cabeca.html" %}
 {%- from "_barra.html" import barra with context %}
+{%- from "_faixa.html" import faixa %}
 </head>
-<body class="portal">
+<body class="portal tela-de-arquivos">
   {{ barra(atual="arquivos") }}
+  {{ faixa("Arquivos", "Envie oscilografias e abra as que já estão no acervo.", acende="oscilografia") }}
 
 
   <main>
@@ -53,5 +55,6 @@
   {% include "_rodape.html" %}
 
   <script src="{{ url_for('static', filename='js/acervo.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/vitrine.js') }}"></script>
 </body>
 </html>

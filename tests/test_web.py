@@ -2772,7 +2772,10 @@ def test_a_BARRA_DE_CIMA_e_a_mesma_em_todo_o_portal_e_marca_onde_se_esta(cliente
         assert html.count('id="tema"') == 1, rota
         assert 'rel="icon"' in html and "favicon-mono.svg" in html, rota
         assert 'class="rodape-da-casa"' in html, rota
-        assert 'class="tela-do-menu portal"' in html or 'class="portal"' in html, rota
+        # o papel e a moldura vêm da classe `portal` no <body>; a página pode
+        # ter a sua junto (`tela-do-menu`, `tela-de-arquivos`, `tela-da-base`)
+        import re
+        assert re.search(r'<body class="(?:[^"]* )?portal(?: [^"]*)?"', html), rota
     abas = cliente.get("/abas").get_data(as_text=True)
     assert 'aria-current="page">Oscilografia</span>' in abas
     assert 'class="rodape-da-casa"' not in abas

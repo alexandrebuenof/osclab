@@ -6,8 +6,9 @@
   <title>OscLab — Base de dados</title>
   {% include "_cabeca.html" %}
 {%- from "_barra.html" import barra with context %}
+{%- from "_faixa.html" import faixa %}
 </head>
-<body class="portal">
+<body class="portal tela-da-base">
   {#- «voltar» fecha o painel aberto e volta ao passo anterior; aparece só
       quando há painel. Mora na BARRA, à esquerda do que é da casa: sair de
       onde se está é sempre em cima, e botão de sair que muda de lugar é
@@ -18,6 +19,7 @@
               style="--ic: var(--ic-voltar)" hidden
               title="Voltar ao passo anterior">voltar</button>
   {%- endcall %}
+  {{ faixa("Base de dados", "O dicionário dos sinais digitais e os parâmetros das linhas.", acende="base") }}
 
   {#- A tela inteira e' desenhada pelo `base.js`, a partir do estado que vem
       aqui embaixo ja' pronto. O estado viaja NO HTML, e nao numa primeira
@@ -61,5 +63,6 @@
   {% include "_rodape.html" %}
 
   <script src="{{ url_for('static', filename='js/base.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/vitrine.js') }}"></script>
 </body>
 </html>

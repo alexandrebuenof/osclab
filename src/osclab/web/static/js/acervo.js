@@ -41,19 +41,124 @@
     const dados = new FormData();
     for (const arquivo of arquivos) dados.append("arquivos", arquivo);
 
-    mostrarRecado([`Enviando ${arquivos.length} arquivo(s)…`], "neutro");
+    recado.hidden = true;
     area.classList.add("ocupada");
+    const painel = progressoDoEnvio([...arquivos]);
 
     try {
-      const resposta = await fetch("/api/acervo", { method: "POST", body: dados });
-      const corpo = await resposta.json();
+      const corpo = await enviarComProgresso(dados, painel);
+      painel.fase("lido", "pronto");
       relatar(corpo);
       await carregarLista();
     } catch (erro) {
+      painel.fase("erro", `falhou: ${erro.message}`);
       mostrarRecado([`Falha no envio: ${erro.message}`], "ruim");
     } finally {
       area.classList.remove("ocupada");
+      setTimeout(() => painel.sumir(), 2600);
     }
+  }
+
+  // --- o progresso do envio -----------------------------------------------
+  //
+  // Um registro de relé chega a dezenas de MB, e numa rede de subestação o
+  // envio leva tempo: sem número na tela, a pessoa não sabe se travou. Por
+  // arquivo e no total, em kB e em %, e depois a fase «lendo», que é o
+  // servidor abrindo o .cfg/.dat, conferindo o par e gravando no acervo — o
+  // que sobra de espera depois que o último byte subiu.
+  //
+  // `fetch` não diz quanto já subiu; o XMLHttpRequest diz, pelo
+  // `upload.onprogress`. A velocidade é a real: em localhost a barra enche
+  // num piscar, e é isso mesmo.
+
+  const kB = (bytes) => (bytes / 1024).toLocaleString("pt-BR",
+    { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+  function progressoDoEnvio(lista) {
+    const caixa = criar("div", "progresso");
+    caixa.setAttribute("role", "status");
+    caixa.dataset.fase = "enviando";
+    const titulo = criar("div", "progresso-titulo");
+    const nomeFase = criar("span", "progresso-fase", "enviando");
+    const detalhe = criar("span", "progresso-detalhe", `${lista.length} arquivo(s)`);
+    titulo.append(nomeFase, detalhe);
+    caixa.append(titulo);
+    const total = lista.reduce((s, a) => s + a.size, 0);
+
+    const linha = (nome, tamanho, classe) => {
+      const l = criar("div", "progresso-linha" + (classe ? " " + classe : ""));
+      const barra = criar("span", "progresso-barra");
+      const cheio = criar("span", "progresso-cheio");
+      barra.append(cheio);
+      const numeros = criar("span", "progresso-numeros", `0,0 de ${kB(tamanho)} kB`);
+      const pct = criar("span", "progresso-pct", "0 %");
+      l.append(criar("span", "progresso-nome", nome), barra, numeros, pct);
+      caixa.append(l);
+      return { l, cheio, numeros, pct, tamanho };
+    };
+    const pinta = (x, enviados) => {
+      const f = x.tamanho ? Math.min(1, enviados / x.tamanho) : 1;
+      x.cheio.style.width = `${(f * 100).toFixed(1)}%`;
+      x.numeros.textContent = `${kB(enviados)} de ${kB(x.tamanho)} kB`;
+      x.pct.textContent = `${Math.floor(f * 100)} %`;
+      x.l.classList.toggle("feito", f >= 1);
+    };
+
+    const linhas = lista.map((a) => linha(a.name, a.size));
+    const linhaTotal = linha("total", total, "progresso-total");
+    area.after(caixa);
+
+    return {
+      total,
+      /* O navegador diz quantos bytes do PEDIDO subiram, não de qual
+       * arquivo: os arquivos vão em fila dentro do formulário, então o
+       * enviado é repartido na ordem — enche o primeiro, depois o segundo.
+       * O pedido tem também os separadores do formulário (algumas centenas
+       * de bytes); por isso os números ficam presos ao tamanho de cada um. */
+      mostrar(enviados) {
+        let resto = Math.min(enviados, total);
+        for (const x of linhas) {
+          const deste = Math.max(0, Math.min(x.tamanho, resto));
+          resto -= deste;
+          pinta(x, deste);
+        }
+        pinta(linhaTotal, Math.min(enviados, total));
+      },
+      fase(qual, texto) {
+        caixa.dataset.fase = qual;
+        nomeFase.textContent = texto;
+        if (qual === "lendo") {
+          detalhe.textContent = "abrindo os arquivos, conferindo o par e gravando no acervo";
+        }
+      },
+      sumir() { caixa.remove(); },
+    };
+  }
+
+  function enviarComProgresso(dados, painel) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/acervo");
+      xhr.upload.onprogress = (ev) => {
+        // `ev.total` é o pedido inteiro; a fração dele vale para os arquivos
+        painel.mostrar(ev.lengthComputable && ev.total
+          ? (ev.loaded / ev.total) * painel.total : ev.loaded);
+      };
+      // O último byte subiu: a espera dali em diante é a leitura.
+      xhr.upload.onload = () => {
+        painel.mostrar(painel.total);
+        painel.fase("lendo", "lendo e conferindo");
+      };
+      xhr.onload = () => {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch (_e) {
+          reject(new Error(`o servidor respondeu ${xhr.status} sem um relatório legível`));
+        }
+      };
+      xhr.onerror = () => reject(new Error("o servidor não respondeu"));
+      xhr.send(dados);
+    });
   }
 
   function relatar(corpo) {
