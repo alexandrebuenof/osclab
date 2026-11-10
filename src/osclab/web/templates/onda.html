@@ -158,9 +158,13 @@
       <button type="button" class="chave com-icone" id="ajuda"
               style="--ic: var(--ic-ajuda)"
               title="Como usar esta tela: gestos, teclas e o que cada gráfico mostra.">ajuda</button>
+      {#- Dentro de uma aba o tema é o da barra de cima (que troca todas as abas
+          juntas); dois botões de tema na mesma tela seria um a mais. #}
+      {%- if not em_aba %}
       <button type="button" class="chave tema com-icone" id="tema"
               style="--ic: var(--ic-tema)"
               title="Alternar tema">tema</button>
+      {%- endif %}
       {#- As CORES DAS FASES: a convenção de cada país ou empresa (ver
           `fases.css` e `tema.js`). Vale para o programa todo, como o tema. #}
       <button type="button" class="chave com-icone" id="fases"
