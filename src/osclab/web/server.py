@@ -83,6 +83,7 @@ from osclab.basedados import pasta as base_mod
 from osclab.basedados import tres_terminais as tres_terminais_mod
 from osclab.dsp import fasor as fasor_mod
 from osclab.faultloc import ldl as ldl_mod
+from osclab.faultloc import parametros as parametros_mod
 from osclab.faultloc import rele as rele_mod
 from osclab.faultloc import seqneg as seqneg_mod
 from osclab.formats import ajustes as ajustes_mod
@@ -592,13 +593,16 @@ def create_app() -> Flask:
                               "motivo": "escolha a linha da base em «parâmetros»"}
         else:
             fontes["base"] = {"ok": False, "motivo": "sem base de dados ativa"}
+        ajustes_por = {term["letra"]: ajustes_de(term) for term in terminais[:2]}
         for term in terminais[:2]:
-            ajustes = ajustes_de(term)
+            ajustes = ajustes_por[term["letra"]]
             fontes[term["letra"]] = seqneg_mod.linha_dos_ajustes(
                 ajustes, impedancia_mod.relacao_rtp_rtc(term["registro"], ajustes))
         fontes.setdefault("B", {"ok": False, "motivo": "a aba não tem IED B"})
-        fontes["manual"] = seqneg_mod.linha_digitada(
-            corpo.get("manual"), impedancia_mod.relacao_rtp_rtc(registro, {}))
+        # O secundário do que se digita é o do relé A: dos ajustes dele
+        # primeiro (num `.CEV` a relação só está ali), do cabeçalho depois.
+        rtp_rtc_a = impedancia_mod.relacao_rtp_rtc(registro, ajustes_por["A"])
+        fontes["manual"] = seqneg_mod.linha_digitada(corpo.get("manual"), rtp_rtc_a)
 
         pedida = str(corpo.get("fonte") or "auto")
         usada = None
@@ -640,6 +644,25 @@ def create_app() -> Flask:
                       # O aviso da derivação (TAP) ou dos trechos sem TAP
                       # confirmado: a tela o mostra enquanto essa linha vale.
                       aviso_linha=(fontes.get(usada) or {}).get("aviso", "") if usada else "")
+        # A janela «parâmetros» (as colunas Relé · Base · Digitado, nas quatro
+        # vistas, e quem difere da coluna em uso) e o selo «⚠ relé ≠ base» do
+        # cabeçalho do painel. Conta em `faultloc/parametros.py`. O k0 que o
+        # relé GRAVA (k0M1/k0A1 na SEL) vence o calculado na coluna dele.
+        k0s = {}
+        for letra, ajustes in ajustes_por.items():
+            k0_lido = impedancia_mod.k0_de(ajustes)
+            if k0_lido is not None and k0_lido[1] == "lido":
+                k0s[letra] = k0_lido[0]
+        pacote.update(
+            parametros=parametros_mod.montar(fontes, usada, [x["letra"] for x in terminais[:2]],
+                                             rtp_rtc_a, corpo.get("manual"), k0s),
+            n_ieds=len(terminais),
+            # O rodapé diz «a partir de SE X» só quando o arquivo (ou o apelido)
+            # diz a estação; sem ela, «a partir deste terminal».
+            estacao_conhecida={x["letra"]: bool((acervo.apelido(x["sha"]) or "").strip()
+                                                or (x["registro"].station or "").strip())
+                               for x in terminais},
+            sobre_o_resultado=ldl_mod.sobre_o_resultado())
         if corpo.get("painel"):
             # O painel «localizador de faltas» lê os DOIS cursores e o número
             # do relé. O cursor 2 é a mesma conta guardada, lida noutro

@@ -74,6 +74,33 @@ TEMAS = {
     },
 }
 
+#: As curvas do painel «localizador de faltas» — um gráfico que não divide
+#: eixo com fase nenhuma, e por isso uma paleta À PARTE: os quatro métodos e a
+#: linha tracejada do número do relé, em âmbar (variante 17 da maquete,
+#: aprovada em 10/11/2026). Conferida contra ela mesma, não contra as fases.
+LOCALIZADOR = {
+    "escuro": {
+        "fundo": "#09131f",
+        "cores": {
+            "--loc-seqneg": "#4fb3bf",
+            "--loc-laco": "#e08a74",
+            "--loc-takagi": "#77818d",
+            "--loc-takagi-i2": "#a98be0",
+            "--loc-rele": "#f0b429",
+        },
+    },
+    "claro": {
+        "fundo": "#ffffff",
+        "cores": {
+            "--loc-seqneg": "#1f5f6b",
+            "--loc-laco": "#b5533c",
+            "--loc-takagi": "#6b7480",
+            "--loc-takagi-i2": "#6a3f8f",
+            "--loc-rele": "#b07800",
+        },
+    },
+}
+
 #: Distância perceptual mínima entre dois traços do mesmo gráfico. Abaixo
 #: disso, "a azul e a outra azul" — que é como se descreve um gráfico que não
 #: se lê.
@@ -382,9 +409,11 @@ def main() -> int:
         return 0
 
     problemas = 0
-    for tema, dados in TEMAS.items():
+    grupos = [(f"tema {tema}", dados) for tema, dados in TEMAS.items()]
+    grupos += [(f"localizador, tema {tema}", dados) for tema, dados in LOCALIZADOR.items()]
+    for nome, dados in grupos:
         reprovacoes, avisos = conferir(dados["cores"], dados["fundo"])
-        print(f"tema {tema}: {len(dados['cores'])} cores, "
+        print(f"{nome}: {len(dados['cores'])} cores, "
               f"{len(reprovacoes) or 'nenhuma'} reprovação(ões), "
               f"{len(avisos)} aviso(s)")
         for q in reprovacoes:
