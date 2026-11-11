@@ -263,99 +263,104 @@
 }
 
 :root[data-tema="escuro"] {
-  /* O escuro da identidade nova: o mesmo marinho profundo da barra, aberto
-     um pouco para a página. As cores de TRAÇO são as que já estavam
-     validadas no escuro; o fundo novo passou de novo pelo `tools/paleta.py`.
+  /* A PALETA 08 «Ardósia clara», escolhida pelo Alexandre em 11/11/2026 na
+     rodada de dez paletas do escuro (ramo maquete/escuro, ver
+     docs/identidade-visual.md): um escuro ABERTO, cinza-azulado médio, que
+     dá menos salto ao trocar de janela. Até ali era o marinho profundo.
 
-     O fundo dos GRÁFICOS é #09131f, e não o #0b1626 do papel: com o tom mais
-     aberto, o cinza-azulado das convenções IEC, RYB, EUA 208, Canadá e
-     AU/NZ (#516375, #5a6363) caía abaixo de 3:1 de contraste — o teste
-     `test_toda_convencao_de_cores_das_fases_passa_no_validador` pegou. */
-  --fundo: #09131f;
-  --superficie: #112035;
-  --tinta: #e4eaf2;
-  --suave: #95a5ba;
-  --linha: #2a3b54;
-  --destaque: #8fb4e0;
-  --destaque-fraco: #172d4a;
+     Toda cor de traço passou pelo `tools/paleta.py` contra o fundo novo dos
+     gráficos — mais claro que o de antes, então fases, calculados, sobras,
+     localizador e calculadora foram reajustados até passar SEM as exceções
+     `CONHECIDAS`; as convenções do `fases.css` também. */
+  --fundo: #1f252c;
+  --superficie: #2a3139;
+  --tinta: #d6dee6;
+  --suave: #9ba7b4;
+  --linha: #3d4854;
+  --destaque: #a7c0dc;
+  --destaque-fraco: #3e4853;
 
-  /* As tiras digitais. Mais claro que o tom antigo (#2f8da1) — escolha dele,
-     entre sete modelos: a tira estava fina e apagada demais no meio de 76
-     linhas. O preço está medido: sob deuteranopia este tom fica a ΔE 1,8 do
-     azul da fase A, contra 14,6 do antigo. Não é colisão DENTRO de um
-     gráfico — digital e analógico nunca dividem painel —, mas na mesma tela
-     são duas coisas da mesma cor para quem não distingue verde e vermelho.
-     Por isso a engrenagem do painel deixa trocar. */
-  --digital: #45b8cf;
+  /* As tiras digitais. Sob deuteranopia este tom fica perto do azul da fase
+     A; digital e analógico nunca dividem painel, e a engrenagem do painel
+     deixa trocar. */
+  --digital: #62c3d6;
 
-  --cartao: #0a1422;
-  --cartao-borda: #22344d;
-  --faixa-da-tabela: #172740;
-  --faixa-da-lista: #0e1b2d;
+  --cartao: #232931;
+  --cartao-borda: #37414c;
+  --faixa-da-tabela: #333b45;
+  --faixa-da-lista: #252c33;
 
   --energia-60: #2fb3bd;
   --energia-harm: #8a72d8;
   --energia-dc: #cc6a7a;
 
-  --calculado-1: #c499ff;
-  --calculado-2: #ff70ac;
-  --calculado-3: #7c1fff;
+  --calculado-1: #7b74c3;
+  --calculado-2: #e79dc9;
+  --calculado-3: #9c38fa;
 
-  /* As cores de SOBRA do escuro. Escolhidas de novo em 25/10/2026, olhando,
-     depois que o validador passou a simular o daltonismo do jeito certo (no
-     espaço LMS): o laranja de antes ficava IDÊNTICO ao âmbar da fase B sob
-     deuteranopia. */
-  --traco-1: #49760a;
+  /* As cores de SOBRA do escuro (ver o comentário delas no claro). */
+  --traco-1: #5b833f;
   --traco-2: #e2128c;
   --traco-3: #1fecff;
 
-  --bom: #2c9b75;
-  --atencao: #b8860b;
-  --ruim: #d45560;
+  --bom: #45b88d;
+  --atencao: #d0a03a;
+  --ruim: #ef6c70;
 
-  --fase-a: #4b83d6;
-  --fase-b: #b8860b;
-  --fase-c: #d45560;
-  --fase-n: #2c9b75;
+  --fase-a: #6b9de6;
+  --fase-b: #d0a03a;
+  --fase-c: #ef6c70;
+  --fase-n: #45b88d;
 
-  --falta-ab: #828571;
-  --falta-bc: #c66e36;
-  --falta-ca: #906c9b;
+  --falta-ab: #9e9e90;
+  --falta-bc: #e08655;
+  --falta-ca: #ad84ab;
 
   --cursor-1: #ffffff;
-  --cursor-2: #ffd166;
+  --cursor-2: #fbe160;
 
   /* A moldura fica um tom ABAIXO da página: no escuro, a barra que tivesse
-     a cor da página deixaria de ser moldura. */
-  --barra: #060d18;
-  --barra-borda: #02060c;
-  --rodape-filete: #16233a;
+     a cor da página deixaria de ser moldura. Na 08 ela é grafite, não
+     marinho, e o texto dela tem tokens próprios. */
+  --barra: #161b21;
+  --barra-borda: #0b0e10;
+  --barra-tinta: #ffffff;
+  --barra-texto: #c9d2dc;
+  --barra-apagado: #8f9aa6;
+  --barra-logo-tinta: #dfe4ea;
+  --barra-logo-amostra: #9fbfef;
+  --rodape-texto: #aeb7c0;
+  --rodape-lista: #c9d2dc;
+  --rodape-link: #e4e8ee;
+  --rodape-nota: #8f9aa6;
+  --rodape-filete: #2d3640;
 
-  --titulo: #eef3f9;
-  --marinho: #2f5885;
-  --marinho-medio: #9fb8d6;
-  --aco: #6f9bd0;
-  --loc-seqneg: #4fb3bf;
-  --loc-laco: #e08a74;
-  --loc-takagi: #77818d;
-  --loc-takagi-i2: #a98be0;
-  --loc-rele: #f0b429;
-  --loc-plato: #6f9bd0;
-  --loc-plato-fundo: rgba(111, 155, 208, .12);
-  --loc-hachura: rgba(149, 165, 186, .16);
+  --titulo: #e8eef4;
+  --marinho: #3e6390;
+  --marinho-medio: #b0c6de;
+  --aco: #86a9d2;
+  --loc-seqneg: #85d0d6;
+  --loc-laco: #eea08b;
+  --loc-takagi: #5a91af;
+  --loc-takagi-i2: #bba3ec;
+  --loc-rele: #f3c04b;
+  --loc-plato: #86a9d2;
+  --loc-plato-fundo: rgba(134, 169, 210, .12);
+  --loc-hachura: rgba(155, 167, 180, .16);
   --calc-onda: #4fb3bf;
   --calc-fasor: #e0a060;
-  --calc-visor-fundo: #060d18;
-  --ceu: #0f1d31;
-  --ceu-borda: #22344d;
-  --borda: #2a3b54;
+  /* O visor da calculadora é um bloco no tom da barra, nos dois temas. */
+  --calc-visor-fundo: #161b21;
+  --ceu: #272e36;
+  --ceu-borda: #37414c;
+  --borda: #3d4854;
 
-  --papel-cor: #0b1626;
-  --papel: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cpath d='M10 0V100M20 0V100M30 0V100M40 0V100M60 0V100M70 0V100M80 0V100M90 0V100M0 10H100M0 20H100M0 30H100M0 40H100M0 60H100M0 70H100M0 80H100M0 90H100' stroke='%23122139' stroke-width='.9'/%3E%3Cpath d='M50 0V100M0 50H100' stroke='%2316263f' stroke-width='1'/%3E%3Cpath d='M.6 0V100M0 .6H100' stroke='%231c304d' stroke-width='1.1'/%3E%3C/svg%3E");
-  --pagina-lisa: #0d192b;
-  --milimetrado-fino: #111e30;
-  --milimetrado-medio: #17283e;
-  --milimetrado-forte: #203550;
+  --papel-cor: #232a32;
+  --papel: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cpath d='M10 0V100M20 0V100M30 0V100M40 0V100M60 0V100M70 0V100M80 0V100M90 0V100M0 10H100M0 20H100M0 30H100M0 40H100M0 60H100M0 70H100M0 80H100M0 90H100' stroke='%2328303a' stroke-width='.9'/%3E%3Cpath d='M50 0V100M0 50H100' stroke='%232d353f' stroke-width='1'/%3E%3Cpath d='M.6 0V100M0 .6H100' stroke='%23353e49' stroke-width='1.1'/%3E%3C/svg%3E");
+  --pagina-lisa: #252c34;
+  --milimetrado-fino: #262d35;
+  --milimetrado-medio: #2c343d;
+  --milimetrado-forte: #353e48;
 
   color-scheme: dark;
 }

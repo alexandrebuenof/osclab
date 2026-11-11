@@ -43,16 +43,17 @@ import math
 #: A paleta de traço de cada tema, como está no `osclab.css`.
 TEMAS = {
     "escuro": {
-        "fundo": "#09131f",
+        # paleta 08 «Ardósia clara», escolhida em 11/11/2026
+        "fundo": "#1f252c",
         "cores": {
-            "--fase-a": "#4b83d6",
-            "--fase-b": "#b8860b",
-            "--fase-c": "#d45560",
-            "--fase-n": "#2c9b75",
-            "--calculado-1": "#c499ff",
-            "--calculado-2": "#ff70ac",
-            "--calculado-3": "#7c1fff",
-            "--traco-1": "#49760a",
+            "--fase-a": "#6b9de6",
+            "--fase-b": "#d0a03a",
+            "--fase-c": "#ef6c70",
+            "--fase-n": "#45b88d",
+            "--calculado-1": "#7b74c3",
+            "--calculado-2": "#e79dc9",
+            "--calculado-3": "#9c38fa",
+            "--traco-1": "#5b833f",
             "--traco-2": "#e2128c",
             "--traco-3": "#1fecff",
         },
@@ -80,13 +81,13 @@ TEMAS = {
 #: aprovada em 10/11/2026). Conferida contra ela mesma, não contra as fases.
 LOCALIZADOR = {
     "escuro": {
-        "fundo": "#09131f",
+        "fundo": "#1f252c",
         "cores": {
-            "--loc-seqneg": "#4fb3bf",
-            "--loc-laco": "#e08a74",
-            "--loc-takagi": "#77818d",
-            "--loc-takagi-i2": "#a98be0",
-            "--loc-rele": "#f0b429",
+            "--loc-seqneg": "#85d0d6",
+            "--loc-laco": "#eea08b",
+            "--loc-takagi": "#5a91af",
+            "--loc-takagi-i2": "#bba3ec",
+            "--loc-rele": "#f3c04b",
         },
     },
     "claro": {
@@ -104,7 +105,7 @@ LOCALIZADOR = {
 #: A calculadora (variante 10, 11/11/2026): a marca do domínio, onda e fasor,
 #: no filete da conta e nas teclas — conferidas uma contra a outra.
 CALCULADORA = {
-    "escuro": {"fundo": "#09131f",
+    "escuro": {"fundo": "#1f252c",
                "cores": {"--calc-onda": "#4fb3bf", "--calc-fasor": "#e0a060"}},
     "claro": {"fundo": "#ffffff",
               "cores": {"--calc-onda": "#1f5f6b", "--calc-fasor": "#8a4b12"}},
@@ -115,7 +116,7 @@ CALCULADORA = {
 _NO_VISOR = {"--calc-visor-onda": "#4fb3bf", "--calc-visor-fasor": "#e0a060",
              "--calc-visor-tinta": "#e4eaf2"}
 VISOR = {
-    "escuro": {"fundo": "#060d18", "cores": dict(_NO_VISOR)},
+    "escuro": {"fundo": "#161b21", "cores": dict(_NO_VISOR)},
     "claro": {"fundo": "#0e1c31", "cores": dict(_NO_VISOR)},
 }
 

@@ -11,6 +11,12 @@
    `tests/test_web.py` passa cada bloco por ele de novo: no escuro, zero
    reprovações; no claro, só a que o tema claro já tem hoje.
 
+   Os blocos do ESCURO foram reajustados em 11/11/2026, quando o escuro passou
+   à paleta 08 «Ardósia clara»: o fundo dos gráficos clareou (#1f252c), e o
+   cinza escuro do «preto» e os vermelhos fechados de antes caíam abaixo de
+   3:1. A matiz de cada fase ficou; mudaram luz e saturação até o validador
+   passar. O claro não mudou.
+
    Os dois temas levam DOIS atributos (`data-tema` e `data-fases`), para
    ganhar do `:root[data-tema="escuro"]` do `osclab.css` sem depender da ordem
    dos arquivos. Desde 10/11/2026 o claro é o padrão do `:root`; o `tema.js`
@@ -24,12 +30,12 @@
 
 /* IEC 60445 / NBR 5410 (escuro): marrom, preto, cinza, azul-claro */
 :root[data-tema="escuro"][data-fases="iec60445"] {
-  --fase-a: #99511b;
-  --fase-b: #516375;
+  --fase-a: #a86124;
+  --fase-b: #427b8a;
   --fase-c: #808080;
-  --fase-n: #87abc6;
+  --fase-n: #d6e8eb;
   --traco-1: #1fecff;
-  --traco-2: #e124fc;
+  --traco-2: #d874fb;
   --traco-3: #63bd00;
 }
 /* IEC 60445 / NBR 5410 (claro): marrom, preto, cinza, azul-claro */
@@ -46,8 +52,8 @@
 :root[data-tema="escuro"][data-fases="ryb"] {
   --fase-a: #d42a2a;
   --fase-b: #b4ab00;
-  --fase-c: #3f63bd;
-  --fase-n: #5a6363;
+  --fase-c: #5aa0ed;
+  --fase-n: #6c7375;
   --traco-1: #1fecff;
   --traco-2: #00cf87;
   --traco-3: #009051;
@@ -64,10 +70,10 @@
 }
 /* EUA 208/120 V (escuro): preto, vermelho, azul, branco */
 :root[data-tema="escuro"][data-fases="eua208"] {
-  --fase-a: #5a6363;
+  --fase-a: #6c7375;
   --fase-b: #d42a2a;
-  --fase-c: #3f63bd;
-  --fase-n: #bdc6d8;
+  --fase-c: #5aa0ed;
+  --fase-n: #c8d8f9;
   --traco-1: #63bd00;
   --traco-2: #00cf87;
   --traco-3: #009051;
@@ -84,12 +90,12 @@
 }
 /* EUA 480/277 V (escuro): marrom, laranja, amarelo, cinza */
 :root[data-tema="escuro"][data-fases="eua480"] {
-  --fase-a: #99511b;
+  --fase-a: #a86124;
   --fase-b: #f07f13;
   --fase-c: #fcfc1b;
   --fase-n: #808080;
   --traco-1: #1fecff;
-  --traco-2: #e124fc;
+  --traco-2: #d874fb;
   --traco-3: #fc3663;
 }
 /* EUA 480/277 V (claro): marrom, laranja, amarelo, cinza */
@@ -105,9 +111,9 @@
 /* Canadá (escuro): vermelho, preto, azul, branco */
 :root[data-tema="escuro"][data-fases="canada"] {
   --fase-a: #d42a2a;
-  --fase-b: #5a6363;
-  --fase-c: #3f63bd;
-  --fase-n: #bdc6d8;
+  --fase-b: #6c7375;
+  --fase-c: #5aa0ed;
+  --fase-n: #c8d8f9;
   --traco-1: #63bd00;
   --traco-2: #00cf87;
   --traco-3: #009051;
@@ -125,9 +131,9 @@
 /* Austrália / NZ (escuro): vermelho, branco, azul, preto */
 :root[data-tema="escuro"][data-fases="aunz"] {
   --fase-a: #d42a2a;
-  --fase-b: #bdc6d8;
-  --fase-c: #3f63bd;
-  --fase-n: #5a6363;
+  --fase-b: #c8d8f9;
+  --fase-c: #5aa0ed;
+  --fase-n: #6c7375;
   --traco-1: #63bd00;
   --traco-2: #00cf87;
   --traco-3: #009051;
@@ -144,13 +150,13 @@
 }
 /* China (GB) (escuro): amarelo, verde, vermelho, azul-claro */
 :root[data-tema="escuro"][data-fases="china"] {
-  --fase-a: #b4ab00;
-  --fase-b: #2e9e3e;
-  --fase-c: #cf001b;
-  --fase-n: #87abc6;
+  --fase-a: #c7b705;
+  --fase-b: #20972d;
+  --fase-c: #ed735a;
+  --fase-n: #d6e8eb;
   --traco-1: #e2128c;
   --traco-2: #1fecff;
-  --traco-3: #e124fc;
+  --traco-3: #d874fb;
 }
 /* China (GB) (claro): amarelo, verde, vermelho, azul-claro */
 :root[data-tema="claro"][data-fases="china"] {

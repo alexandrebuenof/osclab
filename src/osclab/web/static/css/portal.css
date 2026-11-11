@@ -48,31 +48,48 @@
 }
 
 :root[data-tema="escuro"] {
-  /* No escuro o marinho de botão (#2f5885) é escuro demais para ser linha
-     de chão sobre o papel #0b1626; um tom acima, ainda quieto. */
-  --portal-chao: #3d5a80;
-  --portal-cheio-hover: #3a6a9e;
-  --portal-filete-apagado: #3a5070;
-  --portal-borda-icone: #34496a;
-  --portal-borda-hover: #4a6488;
-  --portal-filete-passo: #3a5070;
-  --portal-solta-borda: #3d5578;
-  --portal-solta-fundo: #0e1b2d;
-  --portal-selo-bom-borda: #1f5e48;
-  --portal-selo-bom-fundo: #0f2a22;
+  /* Paleta 08 «Ardósia clara» (11/11/2026): o chão é o marinho de botão
+     puxado para a tinta, ainda quieto. */
+  --portal-chao: #59799f;
+  --portal-cheio-hover: #55759d;
+  --portal-filete-apagado: #596471;
+  --portal-borda-icone: #4b5662;
+  --portal-borda-hover: #67737f;
+  --portal-filete-passo: #596471;
+  --portal-solta-borda: #596471;
+  --portal-solta-fundo: #252c33;
+  --portal-selo-bom-borda: #366e5f;
+  --portal-selo-bom-fundo: #2d4143;
 
-  /* traço claro e apagado sobre o marinho; o aceso, o aço claro */
-  --se-tinta: #5b7193;
-  --se-tinta-longe: #2e4260;
-  --se-tela: #5b7193;
+  /* O DESENHO no escuro: o tratamento «ajustável» da maquete no realce 20
+     (escolha dele, 11/11/2026), com os valores já interpolados — traço
+     ÷ título = 34 %. O claro fica como estava (o realce dele é 0). A
+     espessura e o véu das faces da casa estão nas regras logo abaixo. */
+  --se-tinta: #828b95;
+  --se-tinta-longe: #535c66;
+  --se-tela: #828b95;
+  --se-papel: #293038;
 
-  --casa-tinta: #a9bbd3;
-  --casa-tinta-longe: #6d83a3;
-  --casa-papel: #0b1626;
-  --casa-face-1: #2b3f5c;
-  --casa-face-2: #1f314b;
-  --casa-face-3: #16253b;
+  --casa-tinta: #b3bdc8;
+  --casa-tinta-longe: #77828d;
+  --casa-papel: #2d3743;
+  --casa-face-1: #46525e;
+  --casa-face-2: #353f4a;
+  --casa-face-3: #2d3640;
+  /* o aceso da casa de arquivos e base (no claro, o --aco) */
+  --casa-destaque: #92b1d5;
 }
+
+/* A espessura do desenho no escuro (realce 20): a aresta não encolhe com o
+   desenho — 0,79 px de tela em vez dos ≈ 0,3 px que o desenho reduzido
+   dava, que era o que o deixava apagado. As faces da casa de arquivos e base
+   ficam um pouco mais cheias. */
+:root[data-tema="escuro"] .vitrine-desenho svg.se3d .a,
+:root[data-tema="escuro"] .vitrine-desenho svg.se3d .l,
+:root[data-tema="escuro"] .casa-da-faixa svg.se3d .a,
+:root[data-tema="escuro"] .casa-da-faixa svg.se3d .l { vector-effect: non-scaling-stroke; }
+:root[data-tema="escuro"] svg.se3d .a { stroke-width: .79px; }
+:root[data-tema="escuro"] .faixa-de-titulo .casa-da-faixa svg.se3d [data-camada="casa-casca"] .f { fill-opacity: .61; }
 
 /* --- botões do portal ---------------------------------------------------- */
 .botao-da-casa {
@@ -395,7 +412,7 @@ body.portal .botao-da-casa.cheio {
   --se-face-2: var(--casa-face-2);
   --se-face-3: var(--casa-face-3);
   --se-tela: var(--casa-tinta);
-  --se-destaque: var(--aco);
+  --se-destaque: var(--casa-destaque, var(--aco));
 }
 .casa-da-faixa svg { height: 100%; }
 /* Sem esmaecer: a casa É o assunto aqui, não o que está em volta dela. */
