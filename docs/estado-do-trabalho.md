@@ -31,6 +31,15 @@ main só depois da minha revisão) · B `../osclab-maq-eventos` 8774 · C `../os
 E `../osclab-maq-refino` 8773. Padrões assumidos sem resposta dele: `Ω/km` fica; o `.eev`
 real (pendrive) é lido só para aprender o formato, a maquete usa um fictício.
 
+**Resultado da noite (22h40):** A juntado no main (d166c90, suíte ok, sem push). Maquetes prontas e no ar:
+B eventos 8774 (`.eev` = CSV do EnerVista; recomendadas 02/03) · C calculadora 8775 (recomendada 10)
+· D vitrine http://localhost:8771/maquete/menus/ (72 menus, 9 desconexões) + dois IEDs nas
+variantes 18/19/20 · E refino 8773 (recomendada 03+01+06+02). Perguntas de cada uma nos `.md`
+das maquetes. **Defeito no main:** com dois IEDs, em secundário, a coluna do relé B usa a
+relação do relé A (`faultloc/parametros.montar` recebe um `rtp_rtc` só) — corrigir junto com
+a escolha 18/19/20. **Defeito no main achado pela C:** conta do usuário + filtro 60 Hz = erro 500
+(`plot/catalogo.efetivo`). Falta F (escuro), de noite.
+
 Regras de sempre: maquete antes (dez por função nova), versão `0.8.0` só quando ele aprovar
 a rodada, push só com a confirmação dele.
 
