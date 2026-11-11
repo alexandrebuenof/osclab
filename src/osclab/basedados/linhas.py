@@ -174,8 +174,8 @@ def buscar(base, texto: str) -> list[dict]:
     sozinha; as duas eram palpite tirado de um nome, e o km da falta sai da
     linha escolhida. Quem escolhe é quem olha.
 
-    `sugerida` e `casou` continuam no pacote, sempre falsos e vazios, só
-    porque a tela atual ainda os lê; saem quando a janela for refeita.
+    Os campos `sugerida` e `casou` saíram com a janela refeita (variante 17
+    da maquete do localizador, 10/11/2026).
     """
     digitadas = _palavras(texto).split()
     saida = []
@@ -186,7 +186,7 @@ def buscar(base, texto: str) -> list[dict]:
                                      for t in x["trechos"]]))
         if any(p not in alvo for p in digitadas):
             continue
-        saida.append({**x, "sugerida": False, "casou": []})
+        saida.append(dict(x))
     # Ordem alfabética SEM acento: pelo código do caractere, «ÁGUA BOA» ia
     # para depois de «SIGMA».
     saida.sort(key=lambda d: _palavras(d["nome"]))

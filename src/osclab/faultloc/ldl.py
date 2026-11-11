@@ -399,6 +399,44 @@ QUANDO_USAR = {
                   "carga sem pré-falta e é o que menos erra com infeed. Piora com TC "
                   "saturado; não existe na trifásica."),
 }
+#: O detalhe que a ajuda «? métodos» do painel acrescenta ao `COMO_CALCULA`.
+DETALHE = {
+    "seqneg": ("Usa V2 e I2 dos DOIS terminais e só os módulos: não precisa de relógio "
+               "sincronizado, só de os dois serem lidos dentro da falta sustentada. Z0 "
+               "não entra."),
+    "laco": ("No laço de terra I_laço = Iφ + k0·3I0, com k0 = (Z0 − Z1)/(3·Z1); no de "
+             "fase, V e I são as diferenças entre as duas fases. Um terminal, sem "
+             "pré-falta."),
+    "takagi": ("A pré-falta é a janela de um ciclo que acaba um ciclo antes do início da "
+               "falta. Serve à trifásica. Não corrige a alimentação do outro terminal "
+               "(infeed)."),
+    "takagi_i2": ("A I2 é a do LAÇO (I2φ no de terra, I2φ1 − I2φ2 no de fase). Recusa a "
+                  f"trifásica (|I2| abaixo de {100 * MINIMO_I2_SOBRE_I1:.0f} % de |I1|)."),
+}
+
+
+def sobre_o_resultado() -> list[list[str]]:
+    """O bloco final da ajuda «? métodos»: de onde sai o número e a faixa. Os
+    números do texto são as constantes deste módulo — mudou a conta, muda o
+    texto."""
+    def br(v: float) -> str:
+        return f"{v:g}".replace(".", ",")
+    return [
+        ["qual método", "Com os dois terminais, a sequência negativa. Com um: Takagi I2 na "
+                        "falta assimétrica, Takagi ΔI na trifásica; o laço só quando nenhum "
+                        "dos dois tem número."],
+        ["qual número", f"A mediana do método no PLATÔ — o trecho em que a falta está "
+                        f"assentada, de {br(CICLOS_ANTES_DO_PLATO)} ciclos depois do início "
+                        f"até {br(CICLOS_DEPOIS_DO_PLATO)} de ciclo antes da abertura ou do "
+                        f"fim da falta."],
+        ["o trecho a patrulhar", f"É a dispersão do resultado no platô, com mínimo de "
+                                 f"±{br(FAIXA_MINIMA_KM)} km. Não é o erro do método: o laço "
+                                 f"com Rf e carga erra quilômetros com dispersão quase zero."],
+        ["fundo hachurado", "Entrando na falta a janela de um ciclo ainda está pela metade, e "
+                            "depois da abertura sobra carga: ali a curva não mede a falta."],
+    ]
+
+
 #: Como cada método calcula, numa frase.
 COMO_CALCULA = {
     "seqneg": ("Iguala a tensão de sequência negativa no ponto da falta vista pelos "
@@ -717,14 +755,16 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
     reg_a = term_a.registro
     t_a = reg_a.time
     if term_a.v is None or term_a.i is None:
-        pacote["aviso"] = f"IED A: {term_a.aviso}"
+        # Com um IED só não há «A»: a letra só existe para distinguir dois.
+        pacote["aviso"] = f"IED A: {term_a.aviso}" if term_b is not None else term_a.aviso
         return pacote, None
     v = term_a.veredito
     laco = v.laco if v is not None and v.tipo else ""
     pacote["tipo"] = v.tipo if v is not None else ""
     pacote["laco"] = laco
     if v is None or v.instante is None:
-        pacote["aviso"] = "o IED A não mostra o início de uma falta"
+        pacote["aviso"] = ("o IED A não mostra o início de uma falta" if term_b is not None
+                           else "o registro não mostra o início de uma falta")
         return pacote, None
     if term_b is not None and term_b.aviso:
         pacote["aviso"] = f"IED B: {term_b.aviso}"
@@ -882,7 +922,7 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
         z1_dir = complex(linha["r"], linha["x"])
         seq_a = _seqs_paradas(term_a)
         if _direcao(seq_a, _pre_de(term_a, seq_a), v2a, i2a, z1_dir, no_plato_a) is False:
-            atras = "o IED A vê a falta PARA TRÁS"
+            atras = "o IED A vê a falta PARA TRÁS" if tem_b else "o relé vê a falta PARA TRÁS"
         elif tem_b:
             proprias = _seqs_paradas(term_b)
             seq_b = tuple(_no(x, idx_b) for x in proprias)
@@ -896,7 +936,8 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
             pacote["metodos"][metodo] = {"nome": NOMES[metodo], "curto": CURTOS[metodo],
                                          "km": None, "motivo": motivos.get(metodo, ""),
                                          "quando": QUANDO_USAR[metodo],
-                                         "como": COMO_CALCULA[metodo]}
+                                         "como": COMO_CALCULA[metodo],
+                                         "detalhe": DETALHE[metodo]}
             continue
         s = series[metodo]
         valores = s[no_plato if metodo == "seqneg" else no_plato_a]
@@ -918,7 +959,8 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
         pacote["metodos"][metodo] = {"nome": NOMES[metodo], "curto": CURTOS[metodo],
                                      "km": km_med, "dispersao": disp, "fora": fora,
                                      "motivo": motivo, "quando": QUANDO_USAR[metodo],
-                                     "como": COMO_CALCULA[metodo]}
+                                     "como": COMO_CALCULA[metodo],
+                                     "detalhe": DETALHE[metodo]}
         if metodo == "seqneg":
             pacote["metodos"][metodo]["modelo"] = modelo_sn
         # A curva vai à tela limitada a ±1 LT além das pontas: um método que

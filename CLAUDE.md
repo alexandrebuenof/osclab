@@ -516,12 +516,23 @@ osclab/
   moldura e fora do fundo guardado: o arrasto desloca o sinal, não o papel.
   Grade de página atrás de grade de gráfico ficou ruim na maquete. Os
   gráficos sem moldura retangular (fasorial, planos) ficam lisos.
-- **«Localizar falta» mora no painel localizador** *(10/11/2026)*. A barra
-  do aplicativo saiu (arquivos, menu e base são da barra de cima; o exportar
-  desceu para a fileira do registro), e o acesso à tela de localização é o
-  «abrir tela de localização» no cabeçalho do painel «localizador de
-  faltas». Sem painel desses na tela, o «+ adicionar gráfico» cria um — tirar
-  o tipo do menu deixaria a tela sem caminho.
+- **A localização de falta É o painel localizador** *(10/11/2026, variante
+  17 da maquete)*. A barra do aplicativo saiu, e a TELA «localizar falta»
+  saiu também: o código dela ficou, desligado (`TELA_LOC_LIGADA = false` em
+  `onda.js`, como o dicionário `futura=True`). O cabeçalho do painel tem só
+  `km` / `% da linha`, «parâmetros», «? métodos» e `comprimento 137,0 km`
+  (sem a fonte — ela mora em «parâmetros»), mais o selo `⚠ relé ≠ base`
+  quando os ajustes do relé diferem da linha comparada em Z1, Z0/k0 ou LL. O
+  gráfico hachura onde a curva não mede (sem texto, e a curva não é
+  desenhada ali), marca o platô com um colchete acima da moldura e traz o
+  número do relé em âmbar (`--loc-rele`); o rodapé diz SÓ o trecho a
+  patrulhar — «a partir de SE X», «a partir deste terminal» sem a estação,
+  «a partir do IED A» com mais de uma oscilografia (nunca «IED A» com um
+  só). A janela «parâmetros» compara Relé · Base de dados · Digitado em
+  blocos, com «usar» por coluna, «● em uso» e vermelho onde difere da coluna
+  em uso; Ω ⇄ Ω/km e primário ⇄ secundário são VISTA, e toda conta é de
+  `faultloc/parametros.py`. Sem painel desses na tela, o «+ adicionar
+  gráfico» cria um — tirar o tipo do menu deixaria a localização sem caminho.
 - **«+ adicionar gráfico» fica ao lado de «+ adicionar oscilografia»**, no pé
   do bloco do registro, o mesmo botão nos dois; o gráfico novo continua
   entrando no FIM da lista. O menu de tipos tem um ícone de traço por tipo

@@ -480,6 +480,24 @@ def test_o_validador_de_paleta_confere_as_cores_QUE_ESTAO_NO_CSS():
             f"tema {tema}: o validador e o CSS discordam")
 
 
+def test_a_paleta_do_LOCALIZADOR_e_a_do_css_e_passa_no_validador():
+    """As curvas do localizador e o âmbar do relé têm paleta própria
+    (`paleta.LOCALIZADOR`): a mesma do CSS, e sem reprovação nos dois temas —
+    tritanopia só avisa, como em toda paleta do projeto."""
+    import re
+
+    from osclab import paths
+    paleta = _paleta_do_repositorio()
+    texto = (paths.STATIC_DIR / "css" / "osclab.css").read_text(encoding="utf-8")
+    corte = texto.index('\n:root[data-tema="escuro"] {')
+    padrao = re.compile(r"(--loc-(?:seqneg|laco|takagi|takagi-i2|rele))\s*:\s*(#[0-9a-f]{6})")
+    for tema, pedaco in (("claro", texto[:corte]), ("escuro", texto[corte:])):
+        do_css = dict(padrao.findall(pedaco))
+        assert paleta.LOCALIZADOR[tema]["cores"] == do_css, tema
+        reprovacoes, _ = paleta.conferir(do_css, paleta.LOCALIZADOR[tema]["fundo"])
+        assert not reprovacoes, (tema, reprovacoes)
+
+
 def _paleta_do_repositorio():
     import importlib.util
     import pathlib
@@ -2680,17 +2698,19 @@ def test_a_BASE_DE_DADOS_fica_na_barra_de_cima_e_nao_na_fileira():
 
 
 def test_LOCALIZAR_FALTA_mora_no_painel_localizador():
-    """O botão «localizar falta» saiu da barra (10/11/2026): o acesso à tela é
-    o «abrir tela de localização» no cabeçalho do painel «localizador de
-    faltas». Sem painel na tela, o «+ adicionar gráfico» cria um — e o menu
-    tem de continuar oferecendo o tipo, senão a tela fica sem caminho."""
+    """O botão «localizar falta» saiu da barra (10/11/2026), e com a variante
+    17 a TELA de localização saiu também: fica o painel «localizador de
+    faltas», com «parâmetros» e «? métodos» no cabeçalho. O código da tela
+    ficou, DESLIGADO — como o dicionário `futura=True`. O menu tem de
+    continuar oferecendo o tipo, senão a localização fica sem caminho."""
     onda = _template("onda.html")
     js = _onda_js()
     assert 'id="localizar"' not in onda
     assert 'getElementById("localizar")' not in js
     assert 'id="tela-localizar"' in onda
-    assert '"abrir tela de localização"' in js
-    assert "abrirLocalizacao(true)" in js
+    assert "const TELA_LOC_LIGADA = false;" in js
+    assert '"abrir tela de localização"' not in js
+    assert '"parâmetros"' in js and '"? métodos"' in js
     assert '["localizador", "localizador de faltas",' in js
 
 

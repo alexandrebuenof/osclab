@@ -247,7 +247,8 @@ def test_a_busca_nao_sugere_nada_e_lista_em_ordem_alfabetica(tmp_path, monkeypat
     achadas = linhas_mod.buscar(base, "")
     assert [x["nome"] for x in achadas] == ["LT ÁGUA BOA - SIGMA", "LT MI - NI",
                                             "LT SIGMA - OMEGA"]
-    assert not any(x["sugerida"] or x["casou"] for x in achadas)
+    # Nem o campo existe mais (saiu com a janela refeita, variante 17).
+    assert not any("sugerida" in x or "casou" in x for x in achadas)
     # Cada palavra digitada filtra, sem acento e como pedaço de palavra.
     assert [x["nome"] for x in linhas_mod.buscar(base, "agua")] == ["LT ÁGUA BOA - SIGMA"]
     assert [x["nome"] for x in linhas_mod.buscar(base, "sig ome")] == ["LT SIGMA - OMEGA"]
@@ -294,6 +295,21 @@ def test_a_linha_escolhida_pelo_nome_vale_com_um_terminal_so(tmp_path, monkeypat
     assert errada["fontes"]["base"]["ok"] is False and errada["linha"] is None
     lista = cliente.get(f"/api/onda/{sha}/linhas-da-base?q=alfa").get_json()
     assert lista["base"] is True and [x["nome"] for x in lista["linhas"]] == ["LT ALFA - BETA"]
+    # A janela «parâmetros» (variante 17): a coluna da base nas quatro vistas,
+    # e o selo, que só sai quando o relé difere — o CEV de teste não traz ajuste.
+    par = com["parametros"]
+    assert par["fichas"]["base"]["prim"]["ohm"]["km"] == "37,5"
+    assert par["fichas"]["base"]["prim"]["km"]["r"] == "0,08"
+    assert par["selo"] == [] and com["n_ieds"] == 1
+    assert "estacao_conhecida" in com and com["sobre_o_resultado"]
+    digitado = cliente.post(f"/api/onda/{sha}/localizar",
+                            json={"painel": True, "fonte": "manual",
+                                  "manual": {"r": "3", "x": "15", "km": "37,5"},
+                                  "linha_base": "LT ALFA - BETA"}).get_json()
+    assert digitado["fonte"] == "manual"
+    cmp = digitado["parametros"]["comparacao"]["ohm"]["base"]
+    assert cmp["km"] is False and cmp["mod"] is False and cmp["r0"] is False
+    assert digitado["parametros"]["fichas"]["manual"]["prim"]["ohm"]["k0mod"] == ""
 
 
 def test_a_linha_de_tres_terminais_entra_pelo_caminho_A_B_com_o_aviso(tmp_path, monkeypatch,

@@ -1,5 +1,19 @@
 # Onde o trabalho está
 
+## 10/11/2026 — o painel localizador da variante 17 (ramo `localizador-17`)
+
+Feito, a partir da maquete `maquete/localizador-grafico` (variante 17, com os dois
+ajustes pedidos: sem a troca R+jX ⇄ |Z|∠θ e sem as wordbits sob os valores do relé):
+a TELA de localização desligada (`TELA_LOC_LIGADA = false`, código guardado); cabeçalho
+com km / % da linha, «parâmetros», «? métodos», `comprimento` e o selo `⚠ relé ≠ base`;
+hachura onde a curva não mede, colchete do platô, relé em âmbar (paleta `LOCALIZADOR`
+em `tools/paleta.py`); rodapé só com o trecho a patrulhar; janela «parâmetros» refeita
+(Relé · Base · Digitado, «usar» por coluna, vermelho além da tolerância, Ω/km e
+primário/secundário como vista). Conta em `faultloc/parametros.py`, com testes.
+`sugerida`/`casou` saíram da busca da base. `CONTRATO` 24 → 25.
+
+Pendente com o Alexandre: revisar e juntar no `main`; versão `0.8.0` quando aprovar.
+
 ## 09/11/2026 — painel localizador, parâmetros da linha e linhas de três terminais (commits 469091c … 36261f5)
 
 Feito: painel «localizador de faltas» (curvas dos métodos no tempo; curva apagada fora do

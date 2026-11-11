@@ -175,6 +175,17 @@
   /* O azul-aço ACESO: equipamento do desenho, linha de chamada, filete do
      cartão no hover. Mais claro que o --destaque, que é cor de texto. */
   --aco: #34618f;
+  /* O painel localizador de faltas (variante 17, 10/11/2026): as curvas dos
+     métodos e o âmbar do relé, validados juntos por `tools/paleta.py`
+     (`LOCALIZADOR`); o fundo hachurado onde a curva não mede e o platô. */
+  --loc-seqneg: #1f5f6b;
+  --loc-laco: #b5533c;
+  --loc-takagi: #6b7480;
+  --loc-takagi-i2: #6a3f8f;
+  --loc-rele: #b07800;
+  --loc-plato: #34618f;
+  --loc-plato-fundo: rgba(52, 97, 143, .10);
+  --loc-hachura: rgba(85, 103, 127, .16);
   /* A faixa clara sob a barra (a barra do aplicativo na oscilografia) e o
      filete dos blocos. */
   --ceu: #e8eef5;
@@ -314,6 +325,14 @@
   --marinho: #2f5885;
   --marinho-medio: #9fb8d6;
   --aco: #6f9bd0;
+  --loc-seqneg: #4fb3bf;
+  --loc-laco: #e08a74;
+  --loc-takagi: #77818d;
+  --loc-takagi-i2: #a98be0;
+  --loc-rele: #f0b429;
+  --loc-plato: #6f9bd0;
+  --loc-plato-fundo: rgba(111, 155, 208, .12);
+  --loc-hachura: rgba(149, 165, 186, .16);
   --ceu: #0f1d31;
   --ceu-borda: #22344d;
   --borda: #2a3b54;
@@ -6105,7 +6124,14 @@ p.sem-logica {
 .pl-pilula .medida + .medida { margin-left: -1px; }
 .legenda .pl-valor { font-weight: 700; font-size: 12.5px; color: var(--tinta); }
 .legenda .pl-marca-rele, .pl-mini .pl-marca-rele {
-  background: repeating-linear-gradient(90deg, var(--tinta) 0 5px, transparent 5px 8px); }
+  background: repeating-linear-gradient(90deg, var(--loc-rele) 0 5px, transparent 5px 8px); }
+/* O cabeçalho: o comprimento da linha em uso e o selo «⚠ relé ≠ base». */
+.pl-comprimento { font: 12.5px var(--mono); color: var(--suave); white-space: nowrap; }
+.pl-comprimento b { color: var(--tinta); font-weight: 600; }
+.pl-comprimento.sem { color: var(--atencao); }
+.pl-selo-div { font: 600 11.5px var(--mono); color: var(--ruim); border: 1px solid var(--ruim);
+  background: color-mix(in srgb, var(--ruim) 10%, transparent); border-radius: 999px;
+  padding: 0 8px; cursor: pointer; white-space: nowrap; }
 .legenda li.pl-escolhido .nome { font-weight: 700; }
 .legenda li.pl-apagado { opacity: .45; }
 .legenda li.pl-indisponivel .marca { background: var(--suave) !important; opacity: .5; }
@@ -6137,23 +6163,57 @@ p.sem-logica {
 .pl-nota { margin: 4px 0 0; color: var(--suave); font-size: 11px; }
 
 /* ----------------------------------------------------------------------
-   A JANELA «PARÂMETROS» DO PAINEL LOCALIZADOR
+   A JANELA «PARÂMETROS» DO PAINEL LOCALIZADOR (variante 17, 10/11/2026)
 
-   A mesma moldura das outras janelas (`.busca`): cabeça com o ×, as abas no
-   desenho das abas de IED, corpo de ALTURA FIXA — trocar de aba ou digitar
-   na busca não pode fazer o «aplicar» fugir de debaixo do mouse — e o pé.
+   A mesma moldura das outras janelas (`.busca`), com ALTURA FIXA: a tabela
+   compara Relé · Base de dados · Digitado em blocos (cabeçalho de bloco com
+   régua, faixas alternadas, como o catálogo). A coluna em uso tem o filete
+   do destaque; a célula que difere dela além da tolerância, vermelho.
    ---------------------------------------------------------------------- */
-.busca.parametros-loc { width: min(1180px, 96vw); }
+.busca.parametros-loc { width: min(1100px, 96vw); height: 86vh; max-height: 86vh; }
 .busca.parametros-loc[open] { display: flex; flex-direction: column; }
-.parametros-loc .cabeca .pl-linha-em-uso { min-width: 0; }
-/* Rola só a TABELA: com a janela inteira rolando, o campo de busca subia e
-   sumia junto com as primeiras linhas. */
-.parametros-loc .corpo-dos-parametros {
-  height: 52vh; margin: 4px 0 12px; overflow-y: auto;
-  display: flex; flex-direction: column;
-}
-.parametros-loc .corpo-dos-parametros > .fila-loc,
-.parametros-loc .corpo-dos-parametros > .resumo-das-linhas { flex: none; }
+.parametros-loc .corpo-dos-parametros { flex: 1; min-height: 0; overflow-y: auto; margin: 6px 0 8px; }
+.parametros-loc .pe-do-catalogo { border-top: 1px solid var(--linha); padding-top: 8px; }
+.parametros-loc .nota-dos-parametros { color: var(--suave); font-size: 11.5px; }
+.parametros-loc .escolha-da-base .barra-do-catalogo,
+.parametros-loc .barra-do-catalogo { margin: 0 0 8px; }
+.parametros-loc .chip-da-linha { font-size: 12px; padding: 2px 8px; }
+.parametros-loc .lista-da-base-loc { display: flex; flex-direction: column; height: 300px;
+  margin: 0 0 10px; padding: 4px 8px; border: 1px solid var(--linha); border-radius: 6px; }
+.parametros-loc .lista-da-base-loc > .fila-loc,
+.parametros-loc .lista-da-base-loc > .resumo-das-linhas { flex: none; }
+.parametros-loc .lista-da-base-loc input[type="search"] { flex: 1; }
+.ficha-loc { width: 100%; border-collapse: separate; border-spacing: 0; font: 12px var(--mono); }
+.ficha-loc thead th { position: sticky; top: 0; z-index: 2; background: var(--superficie);
+  vertical-align: bottom; padding: 6px 8px; text-align: right; font-family: var(--sans);
+  border-bottom: 1px solid var(--linha); }
+.ficha-loc thead th b { display: block; font-size: 12.5px; color: var(--tinta); }
+.ficha-loc .origem-da-coluna { display: block; font-size: 11px; font-weight: 400; color: var(--suave);
+  max-width: 230px; margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ficha-loc th.col-grandeza, .ficha-loc tbody th { text-align: left; color: var(--suave);
+  font-weight: 400; width: 190px; padding: 3px 8px; }
+.ficha-loc td { padding: 3px 8px; text-align: right; white-space: nowrap; color: var(--tinta); }
+.ficha-loc tr.faixa > th, .ficha-loc tr.faixa > td { background: var(--faixa-da-lista); }
+.ficha-loc tr.linha-de-bloco td { padding: 0 2px; }
+.ficha-loc td.em-uso { box-shadow: inset 2px 0 0 var(--destaque), inset -2px 0 0 var(--destaque); }
+.ficha-loc thead th.em-uso { box-shadow: inset 2px 0 0 var(--destaque), inset -2px 0 0 var(--destaque),
+  inset 0 3px 0 var(--destaque); }
+.ficha-loc td.vazio .valor { color: var(--suave); }
+.ficha-loc td.vermelho { color: var(--ruim); font-weight: 700;
+  background: color-mix(in srgb, var(--ruim) 13%, transparent) !important; }
+.ficha-loc td.vermelho input.num-loc { color: var(--ruim); border-color: var(--ruim); font-weight: 700; }
+.ficha-loc input.num-loc { width: 92px; text-align: right; font: 12px var(--mono); padding: 2px 6px;
+  border: 1px solid var(--linha); border-radius: 4px; background: var(--fundo); color: var(--tinta); }
+.ficha-loc input.num-loc:disabled { opacity: .45; }
+.selo-em-uso { display: inline-block; margin-top: 4px; font: 600 11px var(--mono); color: var(--fundo);
+  background: var(--destaque); border-radius: 4px; padding: 1px 7px; }
+.ficha-loc .usar-col { margin-top: 4px; font-size: 11px; padding: 2px 8px; }
+/* «? métodos» */
+.busca.ajuda-metodos-loc { width: min(760px, 94vw); }
+.ajuda-metodos-loc .corpo-ajuda { max-height: 70vh; overflow-y: auto; }
+.ajuda-metodos-loc .marca-do-metodo { width: 14px; height: 4px; border-radius: 2px; flex: none; }
+.ajuda-metodos-loc .linha-da-logica { grid-template-columns: 120px minmax(0, 1fr); }
+.ajuda-metodos-loc .linha-da-logica .valor { white-space: normal; font-family: var(--sans); font-size: 12.5px; }
 .parametros-loc .tabela-de-linhas { flex: 1; min-height: 0; overflow-y: auto; }
 .parametros-loc .resumo-das-linhas { margin: 2px 0 6px; color: var(--suave); font-size: 11px; }
 .parametros-loc .tabela-de-linhas { font-family: var(--mono); font-size: 12px; }
@@ -6162,7 +6222,6 @@ p.sem-logica {
   border-radius: 4px; cursor: pointer; color: var(--suave);
 }
 .parametros-loc .linha-da-lt:hover { background: var(--fundo); color: var(--tinta); }
-.parametros-loc .linha-da-lt.sugerida { color: var(--tinta); }
 /* A linha que está valendo: contorno, não fundo — o fundo é do hover. */
 .parametros-loc .linha-da-lt.em-uso { box-shadow: inset 0 0 0 1px var(--destaque); }
 .parametros-loc .cabeca-das-linhas {
@@ -6186,13 +6245,6 @@ p.sem-logica {
   border-radius: 4px; padding: 2px 6px; font: inherit;
 }
 
-/* Ao lado do botão «parâmetros»: qual linha está valendo. */
-.pl-linha-em-uso {
-  font-family: var(--mono); font-size: 12px; color: var(--suave);
-  max-width: 560px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.pl-linha-em-uso b { color: var(--tinta); font-weight: 600; }
-.pl-linha-em-uso.sem { color: var(--atencao); }
 
 /* As linhas com derivação na janela «parâmetros»: a marca do TAP ao lado do
    nome, o aviso de quantas o OnLiner deixou reconhecer, e o que fica DENTRO
@@ -6229,7 +6281,6 @@ p.sem-logica {
   background: var(--fundo); color: var(--tinta); border: 1px solid var(--linha);
   border-radius: 4px; font: inherit;
 }
-.pl-linha-em-uso .marca-3t { margin-left: 6px; }
 
 /* =========================================================================
    A MOLDURA DA CASA — identidade f10 (10/11/2026)
