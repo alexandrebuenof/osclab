@@ -40,6 +40,17 @@ relação do relé A (`faultloc/parametros.montar` recebe um `rtp_rtc` só) — 
 a escolha 18/19/20. **Defeito no main achado pela C:** conta do usuário + filtro 60 Hz = erro 500
 (`plot/catalogo.efetivo`). Falta F (escuro), de noite.
 
+**Para a manhã de 11/11 (as três janelas do Chrome ficaram abertas):**
+- Etapa 1: localizador 17 (8776, já no main) · eventos 8774 (limpos; recomendadas 02, 03 e a nova 10 «trilha»)
+  · calculadora 8775 (limpa; recomendada 10, alternativa enxuta 04 «ƒx na legenda»).
+- Etapa 2: vitrine dos menus 8771 `/maquete/menus/` (por peça · comparar · ficha · dois IEDs 17–20;
+  achados novos: bolinhas de cor em Arial; lógica/eventos fecham no Esc mas não no clique fora)
+  · refino 8773 (limpo a pedido dele; pergunta: B tracejado com várias fases ou uma tira por fase?).
+- Etapa 3: paletas do escuro 8777 `/maquete/escuro/` (dez, todas passam no validador; recomendadas 09
+  Heliográfica e 05 Carvão quente).
+- A corrigir no main, com ele: relé B convertido pela relação do A (dois IEDs, secundário) e erro 500
+  da conta do usuário com filtro 60 Hz (`plot/catalogo.efetivo`). Nada de push ainda.
+
 Regras de sempre: maquete antes (dez por função nova), versão `0.8.0` só quando ele aprovar
 a rodada, push só com a confirmação dele.
 
