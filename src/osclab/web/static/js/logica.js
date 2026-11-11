@@ -197,13 +197,12 @@
   }
 
   function dentroDaTela(x, y, l, a) {
-    /* Um painel que o usuário arrastou até sair da tela e some para sempre é
-       um painel perdido. Deixa sempre a barra alcançável. */
-    const folga = 40;
-    return {
-      x: Math.max(-(l - folga * 2), Math.min(x, window.innerWidth - folga)),
-      y: Math.max(0, Math.min(y, window.innerHeight - folga)),
-    };
+    /* O painel cabe INTEIRO na área visível, abaixo da barra de cima (que é
+       presa e ficava por cima do cabeçalho, escondendo o ×). Deixar sobrar
+       só uma folga de 40 px — como era — permitia abrir com o × fora da
+       tela a partir de uma posição lembrada num navegador maior (11/11/2026).
+       Não cabendo, o painel encolhe; a lista rola por dentro. */
+    return caberNaTela(painel, x, y, l, a);
   }
 
   function posicionar() {

@@ -286,11 +286,8 @@
   }
 
   function dentroDaTela(x, y, l, a) {
-    const folga = 40;
-    return {
-      x: Math.max(-(l - folga * 2), Math.min(x, window.innerWidth - folga)),
-      y: Math.max(0, Math.min(y, window.innerHeight - folga)),
-    };
+    /* Inteiro na área visível, abaixo da barra de cima — ver logica.js. */
+    return caberNaTela(painel, x, y, l, a);
   }
 
   function posicionar() {
