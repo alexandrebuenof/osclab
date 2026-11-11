@@ -157,6 +157,10 @@ class Record:
     #: arquivo não declara. A tela MOSTRA a hora como o arquivo escreveu;
     #: este campo serve só para ALINHAR dois registros pela hora.
     fuso_horas: float | None = None
+    #: O fuso da INSTALAÇÃO (`local_code` do COMTRADE 2013).
+    #: Só serve para sugerir o deslocamento de uma lista de eventos em hora
+    #: local contra um registro carimbado em UTC.
+    fuso_local_horas: float | None = None
 
     # --- canais -----------------------------------------------------------
     analog_channels: tuple[AnalogChannel, ...] = ()

@@ -290,6 +290,21 @@ osclab/
   por `pointerdown` no documento ganha isso de graça. Janela com edição
   (lógica, «+ sinal», calculadora) fecha só pelo ×: fechar no clique fora
   perderia o que se digitava.
+- **Eventos do relé: o que entra, o que não se grava, o que não se faz**
+  *(11/11/2026, variante 03 da maquete)*. Entra a lista que vem DENTRO do
+  registro (o `.hdr` da Schneider, lido sozinho) e a que se IMPORTA pelo
+  «+ arquivo» da janela de eventos (SER da SEL em texto, `.eev` da GE, ou
+  qualquer texto com data e hora por linha) — nunca pela página Arquivos, e
+  o acervo não muda. **A importada não é gravada**: vale enquanto a aba
+  estiver aberta (sessão do navegador) e vai no corpo de cada pedido; quem lê
+  e conta é o servidor (`formats/eventos.py`, `plot/eventos.py`). Texto que
+  nenhum leitor entende aparece como veio. **Nada se classifica**: nenhuma
+  cor, peso ou apagado sai do nome do evento nem da palavra do valor — os
+  fora da gravação têm a mesma tinta (a gravação fica marcada só na
+  trilha). O fuso que o arquivo não diz é SUGERIDO casando eventos com
+  digitais de mesmo nome, dito «sugerido», e se corrige no ✎. A trilha é a
+  contagem por intervalo, feita no Python (`plot/eventos.distribuicao`),
+  altura linear com mínimo de 2 px; só a barra é alvo de clique.
 - **Enviar oscilografia é UM caminho só** (`static/js/envio.js`): a página
   Arquivos e o «enviar do computador…» dos menus da oscilografia usam o
   mesmo pedido e a mesma leitura da resposta, e o `accept` sai de

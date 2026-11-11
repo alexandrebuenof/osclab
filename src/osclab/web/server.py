@@ -36,6 +36,7 @@ GET    /api/base/dicionario       o dicionário dos sinais digitais
 GET    /api/dicionario/<sha>      o que o dicionário sabe sobre ESTE registro
 GET    /api/logica/<sha>          os ajustes e a lógica que vieram no arquivo
 POST   /api/eventos/<sha>         a lista de eventos do relé, de cada registro da aba
+POST   /api/eventos/<sha>/trilha  quantos eventos caem em cada intervalo, para a trilha
 POST   /api/base/dicionario         cria ou corrige um verbete
 POST   /api/base/dicionario/importar junta um CSV de fora ao que já existe
 GET    /saude                     diagnóstico
@@ -968,17 +969,57 @@ def create_app() -> Flask:
             d = (alinhamento_mod.deslocamento(base, outro, _alinhar())["d"]
                  if base is not None else 0.0)
             fontes.append((letra, sha_outro, apelido, outro, d))
+        # Cada registro dá a lista que veio com ele (o `.hdr` da Schneider) MAIS
+        # as que a tela importou pelo «+ arquivo» da janela. As importadas NÃO
+        # são gravadas (decisão de 11/11/2026): a tela as guarda enquanto a
+        # aba estiver aberta e as manda aqui, no corpo, com as escolhas (fuso,
+        # relé, ordem da data). A conta do tempo é toda daqui
+        # (`plot/eventos.pacote`); a tela só junta e ordena.
+        corpo = request.get_json(silent=True) or {}
+        importados = corpo.get("importados") if isinstance(corpo, dict) else None
+        importados = [x for x in (importados or []) if isinstance(x, dict)]
         listas = []
         for letra, s, apelido, registro, d in fontes:
             dados = (acervo.obter(s) or item).como_dicionario()
+            textos = (registro.station if registro is not None else "",
+                      registro.device_id if registro is not None else "",
+                      apelido or "", *(dados.get("arquivos") or ()))
             achada = eventos_mod.do_registro(acervo.pasta_do_registro(s),
                                              dados.get("arquivos") or ())
-            fim = (float(registro.time[-1])
-                   if registro is not None and registro.n_samples else None)
-            digitais = (eventos_plot.indice_dos_digitais(registro.status_channels)
-                        if registro is not None else {})
-            listas.append(eventos_plot.lista(letra, s, apelido, achada, d, fim, digitais))
+            deste = [x for x in importados if x.get("sha") == s]
+            if achada is not None or not deste:
+                listas.append(eventos_plot.pacote(letra, s, apelido, achada, registro, d,
+                                                  textos_do_registro=textos))
+            referencia = (registro.start_time.date()
+                          if registro is not None and registro.start_time else None)
+            for x in deste:
+                escolhas = x.get("escolhas") if isinstance(x.get("escolhas"), dict) else {}
+                nome = str(x.get("nome") or "eventos.txt")
+                ordem = str(escolhas.get("ordem") or "")
+                lida = eventos_mod.ler_texto_de_eventos(str(x.get("texto") or ""), nome,
+                                                        referencia, ordem)
+                listas.append(eventos_plot.pacote(letra, s, apelido, lida, registro, d,
+                                                  escolhas, importado=True,
+                                                  textos_do_registro=textos))
         return jsonify(tem=any(x["tem"] for x in listas), listas=listas)
+
+    @app.post("/api/eventos/<sha>/trilha")
+    def trilha_dos_eventos(sha: str):
+        """A DISTRIBUIÇÃO dos eventos no tempo, para a trilha da janela.
+
+        O corpo é o mesmo da lista (registros da aba e importadas) mais
+        `largura` (px da trilha) e `escondidos` (os relés desligados nos
+        chips). A contagem é conta, por isso mora aqui; a tela só pinta. Ver
+        `plot/eventos.distribuicao`.
+        """
+        resposta = eventos_do_registro(sha)
+        if isinstance(resposta, tuple):
+            return resposta
+        pacotes = resposta.get_json().get("listas", [])
+        corpo = request.get_json(silent=True) or {}
+        largura = float(corpo.get("largura") or 600)
+        escondidos = [str(x) for x in (corpo.get("escondidos") or [])]
+        return jsonify(geral=eventos_plot.distribuicao(pacotes, largura, escondidos))
 
     @app.get("/api/dicionario/<sha>")
     def dicionario_do_registro(sha: str):

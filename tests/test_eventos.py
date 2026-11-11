@@ -259,6 +259,55 @@ def test_com_dois_registros_cada_lista_vem_com_a_letra_do_ied(cliente, tmp_path)
     assert len(r["listas"][1]["eventos"]) == 2
 
 
+SER_DA_TELA = """\
+=>SER 5
+
+SEL-751                       Date: 02/01/2026    Time: 03:04:06.000
+
+ #    DATE        TIME           ELEMENT              STATE
+
+ 3    02/01/2026  03:04:05.120   TRIP                 Asserted
+ 2    02/01/2026  03:04:05.080   51P1P                Asserted
+ 1    02/01/2026  03:04:05.060   50P1P                Asserted
+"""
+
+
+def test_a_lista_importada_vem_no_corpo_e_nao_e_gravada(cliente, tmp_path):
+    """Decisão de 11/11/2026: o SER e o .eev entram pelo «+ arquivo» da
+    janela, valem na aba e NÃO vão para a pasta do registro."""
+    sha = _enviar(cliente, tmp_path / "a", "UM", None)
+    pasta = paths.LIBRARY_DIR / sha
+    antes = sorted(x.name for x in pasta.iterdir())
+    corpo = {"importados": [{"sha": sha, "nome": "ser.txt", "texto": SER_DA_TELA,
+                             "escolhas": {}}]}
+    r = cliente.post(f"/api/eventos/{sha}", json=corpo).get_json()
+    importada = [x for x in r["listas"] if x["importado"]]
+    assert len(importada) == 1 and importada[0]["tem"]
+    assert importada[0]["tempo"]["modo"] == "absoluto"
+    assert [e["descricao"] for e in importada[0]["eventos"]] == ["TRIP", "51P1P", "50P1P"]
+    assert sorted(x.name for x in pasta.iterdir()) == antes      # nada gravado
+    # o fuso digitado vem nas escolhas, e o ilegível não vira número
+    corpo["importados"][0]["escolhas"] = {"deslocamento": "+1:00"}
+    r = cliente.post(f"/api/eventos/{sha}", json=corpo).get_json()
+    tempo = [x for x in r["listas"] if x["importado"]][0]["tempo"]
+    assert tempo["origem"] == "digitado" and tempo["h"] == 1.0
+    corpo["importados"][0]["escolhas"] = {"deslocamento": "abc"}
+    r = cliente.post(f"/api/eventos/{sha}", json=corpo).get_json()
+    assert [x for x in r["listas"] if x["importado"]][0]["tempo"]["erro"]
+    # e a trilha conta o que veio no corpo
+    trilha = cliente.post(f"/api/eventos/{sha}/trilha",
+                          json={**corpo, "largura": 400}).get_json()["geral"]
+    assert trilha["total"] == 3
+
+
+def test_texto_que_nenhum_leitor_entende_vem_cru(cliente, tmp_path):
+    sha = _enviar(cliente, tmp_path / "a", "UM", None)
+    corpo = {"importados": [{"sha": sha, "nome": "log.txt", "texto": "OC#1 T+102ms PART\n"}]}
+    r = cliente.post(f"/api/eventos/{sha}", json=corpo).get_json()
+    importada = [x for x in r["listas"] if x["importado"]][0]
+    assert importada["tem"] is False and "OC#1" in importada["cru"]
+
+
 def test_rota_de_registro_que_nao_existe(cliente):
     assert cliente.get("/api/eventos/naoexiste").status_code == 404
 
@@ -282,8 +331,15 @@ def test_a_tela_nao_faz_conta_de_tempo_com_os_eventos():
     """O deslocamento de cada registro é do servidor: aqui só se compara o
     instante do cursor com o da linha para saber qual marcar."""
     js = _arquivo("static", "js", "eventos.js")
-    assert "deslocamento" not in js
-    assert "window.osclab.irPara(e.t)" in js
+    # «deslocamento» é rótulo e nome de campo que vai ao servidor; o que não
+    # pode haver é conta que MUDE o instante do evento. Valor → pixel (a
+    # trilha) é do navegador, e texto concatenado não é conta.
+    import re
+    linhas = [x for x in js.splitlines() if "style." not in x and "toFixed" not in x]
+    sem_pixel = "\n".join(linhas)
+    assert not re.search(r"\be\.t\s*[-+]", sem_pixel)
+    assert not re.search(r"[-+]\s*\w*\.?e\.t\b", sem_pixel)
+    assert "window.osclab.irPara(x.e.t)" in js
     assert '"osclab:cursores"' in js
     onda = _arquivo("static", "js", "onda.js")
     assert '"osclab:cursores"' in onda and '"osclab:janela"' in onda

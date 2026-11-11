@@ -2,7 +2,58 @@
 
 Pedido dele em 20/10/2026.
 
-## O que já existe (02/11/2026)
+## Como ficou (11/11/2026) — a variante 03 da maquete «eventos»
+
+Rodadas de maquete no ramo `maquete/eventos` (`maquetes/EVENTOS.md` lá);
+ele escolheu a **03**: a tabela do arquivo, a TRILHA da distribuição em
+cima e o texto como veio a um botão, no jeito da janela da lógica.
+
+- **Fontes.** O `.hdr` da Schneider (dentro do registro) é lido sozinho.
+  O SER da SEL (o texto que se copia da tela do relé), o `.eev` da GE ou
+  qualquer texto com data e hora por linha entram SÓ pelo «+ arquivo» da
+  janela, valem enquanto a aba estiver aberta e NÃO são gravados: a tela
+  guarda o texto na sessão e o manda no corpo de cada pedido
+  (`POST /api/eventos/<sha>`, campo `importados`). O acervo não muda. Texto
+  que nenhum leitor entende aparece como veio.
+- **Leitores** (`formats/eventos.py`): `de_texto` (a tabela da Schneider),
+  `de_eev` e `de_texto_com_hora` (acha data e hora pelo CONTEÚDO da linha,
+  não pela posição; o estado no fim por uma lista de palavras de estado, que
+  serve para achar a coluna e não para classificar). `ler_texto_de_eventos`
+  tenta os três.
+- **Tempo** (`plot/eventos.pacote`). Hora de relógio vira tempo da aba com
+  um deslocamento que o arquivo não diz: o servidor SUGERE o que põe mais
+  eventos na mesma amostra de um digital de mesmo nome (de −14 h a +14 h, de
+  15 em 15 min), e a tela diz «sugerido»; corrige-se no ✎ («digitado»). O
+  mesmo para o relé de um `.eev` que junta vários e para a ordem de uma data
+  que nenhum número passa de 12.
+- **Lista.** Uma só, em ordem de tempo, sem partes; nada apagado nem
+  colorido pelo nome. Clique: o cursor vai ao instante (o gráfico anda pelo
+  gesto `andar`, decidido no servidor) e a tira do digital de mesmo nome fica
+  selecionada; Shift+clique leva o cursor 2. As medidas que o `.eev` grava
+  ficam no ▸ da linha.
+- **Trilha** (`plot/eventos.distribuicao`, `POST /api/eventos/<sha>/trilha`).
+  Quantos eventos caem em cada intervalo; o intervalo é o menor de 1 ms a
+  2 dias que deixa as barras com uns 4 px; altura LINEAR (o máximo enche a
+  tira), mínimo de 2 px para contagem > 0. Fundo próprio, o trecho da
+  gravação marcado, o cursor em linha. Só a barra é alvo: mãozinha e hover
+  (contagem e intervalo) só sobre ela. Clicar numa barra pisca todos os
+  eventos do recorte juntos, deixa um fundo leve neles e rola a tabela até o
+  primeiro; Esc ou clique fora limpam.
+
+### O `.eev` da GE (exportação do EnerVista)
+
+Texto CSV em UTF-8, fim de linha CRLF. **Um bloco por relé**, cada um com o
+seu cabeçalho: `Source, Date/Time, Event, CauseOfEvent, EventCode, <medidas…>`
+— um exemplo do parque junta quatro relés com 1 024 eventos cada (o buffer
+do registrador cheio), cobrindo dias diferentes. Dentro do bloco, do mais
+NOVO para o mais velho. `Date/Time` = `Mon D AAAA hh:mm:ss.ffffff` (mês em
+inglês, microssegundo, **sem fuso**). `CauseOfEvent` = `NOME [On|Off]
+(operando)`, ou palavras de sistema sem parênteses (`Setting Change`).
+`EventCode` em hexadecimal. Depois, as **medidas do relé no instante do
+evento** (correntes e tensões com ângulo, frequência, potências, fator de
+potência), com nome e unidade no cabeçalho.
+
+## O que já existia (02/11/2026)
 
 A maquete 1 de «eventos-10», escolhida por ele: um painel flutuante com a
 tabela do arquivo (tAbs, t, descrição, valor).

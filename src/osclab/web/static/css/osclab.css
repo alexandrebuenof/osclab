@@ -5374,8 +5374,10 @@ table.verbetes tr.pendente td:first-child { box-shadow: inset 3px 0 0 var(--dest
    é o que se acha rolando depressa. */
 .tabela-dos-eventos tr.perto td { background: var(--destaque-fraco); }
 .tabela-dos-eventos tr.perto td:first-child { box-shadow: inset 3px 0 var(--destaque); }
-/* Depois do fim da gravação: aparece, apagado, e não leva o cursor. */
-.tabela-dos-eventos tr.fora { cursor: default; opacity: .5; }
+/* Fora da gravação: MESMA tinta dos outros (ele não entendeu o apagado,
+   11/11/2026); só não leva o cursor — ali não há onda. O trecho da gravação
+   fica marcado na trilha, não na tabela. */
+.tabela-dos-eventos tr.fora { cursor: default; }
 .dados-do-rele { margin-bottom: 10px; font-size: 12px; }
 .dados-do-rele summary { cursor: pointer; color: var(--suave); }
 .dados-do-rele .tabela-dos-eventos td.valor { text-align: right; }
@@ -5397,6 +5399,126 @@ table.verbetes tr.pendente td:first-child { box-shadow: inset 3px 0 0 var(--dest
 }
 .barra-do-painel .como-veio { flex: none; font-size: 11px; padding: 1px 8px; }
 .barra-do-painel .como-veio[hidden] { display: none; }
+
+/* ----- a janela dos EVENTOS, escolha de 11/11/2026 (eventos.js) ---------
+   Só o dado do evento e o controle à vista; o porquê no hover, a
+   explicação no «?», o diagnóstico no ⚠. Nenhuma cor nova. */
+.ev-miudo { font-size: 11px; color: var(--suave); }
+.ev-n { color: var(--suave); font-size: 10px; }
+.filtro-dos-eventos .chave { height: 22px; font-size: 11px; padding: 0 8px; }
+.filtro-dos-eventos .chave.escolhido .ev-n { color: inherit; opacity: .75; }
+.barra-do-painel .ev-ajuda { width: 22px; padding: 0; }
+.ev-alerta { flex: none; color: var(--atencao); font-size: 12px; cursor: help; }
+.ev-alerta[hidden] { display: none; }
+
+/* A origem de um número: o código do vínculo canal → fase — moldura
+   pontilhada para o sugerido, cheia para o lido e o digitado. */
+.ev-origem {
+  display: inline-block; margin-left: 4px; padding: 0 5px; border-radius: 3px;
+  font-family: var(--mono); font-size: 10px; line-height: 15px;
+  border: 1px solid var(--linha); color: var(--suave); white-space: nowrap; vertical-align: 1px;
+}
+.ev-origem.origem-sugerido { border-style: dashed; border-color: var(--destaque); color: var(--destaque); }
+.ev-origem.origem-digitado { border-color: var(--destaque); background: var(--destaque-fraco); color: var(--destaque); }
+.ev-origem.origem-lido { color: var(--tinta); }
+.ev-origem.origem-nenhum { border-color: var(--atencao); color: var(--atencao); }
+
+/* O fuso no alto: o valor, a origem e o lápis. */
+.ev-faixa {
+  display: flex; align-items: center; gap: 12px; flex: none; padding: 0 2px;
+  font-family: var(--mono); font-size: 11px; color: var(--tinta);
+}
+.ev-faixa[hidden] { display: none; }
+.ev-resumo { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.ev-lapis, .ev-voltar, .ev-tirar {
+  border: 0; background: none; cursor: pointer; color: var(--suave); font-size: 12px; padding: 0 3px;
+}
+.ev-lapis:hover, .ev-voltar:hover, .ev-tirar:hover { color: var(--destaque); }
+.ev-tirar { margin-left: auto; font-size: 15px; line-height: 1; }
+
+/* O balão (fuso, importar com vários IEDs, ajuda): nasce DENTRO da janela. */
+.ev-popover {
+  position: absolute; z-index: 5; min-width: 260px; max-height: calc(100% - 16px); overflow: auto;
+  padding: 4px 0; background: var(--superficie);
+  border: 1px solid var(--linha); border-radius: 6px; box-shadow: 0 8px 22px rgba(0, 0, 0, .25);
+}
+.ev-popover > p { margin: 4px 10px; }
+.ev-popover .ev-escolha { display: flex; margin: 3px 10px; gap: 6px; }
+.ev-form { display: grid; gap: 4px; padding: 8px 10px; font-size: 12px; }
+.ev-form + .ev-form { border-top: 1px solid var(--linha); }
+.ev-form-titulo { display: flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 11px; color: var(--suave); }
+.ev-campo { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 22px; }
+.ev-campo .rotulo { flex: none; width: 46px; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--suave); }
+.ev-desloc {
+  width: 92px; height: 22px; box-sizing: border-box; padding: 0 6px;
+  font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums;
+  border: 1px solid var(--linha); border-radius: 4px; background: var(--fundo); color: var(--tinta);
+}
+.ev-desloc:focus { outline: 2px solid var(--destaque-fraco); border-color: var(--destaque); }
+.ev-desloc.errado { border-color: var(--ruim); }
+.ev-sel {
+  height: 22px; font-size: 11.5px; border: 1px solid var(--linha); border-radius: 4px;
+  background: var(--fundo); color: var(--tinta); padding: 0 4px;
+}
+.chave.ev-mini { height: 20px; font-size: 10.5px; padding: 0 7px; }
+.ev-ajuda-lista { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; margin: 6px 12px; font-size: 11.5px; }
+.ev-ajuda-lista dt { font-family: var(--mono); color: var(--destaque); }
+.ev-ajuda-lista dd { margin: 0; color: var(--tinta); }
+
+/* A tabela: uma lista só, contínua, a mesma tinta para todos. */
+.ev-tabela td.desc { white-space: nowrap; max-width: 46ch; overflow: hidden; text-overflow: ellipsis; }
+.ev-tabela tr.par td { background: var(--faixa-da-lista); }
+.ev-tabela td.mais { width: 14px; color: var(--suave); cursor: pointer; text-align: center; padding: 2px 4px; }
+.ev-tabela td.mais:hover { color: var(--destaque); }
+.ev-end { color: var(--suave); }
+.tabela-dos-eventos tr.sem-t { cursor: default; }
+.tabela-dos-eventos tr.escolhido-ev td { box-shadow: inset 0 1px var(--destaque), inset 0 -1px var(--destaque); }
+.ev-detalhe td { background: var(--fundo); white-space: normal; padding: 6px 10px 8px 22px; }
+.ev-grade {
+  display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr);
+  gap: 1px 12px; margin-bottom: 6px; font-family: var(--mono); font-size: 11px;
+}
+.ev-grade .n { color: var(--suave); }
+.ev-grade .v { color: var(--tinta); font-variant-numeric: tabular-nums; }
+/* O recorte clicado na trilha: fundo leve em todos os eventos dele, e um
+   lampejo juntos na hora do clique. */
+.tabela-dos-eventos tr.realce td { background: var(--destaque-fraco); }
+@keyframes ev-lampejo { from { background: var(--destaque); color: var(--superficie); } }
+@keyframes ev-lampejo-filete { from { box-shadow: inset 3px 0 var(--destaque); } }
+.tabela-dos-eventos tr.lampejo td { animation: ev-lampejo 1.4s ease-out; }
+/* O filete só na primeira célula: em todas, ele riscava a linha em colunas. */
+.tabela-dos-eventos tr.lampejo td:first-child { animation: ev-lampejo 1.4s ease-out, ev-lampejo-filete 1.4s ease-out; }
+.ev-vazio { display: flex; align-items: center; gap: 10px; padding: 8px 2px; }
+
+/* O texto como veio, com número de linha, ligado à tabela. */
+.ev-nome-cru { margin: 0 0 4px; font-family: var(--mono); font-size: 10.5px; color: var(--suave); }
+.ev-cru { padding: 4px 0; white-space: normal; overflow: auto; }
+.ev-linha-crua { display: flex; white-space: pre; line-height: 1.45; }
+.ev-linha-crua .n {
+  flex: none; width: 4.2em; padding-right: 10px; margin-right: 8px; text-align: right; color: var(--suave);
+  user-select: none; font-variant-numeric: tabular-nums; border-right: 1px solid var(--linha);
+}
+.ev-linha-crua .x { white-space: pre; }
+.ev-linha-crua.de-evento { cursor: pointer; }
+.ev-linha-crua.de-evento:hover { background: var(--faixa-da-lista); }
+.ev-linha-crua.marcada { background: var(--destaque-fraco); box-shadow: inset 3px 0 var(--destaque); }
+.ev-linha-crua.marcada .n { color: var(--destaque); font-weight: 600; }
+
+/* A TRILHA: a distribuição dos eventos no tempo (contagem do servidor,
+   pintada em canvas). Fundo próprio, um tom da lista com borda fina; a
+   mãozinha só sobre uma barra (ver eventos.js). */
+.ev-trilha { flex: none; margin: 0 2px; }
+.ev-trilha[hidden] { display: none; }
+.ev-tela-trilha {
+  display: block; width: 100%; box-sizing: border-box;
+  background: var(--faixa-da-lista); border: 1px solid var(--linha); border-radius: 3px;
+}
+.ev-dica-trilha {
+  position: absolute; z-index: 6; padding: 2px 7px; border-radius: 3px; pointer-events: none;
+  font-family: var(--mono); font-size: 10.5px; white-space: nowrap;
+  background: var(--tinta); color: var(--superficie);
+}
+.ev-dica-trilha[hidden] { display: none; }
 
 
 /* === O PINCEL dos sinais digitais ======================================== */

@@ -730,6 +730,7 @@ class ComtradeReader:
             trigger_time=cfg.trigger,
             time_quality=qualidade_do_relogio(cfg),
             fuso_horas=fuso_em_horas(cfg.time_code),
+            fuso_local_horas=fuso_em_horas(cfg.local_code),
             analog_channels=tuple(cfg.analogs),
             status_channels=tuple(cfg.status),
             sample_rates=tuple(cfg.rates),

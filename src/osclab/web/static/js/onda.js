@@ -17414,6 +17414,17 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         await carregar({ andar: t - (dados.de + dados.ate) / 2 });
       }
       porCursor(ativo, t);
+      mostrarGraficoNaPagina();
+    },
+    // Põe o cursor `k` (0 ou 1) no instante — Shift+clique num evento leva o
+    // cursor 2, para medir o tempo entre dois eventos na tabelinha.
+    async irParaCursor(k, t) {
+      if (!dados || t === null || t === undefined || !Number.isFinite(t)) return;
+      if (t < dados.de || t > dados.ate) {
+        await carregar({ andar: t - (dados.de + dados.ate) / 2 });
+      }
+      porCursor(k, t);
+      mostrarGraficoNaPagina();
     },
     // Seleciona a tira do digital `indice` do IED `letra`, se ela estiver na
     // tela — o casamento evento → digital é do servidor (`plot/eventos.py`).
@@ -17430,6 +17441,20 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       return false;
     },
   });
+
+  /* Quem clicou num evento quer VER o instante. Se o primeiro gráfico com
+     eixo de tempo está fora da vista, a página rola até ele; se já aparece,
+     nada se mexe (tela que pula sem precisar é pior). */
+  function mostrarGraficoNaPagina() {
+    const g = document.querySelector("section.grafico:not(.fasorial):not(.harmonicos)");
+    if (!g) return;
+    const r = g.getBoundingClientRect();
+    const barra = document.querySelector(".barra-de-cima");
+    const topo = barra ? barra.getBoundingClientRect().bottom : 0;
+    if (r.bottom < topo + 40 || r.top > window.innerHeight - 80) {
+      g.scrollIntoView({ block: "start", behavior: "smooth" });
+    }
+  }
 
   function porCursor(k, t) {
     cursores[k] = t;
