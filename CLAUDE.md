@@ -548,6 +548,22 @@ osclab/
   em uso; Ω ⇄ Ω/km e primário ⇄ secundário são VISTA, e toda conta é de
   `faultloc/parametros.py`. Sem painel desses na tela, o «+ adicionar
   gráfico» cria um — tirar o tipo do menu deixaria a localização sem caminho.
+- **A calculadora é uma GAVETA, e a conta mora no Python** *(variante 10,
+  11/11/2026)*. Visor (expressão, valor nos cursores, prévia) + teclado em
+  grade; abas «calculadora | sugestões | minhas contas»; o botão
+  «calculadora» abre e fecha; o clique fora só fecha com o visor vazio e fora
+  do gráfico (pôr cursor é usar a calculadora). A FILEIRA tem sempre as oito
+  teclas padronizadas IA…VN, de largura fixa, e **insere o nome COMPLETO do
+  canal** (`[TC BUC 69kV:I A]`, não `[IA]`) do grupo escolhido no seletor
+  «G1 · radical» — nunca «alta/baixa». `[IA]` digitado vira o nome do canal no
+  visor; modelos e «guardar como modelo» falam `[IA]` (`calculadora.expandir`
+  ⇄ `generalizar`). `[IN]` é o RESÍDUO da trinca, nunca o neutro medido.
+  Domínio fasor: o `giro` decide se o ângulo é absoluto (Z, S) ou contra a
+  tensão A (V1); denominador abaixo de 2 % do maior dele vira buraco.
+  Argumentos com `;` (a vírgula é decimal). As contas são da TELA (vão no
+  corpo, como os painéis); só os modelos do usuário ficam em disco
+  (`paths.MODELOS_DA_CALCULADORA`). Nome comprido não estraga a gaveta: há
+  teste de navegador (`tests/test_calculadora_navegador.py`).
 - **«+ adicionar gráfico» fica ao lado de «+ adicionar oscilografia»**, no pé
   do bloco do registro, o mesmo botão nos dois; o gráfico novo continua
   entrando no FIM da lista. O menu de tipos tem um ícone de traço por tipo
@@ -1023,6 +1039,7 @@ Três consequências para quem programa isto:
 | 0.5+ | Marcar um sinal no catálogo já o manda para «já na tela», com a cor; e **a leitura do cursor passou a ser refeita quando a lista de sinais muda** — `carregar()` traz a janela e as séries, mas o pacote do cursor é outro pedido, e sem ele o sinal novo entrava sem módulo nem ângulo: só desenhava quando o usuário mexia o cursor | **feito** — `0.5.1` |
 | **0.6** | **Painel de harmônicos.** Espectro em barras no instante de um cursor, em % da fundamental de cada sinal, com o THD das barras ao lado; janela de 1 ciclo (a do relé) ou do TRECHO entre os dois cursores, cortado em ciclos inteiros; só entra onda (canal e resíduo), o teto de ordens é o Nyquist da taxa e vai escrito, e o painel só se cria no modo avançado | **feito** — `0.6.0` |
 | **0.7** | **Calculadora de sinais — domínio ONDA.** `([VAY] - [VBY]) / 1.732` vira um sinal novo, amostra por amostra, no bloco «Calculados» com as cinco colunas de um canal. Tem teclado de calculadora (operações, √2, √3, ÷√3, ÷3) e completa o nome do canal com Tab. Unidades conferidas, mas **nada é bloqueado** — a regra do projeto: A+A passa em A, V×A vira V·A, e A+V faz a conta assim mesmo, sem unidade e com ⓘ ao lado; só o que não se LÊ é erro (parêntese aberto, canal inexistente). A conversão de TC/TP vem ANTES da conta; divisão sinal÷sinal e produto entre sinais caem em «Outros» porque não são senoidais. A expressão é conferida pelo servidor enquanto se digita, para a gramática morar num lugar só. E o painel de harmônicos ganhou a mesma largura e o mesmo alinhamento do analógico | **feito** — `0.7.0` |
+| 0.7+ | **Calculadora em gaveta** (variante 10): domínio FASOR (`a`, `conj`, `mod`, `ang`, `re`, `im`, `polar`), funções de onda (`rms`, `delta`, `deriv`, `integ`, `f60`, `media`, `atrasar`, `maxjan`), nomes padronizados com grupo, `{k0}` com a origem e «usar o do relé», relação de TC digitável para canal sem relação, sugestões (modelos que dizem se cabem no registro) e «guardar como modelo». Corrigido de passagem: conta do usuário + filtro de 60 Hz dava erro 500 (`catalogo.efetivo`) | **feito no ramo `calculadora-10`** — versão sobe com a aprovação dele |
 | 0.5 | Bruto/filtrado, descontinuidade, alinhamento | |
 | 0.6 | Localização de faltas (um e dois terminais) | |
 | 0.7 | Mini relatório | |

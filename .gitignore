@@ -23,6 +23,7 @@ __pycache__/
 /database/
 /base-*/
 /bases.json
+/modelos-calculadora.json
 
 # Configuracao real: tem IP e senha de equipamento. O modelo versionado e' o
 # config/config.ini.example. Uma senha de subestacao commitada fica no

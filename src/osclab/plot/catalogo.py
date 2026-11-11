@@ -975,10 +975,28 @@ def _contas_do_usuario(registro: Record, lado: str, escalas: dict,
         # Só as contas ANTERIORES: ver `Sinal.contas_antes`.
         antes = tuple(anteriores)
         anteriores.append(conta)
-        analise = contas_mod.analisar_com(conta.expressao, registro, por_nome)
+        from osclab.plot import calculadora as maq
+        analise = maq.analisar_conta(conta, registro, por_nome)
         _oferecer(por_nome, conta, analise, contas_mod)
         unidade = analise.unidade_escrita
         divisor, mostrada = escalas.get(unidade, (1.0, unidade))
+        if conta.dominio == "fasor" and analise.vale:
+            _z = maq.serie_fasor(registro, analise, lado)
+            divisor, mostrada = maq._escala(escalas, unidade, None if _z is None else abs(_z))
+            # a conta de FASOR é uma linha só — o módulo (ou o valor,
+            # quando a conta já é real) — como o `3I0`. O ângulo sai na
+            # calculadora, que é quem sabe se ele é absoluto ou relativo.
+            saida.append(Sinal(
+                id=f"{conta.id}:instantaneo", nome=conta.nome, unidade=unidade,
+                unidade_mostrada=mostrada, familia="conta", grandeza="instantaneo",
+                conta="instantaneo", coluna=coluna_da_grandeza("fundamental", ja_filtrado),
+                descricao=f"conta de fasor: {conta.expressao}",
+                origem=", ".join(analise.fontes), expressao=conta.expressao,
+                contas_antes=antes, analise=analise, linha=conta.nome,
+                bloco="sequencia", aviso="; ".join(analise.avisos),
+                nota=f"fasor: {conta.expressao}", dominio="modulo",
+                grandeza_do_canal=next(iter(analise.unidade), "")))
+            continue
         if not analise.vale:
             # Uma linha só, inerte, carregando o erro. Sem contas: não há
             # número nenhum a oferecer.
@@ -1205,6 +1223,11 @@ def efetivo(identidade: str, medida: str, filtro: bool,
         return disponiveis.get(f"v{original.canal}:{par}", original)
     # O resíduo é onda como um canal, e tem o par dele: `IN G1` →
     # `IN G1 · 60Hz`. A componente simétrica não tem: já é fasor de 60 Hz.
+    if original.familia == "conta":
+        # a conta do usuário tem id de DUAS partes (`x1:instantaneo`)
+        # e caía no `split` abaixo — a janela inteira dava erro 500 com o
+        # filtro aceso. O par dela é `x1:filtrado`, quando existe.
+        return disponiveis.get(f"{original.id.split(':')[0]}:{par}", original)
     trinca, chave, _ = original.id.split(":")
     if not e_onda_da_trinca(chave):
         return original
@@ -1268,6 +1291,14 @@ def _serie_de_conta(registro: Record, sinal: Sinal, j0: int, i1: int,
     # A análise que o catálogo já fez, quando há: ver `Sinal.analise`.
     analise = sinal.analise or contas_mod.analisar(
         sinal.expressao, registro, escalas, sinal.contas_antes)
+    from osclab.plot import calculadora as maq
+    if isinstance(analise, maq.FasorAnalise):
+        _z = maq.serie_fasor(registro, analise, lado)
+        divisor, _ = maq._escala(escalas, sinal.unidade, None if _z is None else abs(_z))
+        curva = maq.curva_do_fasor(registro, analise, lado, divisor)
+        if curva is None or curva.size < i1:
+            return np.full(i1 - j0, np.nan)
+        return curva[j0:i1]
     onda = contas_mod.serie(registro, analise, lado, divisor)
     if onda is None or onda.size < i1:
         return np.full(i1 - j0, np.nan)

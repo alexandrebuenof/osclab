@@ -68,6 +68,10 @@ BASE_PADRAO: Path = DATA_DIR / "base"
 #: Fica FORA da base: é preferência desta máquina, e a base viaja sem ela.
 BASES_FILE: Path = DATA_DIR / "bases.json"
 
+#: Os modelos que o usuário guarda na calculadora («guardar como modelo»):
+#: fora do registro, para valerem em qualquer um. Dado do usuário, fora do git.
+MODELOS_DA_CALCULADORA: Path = DATA_DIR / "modelos-calculadora.json"
+
 #: Recursos servidos pela web (CSS, JS, fontes). Viajam com o pacote.
 WEB_DIR: Path = PACKAGE_DIR / "web"
 STATIC_DIR: Path = WEB_DIR / "static"

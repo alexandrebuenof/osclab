@@ -10,8 +10,8 @@ onde já mora o resíduo `IN`, e pelo mesmo motivo: resíduo é exatamente isso,
 conta `[IAW] + [IBW] + [ICW]` com nome fixo.
 
 **Este módulo é o domínio ONDA.** O domínio FASOR — `Z = V ÷ I`, `S = V × I*`,
-`V1/V2` — é outro interpretador, sobre módulo e ângulo de 60 Hz, e ainda não
-existe. Dividir uma onda por outra é aceito **com aviso**: o resultado estoura
+`V1/V2` — é outro interpretador, sobre o fasor complexo de 60 Hz, e mora em
+`plot/calculadora.py`. Dividir uma onda por outra é aceito **com aviso**: o resultado estoura
 em cada passagem por zero (vira buraco no gráfico), e o que o usuário quer ao
 escrever `V ÷ I` quase sempre é impedância, que é conta de fasor.
 
@@ -118,6 +118,14 @@ LIMITE_DE_CONTAS = 20
 #: PAR: a raiz de `A²` é `A`, e a raiz de `A` não se escreve.
 FUNCOES = ("abs", "raiz")
 
+#: as funções novas do domínio ONDA, com o número de
+#: argumentos. O separador de argumentos é `;`, como na planilha em português:
+#: a vírgula já é a casa decimal (`1,732`). `atrasar(x; ms)` e `maxjan(x; ms)`
+#: levam o segundo argumento em milissegundos, que é como se lê o eixo;
+#: `delta(x)` é `x − x(t − 1 ciclo)`, a grandeza incremental do detector.
+FUNCOES_NOVAS = {"atrasar": 2, "delta": 1, "deriv": 1, "integ": 1, "rms": 1,
+                 "media": 1, "f60": 1, "maxjan": 2}
+
 
 @dataclass(frozen=True)
 class Conta:
@@ -126,6 +134,46 @@ class Conta:
     id: str
     nome: str
     expressao: str
+    #: `onda` (amostra a amostra) ou `fasor` (60 Hz, complexo).
+    dominio: str = "onda"
+    #: os parâmetros `{k0}` da expressão — `((nome, real, imag, origem), ...)`.
+    parametros: tuple = ()
+    #: a relação de TC/TP DIGITADA para canal que o arquivo não
+    #: declara — `((indice_do_canal, razao), ...)`. O que o arquivo não diz vira
+    #: campo para digitar, nunca barreira (leitor universal, 25/10/2026).
+    relacoes: tuple = ()
+
+
+def _parametros_de_json(cru) -> tuple:
+    if not isinstance(cru, dict):
+        return ()
+    saida = []
+    for nome, v in sorted(cru.items()):
+        if (not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]{0,15}", str(nome))
+                or not isinstance(v, dict)):
+            continue
+        try:
+            mod = float(str(v.get("mod", 0) or 0).replace(",", "."))
+            ang = float(str(v.get("ang", 0) or 0).replace(",", "."))
+        except (TypeError, ValueError):
+            continue
+        z = complex(mod * math.cos(math.radians(ang)), mod * math.sin(math.radians(ang)))
+        saida.append((str(nome), z.real, z.imag, str(v.get("origem") or "digitado")))
+    return tuple(saida)
+
+
+def _relacoes_de_json(cru) -> tuple:
+    if not isinstance(cru, dict):
+        return ()
+    saida = []
+    for k, v in sorted(cru.items()):
+        try:
+            i, r = int(k), float(str(v).replace(",", "."))
+        except (TypeError, ValueError):
+            continue
+        if r > 0 and math.isfinite(r):
+            saida.append((i, r))
+    return tuple(saida)
 
 
 def de_json(cru) -> list[Conta]:
@@ -150,7 +198,11 @@ def de_json(cru) -> list[Conta]:
         if identidade in vistos or len(expressao) > LIMITE_DA_EXPRESSAO:
             continue
         vistos.add(identidade)
-        saida.append(Conta(id=identidade, nome=nome, expressao=expressao))
+        dominio = "fasor" if item.get("dominio") == "fasor" else "onda"
+        saida.append(Conta(id=identidade, nome=nome, expressao=expressao,
+                           dominio=dominio,
+                           parametros=_parametros_de_json(item.get("parametros")),
+                           relacoes=_relacoes_de_json(item.get("relacoes"))))
     return saida
 
 
@@ -188,7 +240,7 @@ def _escrever_unidade(expoentes: dict, por_grandeza: dict[str, str]) -> str:
         return ""
     sobrescrito = {2: "²", 3: "³", -1: "⁻¹", -2: "⁻²"}
     em_cima, embaixo = [], []
-    for chave in ("V", "I"):
+    for chave in ("V", "I", "s"):
         n = expoentes.get(chave, 0)
         if not n:
             continue
@@ -217,8 +269,9 @@ _SIMBOLOS = re.compile(r"""
     \s*(?:
       (?P<nome>\[[^\]\[]{1,60}\])
     | (?P<numero>\d+(?:[.,]\d+)?(?:[eE][+-]?\d+)?)
+    | (?P<param>\{[A-Za-z_][A-Za-z_0-9]{0,15}\})
     | (?P<funcao>[A-Za-z_][A-Za-z_0-9]*)
-    | (?P<sinal>[-+*/^()])
+    | (?P<sinal>[-+*/^();])
     )\s*
 """, re.VERBOSE)
 
@@ -230,7 +283,7 @@ def _quebrar(expressao: str) -> list[tuple[str, str]]:
         if achado is None or achado.end() == i:
             resto = expressao[i:].strip()
             raise ErroDaConta(f"não entendi «{resto[:20]}»")
-        for tipo in ("nome", "numero", "funcao", "sinal"):
+        for tipo in ("nome", "param", "numero", "funcao", "sinal"):
             valor = achado.group(tipo)
             if valor is not None:
                 fichas.append((tipo, valor))
@@ -256,8 +309,13 @@ class _No:
 
 
 class _Leitor:
-    def __init__(self, fichas, por_nome, por_grandeza):
+    def __init__(self, fichas, por_nome, por_grandeza, parametros=None):
         self.fichas = fichas
+        #: `{k0}` → número. Ver `Conta.parametros`.
+        self.parametros = parametros or {}
+        self.faltam: list[str] = []
+        #: se alguma função tirou o resultado da senoide (`media`).
+        self.nao_senoide = False
         self.i = 0
         #: `NOME EM MAIÚSCULAS` → o `Sinal` do catálogo. Entram os canais do
         #: arquivo, o resíduo, as componentes de sequência e as contas que o
@@ -318,8 +376,7 @@ class _Leitor:
                 if direita.unidade:
                     self.avisos.append(
                         "sinal ÷ sinal estoura em cada passagem por zero do "
-                        "de baixo; impedância mesmo é conta de FASOR, que "
-                        "ainda não existe")
+                        "de baixo; impedância mesmo é conta do domínio fasor")
                     self.tem_produto_de_sinais = True
                 no = _No("/", [no, direita],
                          unidade=_multiplicar(no.unidade,
@@ -379,6 +436,9 @@ class _Leitor:
                                   "registro — e uma conta só enxerga as "
                                   "contas criadas ANTES dela")
             achado = self.por_nome[procurado]
+            if isinstance(achado, str):
+                # nome padronizado que existe em mais de um grupo.
+                raise ErroDaConta(achado)
             if achado is None:
                 raise ErroDaConta(f"há mais de um sinal chamado «{nome}»: "
                                   "renomeie um deles para a conta saber qual é")
@@ -394,9 +454,23 @@ class _Leitor:
             grandeza = fases.grandeza_da_unidade(str(achado.unidade).strip())
             return _No("sinal", sinal=achado,
                        unidade={grandeza: 1} if grandeza else {})
+        if tipo == "param":
+            self.comer()
+            nome = valor[1:-1]
+            if nome not in self.parametros:
+                self.faltam.append(nome)
+                return _No("num", numero=0.0)
+            z = self.parametros[nome]
+            if abs(z.imag) > 1e-12:
+                self.avisos.append(
+                    f"{{{nome}}} é complexo e a conta é de ONDA: entra só a parte "
+                    "real — para usar o ângulo, escolha o domínio fasor")
+            return _No("num", numero=float(z.real))
+        if tipo == "funcao" and valor in FUNCOES_NOVAS:
+            return self._funcao_nova(valor)
         if tipo == "funcao":
             if valor not in FUNCOES:
-                conhecidas = ", ".join(FUNCOES)
+                conhecidas = ", ".join(FUNCOES + tuple(FUNCOES_NOVAS))
                 raise ErroDaConta(f"não conheço a função «{valor}» — tenho "
                                   f"{conhecidas}")
             self.comer()
@@ -414,6 +488,36 @@ class _Leitor:
             return _No("raiz", [dentro],
                        unidade={k: v // 2 for k, v in dentro.unidade.items()})
         raise ErroDaConta(f"não esperava «{valor}» aqui")
+
+    def _funcao_nova(self, valor: str) -> _No:
+        """`atrasar`, `delta`, `deriv`, `integ`, `rms`, `media`, `f60`, `maxjan`."""
+        self.comer()
+        self.comer("(")
+        dentro = self.expressao()
+        numero = 0.0
+        if FUNCOES_NOVAS[valor] == 2:
+            if self.olhar()[1] != ";":
+                raise ErroDaConta(f"{valor}(x; ms) leva dois argumentos, "
+                                  "separados por ponto e vírgula")
+            self.comer(";")
+            tipo, txt = self.olhar()
+            if tipo != "numero":
+                raise ErroDaConta(f"o segundo argumento de {valor} é um número, em ms")
+            self.comer()
+            numero = float(txt.replace(",", "."))
+            if not 0 < numero <= 2000:
+                raise ErroDaConta(f"{valor}: o tempo vai de 0 a 2000 ms")
+        self.comer(")")
+        unidade = dict(dentro.unidade)
+        if valor == "deriv":
+            unidade = _multiplicar(unidade, {"s": -1})
+        elif valor == "integ":
+            unidade = _multiplicar(unidade, {"s": 1})
+        if valor in ("rms", "maxjan"):
+            self.dominios.add("modulo")
+        if valor == "media":
+            self.nao_senoide = True
+        return _No(valor, [dentro], numero=numero, unidade=unidade)
 
 
 
@@ -451,6 +555,10 @@ class Analise:
     #: do projeto é avisar, nunca bloquear — quem decide o que faz sentido é o
     #: engenheiro, não o programa.
     avisos: tuple[str, ...] = ()
+    #: as relações digitadas (`Conta.relacoes`), aplicadas na série.
+    relacoes: tuple = ()
+    #: os canais SEM relação declarada que entraram na conta.
+    sem_relacao: tuple = ()
 
     @property
     def vale(self) -> bool:
@@ -580,11 +688,15 @@ def _do_catalogo(registro: Record) -> dict:
             # RMS, que é a coluna natural de quem tem as duas.
             por_linha[chave] = sinal
     saida: dict = {}
+    _padronizados(registro, por_linha)
     # As colunas primeiro, as linhas depois: se um canal se chamar, por azar,
     # `IN G1 · RMS`, quem manda é a LINHA — ela é o que o usuário vê no
     # catálogo como nome do sinal.
     for origem in (por_coluna, por_linha):
         for chave, sinal in origem.items():
+            if isinstance(sinal, str):
+                saida[chave] = sinal
+                continue
             if sinal is None or sinal is _REPETIDO:
                 saida[chave] = None
                 continue
@@ -640,7 +752,8 @@ def analisar(expressao: str, registro: Record, escalas: dict,
                         referenciaveis(registro, anteriores))
 
 
-def analisar_com(expressao: str, registro: Record, por_nome: dict) -> Analise:
+def analisar_com(expressao: str, registro: Record, por_nome: dict,
+                 parametros=(), relacoes=()) -> Analise:
     """O mesmo que `analisar`, com o mapa de nomes já montado.
 
     Existe para quem vai analisar VÁRIAS contas contra mapas que crescem — o
@@ -659,11 +772,15 @@ def analisar_com(expressao: str, registro: Record, por_nome: dict) -> Analise:
             por_grandeza[g] = canal.unit.strip()
 
     try:
-        leitor = _Leitor(_quebrar(expressao), por_nome, por_grandeza)
+        leitor = _Leitor(_quebrar(expressao), por_nome, por_grandeza,
+                         {n: complex(r, i) for n, r, i, *_ in parametros})
         arvore = leitor.expressao()
         if leitor.i != len(leitor.fichas):
             sobra = leitor.fichas[leitor.i][1]
             raise ErroDaConta(f"sobrou «{sobra}» no fim da conta")
+        if leitor.faltam:
+            nomes = ", ".join("{" + n + "}" for n in dict.fromkeys(leitor.faltam))
+            raise ErroDaConta(f"falta o valor de {nomes} — digite-o no campo ao lado")
     except ErroDaConta as erro:
         return Analise(erro=str(erro))
     except RecursionError:
@@ -674,6 +791,15 @@ def analisar_com(expressao: str, registro: Record, por_nome: dict) -> Analise:
                             "dele entre colchetes, como [IAW]")
 
     avisos = list(leitor.avisos)
+    digitadas = dict(relacoes)
+    for i in _sem_relacao(registro, leitor.usados, ()):
+        nome = next((c.name for c in registro.analog_channels if c.index == i), str(i))
+        if i in digitadas:
+            avisos.append(f"«{nome}»: relação digitada {digitadas[i]:g} "
+                          "(o arquivo não declara)")
+        else:
+            avisos.append(f"«{nome}» não tem relação de TC/TP declarada: entra como "
+                          "o arquivo gravou, sem converter — digite a relação ao lado")
     # Instantâneo com eficaz: a ressalva mais importante desta calculadora. Um
     # eficaz é um patamar que anda devagar; uma onda cruza o zero cento e vinte
     # vezes por segundo. A soma existe, e não descreve grandeza nenhuma.
@@ -702,7 +828,10 @@ def analisar_com(expressao: str, registro: Record, por_nome: dict) -> Analise:
         # Soma e subtração de senoides de mesma frequência é senoide; produto
         # entre sinais não é. Ver o cabeçalho.
         alternado=(all(e_alternado(r) for r in leitor.usados)
-                   and not leitor.tem_produto_de_sinais),
+                   and not leitor.tem_produto_de_sinais
+                   and not leitor.nao_senoide),
+        relacoes=tuple(relacoes),
+        sem_relacao=_sem_relacao(registro, leitor.usados, relacoes),
         tem_produto=leitor.tem_produto_de_sinais,
         dominios=tuple(sorted(leitor.dominios)),
         avisos=tuple(dict.fromkeys(avisos)),
@@ -785,13 +914,22 @@ def serie(registro: Record, analise: Analise, lado: str,
     """
     if not analise.vale or registro.analog.size == 0:
         return None
+    global _RELACOES_ATIVAS
+    antes = _RELACOES_ATIVAS
+    _RELACOES_ATIVAS = dict(getattr(analise, "relacoes", ()) or ())
     try:
         saida = _avaliar(analise.arvore, registro, lado)
     except (ValueError, KeyError, FloatingPointError):
         return None
+    finally:
+        _RELACOES_ATIVAS = antes
     if saida is None:
         return None
     return saida / divisor if divisor and divisor != 1.0 else saida
+
+
+#: as relações digitadas da conta que está sendo avaliada agora.
+_RELACOES_ATIVAS: dict = {}
 
 
 def _serie_do_sinal(ref, registro: Record, lado: str) -> np.ndarray:
@@ -810,9 +948,18 @@ def _serie_do_sinal(ref, registro: Record, lado: str) -> np.ndarray:
     if ref.analise is not None:
         return _avaliar(ref.analise.arvore, registro, lado)
     n = registro.analog.shape[1]
-    valores = catalogo.serie(registro, ref.sinal, 0, n, registro.trechos,
-                             lado, {})
-    return np.asarray(valores, dtype=np.float64)
+    valores = np.asarray(catalogo.serie(registro, ref.sinal, 0, n, registro.trechos,
+                                        lado, {}), dtype=np.float64)
+    razao = _RELACOES_ATIVAS.get(getattr(ref, "canal", -1))
+    if razao:
+        canal = next((c for c in registro.analog_channels if c.index == ref.canal), None)
+        if canal is not None:
+            natural = "primario" if canal.is_primary else "secundario"
+            if lado == "primario" and natural == "secundario":
+                valores = valores * razao
+            elif lado == "secundario" and natural == "primario":
+                valores = valores / razao
+    return valores
 
 
 def _avaliar(no: _No, registro: Record, lado: str) -> np.ndarray:
@@ -833,6 +980,10 @@ def _avaliar(no: _No, registro: Record, lado: str) -> np.ndarray:
         return np.sqrt(np.maximum(dentro, 0.0))
     if no.op == "pot":
         return _avaliar(no.filhos[0], registro, lado) ** int(no.numero)
+    if no.op in FUNCOES_NOVAS:
+        from osclab.plot import calculadora
+        return calculadora.funcao_de_onda(
+            no.op, _avaliar(no.filhos[0], registro, lado), no.numero, registro)
     esquerda = _avaliar(no.filhos[0], registro, lado)
     direita = _avaliar(no.filhos[1], registro, lado)
     if no.op == "+":
@@ -850,3 +1001,69 @@ def _avaliar(no: _No, registro: Record, lado: str) -> np.ndarray:
                              out=np.full_like(esquerda, np.nan),
                              where=direita != 0)
     raise ValueError(no.op)
+
+
+def _sem_relacao(registro: Record, usados, relacoes) -> tuple:
+    """os canais da conta cuja relação de TC/TP o arquivo não declara."""
+    from osclab.plot import conversao
+    digitadas = dict(relacoes)
+    canais = {c.index: c for c in registro.analog_channels}
+    saida = []
+    for r in usados:
+        c = canais.get(getattr(r, "canal", -1))
+        if c is None or c.index in digitadas:
+            continue
+        if conversao.relacao(c) <= 0 and c.index not in saida:
+            saida.append(c.index)
+    return tuple(saida)
+
+
+def _padronizados(registro: Record, por_linha: dict) -> None:
+    """os nomes PADRONIZADOS como referência — `[IA]`, `[IA G2]`, `[3I0]`.
+
+    Um modelo de conta escrito com `[VA] / [IA]` vale para qualquer registro;
+    `[Current IA]` só vale para o fabricante que escreve assim. O nome
+    padronizado sai do VÍNCULO canal → fase (o mesmo que a tela mostra e deixa
+    corrigir), mais o grupo. Sem grupo (`[IA]`) só quando há UM: com dois, o
+    nome é ambíguo e a conta diz quais existem — nunca escolhe por conta própria.
+
+    O nome do canal ganha sempre: se um relé chamar um canal de `IA`, `[IA]` é
+    o canal dele.
+
+    `[IN]` e `[VN]` são o RESÍDUO da trinca (`IN G1`, a soma das fases), como
+    no catálogo — nunca o neutro MEDIDO, que entra pelo nome do canal dele
+    (`[Current IN]`, `[IG]`). Se `[IN]` fosse o canal medido num registro e o
+    resíduo noutro, o mesmo modelo calcularia coisas diferentes em cada relé.
+    """
+    import re as _re
+
+    from osclab.plot import catalogo
+
+    novos: dict = {}
+    for sinal in catalogo.de_registro(registro, "arquivo"):
+        if (sinal.familia == "canal" and sinal.grandeza == "instantaneo"
+                and sinal.grupo and sinal.fundamental and sinal.bloco == "alternado"
+                and sinal.fundamental not in ("IN", "VN")):
+            base, grupo = sinal.fundamental, sinal.grupo
+        elif sinal.familia == "canal":
+            continue
+        else:
+            achado = _re.fullmatch(r"(.+) (G\d+)", sinal.linha or "")
+            if not achado or sinal.nome != sinal.linha:
+                continue
+            base, grupo = achado.group(1), achado.group(2)
+        novos.setdefault(chave_do_nome(f"{base} {grupo}"), []).append(sinal)
+        novos.setdefault(chave_do_nome(base), []).append((grupo, sinal))
+    for chave, lista in novos.items():
+        if chave in por_linha:
+            continue
+        if lista and not isinstance(lista[0], tuple):
+            por_linha[chave] = lista[0]
+            continue
+        grupos = sorted({g for g, _ in lista})
+        if len(grupos) == 1:
+            por_linha[chave] = lista[0][1]
+        else:
+            exemplo = " ou ".join(f"[{chave} {g}]" for g in grupos)
+            por_linha[chave] = (f"«{chave}» existe em {', '.join(grupos)}: escreva "
+                                f"{exemplo} — a conta não escolhe o grupo sozinha")

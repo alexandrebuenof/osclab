@@ -101,6 +101,24 @@ LOCALIZADOR = {
     },
 }
 
+#: A calculadora (variante 10, 11/11/2026): a marca do domínio, onda e fasor,
+#: no filete da conta e nas teclas — conferidas uma contra a outra.
+CALCULADORA = {
+    "escuro": {"fundo": "#09131f",
+               "cores": {"--calc-onda": "#4fb3bf", "--calc-fasor": "#e0a060"}},
+    "claro": {"fundo": "#ffffff",
+              "cores": {"--calc-onda": "#1f5f6b", "--calc-fasor": "#8a4b12"}},
+}
+
+#: O VISOR da calculadora é marinho nos dois temas; por cima dele vão o traço
+#: da prévia (onda ou fasor) e os números.
+_NO_VISOR = {"--calc-visor-onda": "#4fb3bf", "--calc-visor-fasor": "#e0a060",
+             "--calc-visor-tinta": "#e4eaf2"}
+VISOR = {
+    "escuro": {"fundo": "#060d18", "cores": dict(_NO_VISOR)},
+    "claro": {"fundo": "#0e1c31", "cores": dict(_NO_VISOR)},
+}
+
 #: Distância perceptual mínima entre dois traços do mesmo gráfico. Abaixo
 #: disso, "a azul e a outra azul" — que é como se descreve um gráfico que não
 #: se lê.
@@ -411,6 +429,8 @@ def main() -> int:
     problemas = 0
     grupos = [(f"tema {tema}", dados) for tema, dados in TEMAS.items()]
     grupos += [(f"localizador, tema {tema}", dados) for tema, dados in LOCALIZADOR.items()]
+    grupos += [(f"calculadora, tema {tema}", dados) for tema, dados in CALCULADORA.items()]
+    grupos += [(f"visor da calculadora, tema {tema}", dados) for tema, dados in VISOR.items()]
     for nome, dados in grupos:
         reprovacoes, avisos = conferir(dados["cores"], dados["fundo"])
         print(f"{nome}: {len(dados['cores'])} cores, "

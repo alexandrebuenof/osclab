@@ -93,10 +93,11 @@ from osclab.formats import registry
 from osclab.formats.base import FormatError
 from osclab.library import acervo
 from osclab.plot import alinhamento as alinhamento_mod
+from osclab.plot import calculadora as calculadora_mod
 from osclab.plot import contas as contas_mod
 from osclab.plot import eventos as eventos_plot
 from osclab.plot import impedancia as impedancia_mod
-from osclab.plot import janela, leitura, navegacao, paineis, unidades
+from osclab.plot import janela, leitura, navegacao, paineis
 from osclab.plot import localizador as localizador_mod
 from osclab.plot import varios as varios_mod
 
@@ -356,57 +357,110 @@ def create_app() -> Flask:
                 contas=_contas(),
             ))
 
-    @app.post("/api/onda/<sha>/conta")
-    def conferir_conta(sha: str):
-        """Lê uma expressão da calculadora e diz se ela vale, e em que unidade.
+    # --- a calculadora (variante 10, 11/11/2026): `plot/calculadora.py` -----
+    #
+    # As contas são da TELA e viajam no corpo de todo pedido, como os painéis
+    # (`_contas()`); o servidor não guarda nenhuma. O que ele guarda é só o
+    # MODELO que o usuário pediu para guardar («guardar como modelo»), fora do
+    # registro, em `paths.MODELOS_DA_CALCULADORA`.
 
-        Existe para a tela poder dizer o erro ENQUANTO o usuário digita, sem
-        uma segunda implementação da gramática no navegador. Uma gramática em
-        dois lugares é duas gramáticas, e elas divergem no primeiro caso
-        esquisito — que numa calculadora de laudo é o caso que importa.
-        """
+    @app.post("/api/onda/<sha>/calculadora/conferir")
+    def calculadora_conferir(sha: str):
+        """Lê a conta que está no visor: o erro, a unidade, a prévia da curva
+        no registro inteiro e o valor nos dois cursores.
+
+        Existe para a tela poder dizer tudo isso ENQUANTO o usuário digita, sem
+        uma segunda implementação da gramática no navegador."""
         try:
             registro = acervo.ler(sha)
         except FormatError as exc:
             return jsonify(erro=str(exc)), 404
-        pedido = request.get_json(silent=True) or {}
-        lado = str(pedido.get("lado") or "arquivo")
-        escalas = unidades.por_unidade(registro, lado)
-        # As contas JÁ criadas são o alcance desta: ver `plot/contas.analisar`.
-        # Em edição, a própria conta e as posteriores ficam de fora — senão a
-        # tela diria que vale uma referência que o catálogo vai recusar.
-        editando = str(pedido.get("editando") or "")
-        antes = []
-        for conta in _contas():
-            if conta.id == editando:
-                break
-            antes.append(conta)
-        analise = contas_mod.analisar(str(pedido.get("expressao") or ""),
-                                      registro, escalas, tuple(antes))
-        nomes = list(analise.fontes)
-        return jsonify(
-            vale=analise.vale,
-            unidade=escalas.get(analise.unidade_escrita,
-                                (1.0, analise.unidade_escrita))[1],
-            alternado=analise.alternado,
-            canais=nomes,
-            erro=analise.erro,
-            # Se sobra 60 Hz nela. A tela usa para avisar que, no modo
-            # tradicional, esta conta não teria coluna nenhuma — e para
-            # trocar de modo ao criar. Ver `contas.tem_60hz`.
-            tem_60hz=bool(contas_mod.tem_60hz(
-                contas_mod.serie(registro, analise, lado, 1.0), registro))
-            if analise.vale else True,
-            # O DOMÍNIO da conta, que é o que diz se ela tem onda e contínua
-            # ou só o eficaz. `componente`, `modulo` ou `misto` — e o `misto`
-            # é o «não sei», que a tela não barra. Ver `contas.Analise`.
-            dominio=("" if not analise.vale
-                     else "misto" if analise.tem_onda is None
-                     else "componente" if analise.tem_onda else "modulo"),
-            # Os avisos são a conta que PASSA com ressalva — a tela escreve no
-            # ⓘ azul e deixa aplicar. Ver `plot/contas.py`.
-            avisos=list(analise.avisos),
-        )
+        corpo = request.get_json(silent=True) or {}
+        cru = dict(corpo.get("conta") or {})
+        cru["id"] = cru.get("id") or "x9999"
+        cru["nome"] = cru.get("nome") or "nova"
+        if not str(cru.get("expressao") or "").strip():
+            return jsonify(vale=False, erro="")
+        lida = contas_mod.de_json([cru])
+        if not lida:
+            return jsonify(vale=False, erro="a conta é longa demais")
+        lado = str(corpo.get("lado") or "arquivo")
+        # O alcance: em edição, só as contas ANTERIORES a ela; nova, todas.
+        todas = _contas()
+        ids = [c.id for c in todas]
+        antes = todas[:ids.index(lida[0].id)] if lida[0].id in ids else todas
+        instantes = [_numero(str(corpo.get(k))) if corpo.get(k) is not None else None
+                     for k in ("t1", "t2")]
+        with fasor_mod.usando(corpo.get("estimador")):
+            resposta = calculadora_mod.previa(
+                registro, lida[0], antes + [lida[0]], lado,
+                int(_numero(str(corpo.get("colunas") or "")) or 320))
+            resposta["valores"] = calculadora_mod.valores(
+                registro, antes + [lida[0]], lado, instantes)[-1]
+        return jsonify(resposta)
+
+    @app.post("/api/onda/<sha>/calculadora/valores")
+    def calculadora_valores(sha: str):
+        """Cada conta da tela nos dois cursores — a aba «minhas contas»."""
+        try:
+            registro = acervo.ler(sha)
+        except FormatError as exc:
+            return jsonify(erro=str(exc)), 404
+        corpo = request.get_json(silent=True) or {}
+        instantes = [_numero(str(corpo.get(k))) if corpo.get(k) is not None else None
+                     for k in ("t1", "t2")]
+        with fasor_mod.usando(corpo.get("estimador")):
+            return jsonify(linhas=calculadora_mod.valores(
+                registro, _contas(), str(corpo.get("lado") or "arquivo"), instantes))
+
+    @app.get("/api/onda/<sha>/calculadora/modelos")
+    def calculadora_modelos(sha: str):
+        """Os modelos (cada um dizendo se cabe AQUI), os nomes que a gaveta
+        oferece e os ajustes que o relé traz (o k0, com a origem)."""
+        try:
+            registro = acervo.ler(sha)
+        except FormatError as exc:
+            return jsonify(erro=str(exc)), 404
+        saida = calculadora_mod.modelos(registro, request.args.get("lado", "arquivo"))
+        item = acervo.obter(sha)
+        ajustes = None
+        if item is not None:
+            ajustes = ajustes_mod.do_registro(
+                acervo.pasta_do_registro(sha),
+                item.como_dicionario().get("arquivos") or (),
+                [c.name for c in registro.status_channels])
+        saida["sugeridos"] = calculadora_mod.ajustes_sugeridos(ajustes)
+        saida["nomes"] = calculadora_mod.nomes(registro)
+        return jsonify(saida)
+
+    @app.post("/api/onda/<sha>/calculadora/modelos")
+    def calculadora_guardar_modelo(sha: str):
+        """«guardar como modelo»: a conta generalizada, FORA do registro."""
+        corpo = request.get_json(silent=True) or {}
+        m = {k: corpo.get(k) for k in ("id", "nome", "categoria", "dominio", "expressao",
+                                        "parametros", "descricao")}
+        if not m["nome"] or not m["expressao"]:
+            return jsonify(erro="falta nome ou expressão"), 400
+        m["id"] = m["id"] or calculadora_mod.id_de_modelo(m["nome"], m["expressao"])
+        m["categoria"] = m["categoria"] or "Seus modelos"
+        m["dominio"] = "fasor" if m["dominio"] == "fasor" else "onda"
+        m["parametros"] = [str(x) for x in (m["parametros"] or [])]
+        m["descricao"] = m["descricao"] or ""
+        return jsonify(modelos=calculadora_mod.guardar_modelo(m))
+
+    @app.delete("/api/onda/<sha>/calculadora/modelos/<ident>")
+    def calculadora_apagar_modelo(sha: str, ident: str):
+        return jsonify(modelos=calculadora_mod.apagar_modelo(ident))
+
+    @app.post("/api/onda/<sha>/calculadora/generalizar")
+    def calculadora_generalizar(sha: str):
+        """`[Current IA]` → `[IA]`: o que o modelo guardado vai escrever."""
+        try:
+            registro = acervo.ler(sha)
+        except FormatError as exc:
+            return jsonify(erro=str(exc)), 404
+        corpo = request.get_json(silent=True) or {}
+        return jsonify(calculadora_mod.generalizar(str(corpo.get("expressao") or ""), registro))
 
     @app.post("/api/acervo/<sha>/nome")
     def renomear(sha: str):

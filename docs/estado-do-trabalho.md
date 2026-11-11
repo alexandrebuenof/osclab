@@ -1,5 +1,7 @@
 # Onde o trabalho está
 
+**11/11/2026 — calculadora em gaveta (variante 10) implementada no ramo `calculadora-10`, para revisão:** domínio fasor, funções novas, nomes padronizados (a fileira IA…VN insere o nome completo do canal; seletor de grupo «G1 · radical» com duas trincas), `{k0}` com origem, TC sem relação digitável, sugestões e «guardar como modelo»; defeito do main corrigido (conta + filtro → erro 500). Teste de navegador com nomes longos (`tests/test_calculadora_navegador.py`). **Perguntas abertas:** conta livre no fasor ou só laços prontos; relação de TC digitada vale só para a conta ou para o canal; conta de unidade nova ganha gráfico próprio; separador `;`.
+
 **11/11/2026 — janela de eventos (variante 03) implementada no ramo `eventos-03`, para revisão:** `.hdr` da Schneider lido sozinho; SER e `.eev` só pelo «+ arquivo», valendo na aba, sem gravar; trilha da distribuição contada no Python; nada classificado por nome. Ver `docs/log-de-eventos.md`.
 
 ## 10/11/2026 (noite) — fila combinada com o Alexandre, para retomar depois de compactar

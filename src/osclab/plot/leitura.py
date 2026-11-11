@@ -325,6 +325,19 @@ def _linha_de_conta(registro: Record, sinal, i: int, lado: str, escalas: dict,
     # da expressão por sinal a CADA movimento do cursor.
     analise = getattr(sinal, "analise", None) or contas_mod.analisar(
         sinal.expressao, registro, escalas, getattr(sinal, "contas_antes", ()))
+    from osclab.plot import calculadora as maq
+    if isinstance(analise, maq.FasorAnalise):
+        # conta de fasor — o módulo (ou o valor real) na amostra.
+        _z = maq.serie_fasor(registro, analise, lado)
+        divisor, _ = maq._escala(escalas, analise.unidade_escrita,
+                                 None if _z is None else abs(_z))
+        curva = maq.curva_do_fasor(registro, analise, lado, divisor)
+        if curva is None or not (0 <= i < curva.size) or not np.isfinite(curva[i]):
+            return vazio
+        v = _num(float(curva[i]))
+        linha = dict(vazio)
+        linha.update(valor=v, casas=casas(v), fundamental=v, casas_fasor=casas(v))
+        return linha
     onda = contas_mod.serie(registro, analise, lado, divisor)
     if onda is None or not (0 <= i < onda.size):
         return vazio
