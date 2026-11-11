@@ -1,5 +1,40 @@
 # Onde o trabalho está
 
+## 10/11/2026 (noite) — fila combinada com o Alexandre, para retomar depois de compactar
+
+Identidade visual f10 no main e publicada (4d09705). Localizador: **variante 17 escolhida**
+(maquete em `../osclab-maquetes`, ramo `maquete/localizador-grafico`, 85c3aec), com dois
+ajustes antes de virar padrão:
+- sai a troca **R+jX ⇄ |Z|∠θ** da janela «parâmetros» (a tabela já mostra as duas formas);
+  ficam `Ω/km` e primário/secundário — conferir com ele se o `Ω/km` fica;
+- saem as **wordbits** embaixo dos valores do relé («de Z1MAG, Z1ANG, PTRY, CTRW»):
+  ele esperava uma variável por valor, e o valor derivado confunde.
+
+Ordem proposta (aguardando o ok dele). Paralelo = agentes desta sessão, cada um no seu
+worktree e porta; **nunca dois terminais** (decisão dele).
+
+| rodada | frente | depende de | onde |
+|---|---|---|---|
+| 1 | **A. Localizador 17 no main**, de verdade e com testes (tela de localização desligada, cabeçalho km/%/parâmetros + comprimento, rodapé só com o trecho a patrulhar, hachura sem «não mede», âmbar do relé, «? métodos», janela «parâmetros» em faixas com Relé/Base/Digitado e «usar» por coluna, vermelho quando difere, selo `relé ≠ base` com Z1/Z0-k0/LL, «a partir de SE X / deste terminal / do IED A») | — | main |
+| 1 | **B. Eventos**: janela no padrão da «lógica» — vista formatada + «texto» cru; fontes: eventos do Schneider no `.hdr`, **`.eev` da GE** (ele tem um exemplo real; ler o formato localmente, nunca versionar; a maquete usa `.eev` fictício no mesmo formato) e `.txt` de relé (bloco de notas). Retomar o que já existe: commit 8fd0832 (eventos, maquete 1) e `Desktop\OscLab maquetes\eventos-10.html` | — | worktree `maquete/eventos`, porta 8773 |
+| 1 | **C. Calculadora**: dez maquetes funcionais, aberto a sugestões (a 0.7.0 já tem o domínio ONDA) | — | worktree `maquete/calculadora`, porta 8774 |
+| 2 | **D. Menus lado a lado**: uma página que abre os menus de TODOS os gráficos (incl. «+ sinal», parâmetros do localizador) pós-A, para ver se parecem da mesma mão; e o caso de **duas oscilografias na mesma aba** (como fica «parâmetros» com dois IEDs). Depois, padronizar | A | 8771 |
+| 2 | **E. Refino da seq. negativa (dois terminais)**: botão «refinar» ao lado da legenda da seq. negativa → janela com V e I do relé A e do relé B; chave fase ⇄ seq. negativa; alinhamento **automático (padrão)** ⇄ manual (escolher pontos por cursor ou outra forma); zoom nas analógicas/sequência; ao lado, I2/V2 ao vivo com o cursor e a localização por seq. negativa a partir de um IED; campo para digitar a seq. negativa à mão. Antecedente: `Desktop\OscLab maquetes\localizador-refino-10.html` (04/11, sem escolha) | A | 8771 |
+| 3 | **F. Modo escuro**: várias paletas para ele escolher, tudo validado no `tools/paleta.py`. Por último, de noite (ele pede quando for dormir) | B–E escolhidos | 8771 |
+
+**Replanejado às 21h50, com o ok dele** (ele volta no máximo duas vezes antes de dormir):
+A–E rodam JÁ, todas em paralelo; D e E usam a 17 da maquete em vez de esperar o main.
+Na 1ª volta ele avalia; na 2ª dá os vereditos e pede o F (escuro), que roda de madrugada.
+Onde está cada uma: A `../osclab-localizador` (ramo `localizador-17`, porta 8776, merge no
+main só depois da minha revisão) · B `../osclab-maq-eventos` 8774 · C `../osclab-maq-calculadora`
+8775 · D `../osclab-maquetes` ramo `maquete/menus` 8771 (também ajusta a 17) ·
+E `../osclab-maq-refino` 8773. Padrões assumidos sem resposta dele: `Ω/km` fica; o `.eev`
+real (pendrive) é lido só para aprender o formato, a maquete usa um fictício.
+
+Regras de sempre: maquete antes (dez por função nova), versão `0.8.0` só quando ele aprovar
+a rodada, push só com a confirmação dele.
+
+
 ## 09/11/2026 — painel localizador, parâmetros da linha e linhas de três terminais (commits 469091c … 36261f5)
 
 Feito: painel «localizador de faltas» (curvas dos métodos no tempo; curva apagada fora do
