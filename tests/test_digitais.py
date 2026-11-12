@@ -76,14 +76,16 @@ def test_por_padrao_nao_ha_limite_nenhum():
     um evento com quarenta digitais mexendo, e a tela tem que mostrá-lo
     inteiro: cortar nos primeiros N esconderia o religamento e o segundo
     trip, que são o fim da história."""
-    linhas = [[i % 2 for i in range(40)] for _ in range(50)]
+    # Uma transição cada: quem muda o registro todo picota (ver test_picotando).
+    linhas = [[int(i >= 1 + k % 38) for i in range(40)] for k in range(50)]
     assert len(digitais.escolhidos_por_padrao(registro(*linhas))) == 50
 
 
 def test_o_limite_continua_a_um_argumento_de_distancia():
     """Para o registro esquisito — ruído em entrada binária — o corte existe.
     Quem o usar tem que dizer na tela quantos ficaram de fora."""
-    linhas = [[i % 2 for i in range(40)] for _ in range(50)]
+    # Uma transição cada: quem muda o registro todo picota (ver test_picotando).
+    linhas = [[int(i >= 1 + k % 38) for i in range(40)] for k in range(50)]
     assert len(digitais.escolhidos_por_padrao(registro(*linhas), limite=24)) == 24
 
 

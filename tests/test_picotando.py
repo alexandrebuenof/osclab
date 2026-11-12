@@ -49,7 +49,7 @@ def _casos() -> Record:
         "PULSO": _degrau(N - 3, N - 1),                              # pulso no fim
         "ENX": _picotando(170, 6),                                   # ~970 transições
         "RAJADA": _picotando(200, 3, fim=1400),                      # 400, e para
-        "MEDIO": _picotando(3990, 10, fim=6000),                     # 200: no limite
+        "MEDIO": _degrau(*range(4600, 6000, 70)),                    # 20: no limite
         "PARADO": np.zeros(N, dtype=np.int8),
     })
 
@@ -108,9 +108,9 @@ def test_sem_placa_vence_picotando():
 
 
 def test_picota_decide_pelo_fim_do_registro():
-    assert digitais.picota(201, 0.76, 0.0, 1.0)
-    assert not digitais.picota(201, 0.74, 0.0, 1.0)
-    assert not digitais.picota(200, 1.0, 0.0, 1.0)
+    assert digitais.picota(21, 0.76, 0.0, 1.0)
+    assert not digitais.picota(21, 0.74, 0.0, 1.0)
+    assert not digitais.picota(20, 1.0, 0.0, 1.0)
     assert not digitais.picota(5000, None, 0.0, 1.0)
     # O início não é zero num registro real: a fração é da DURAÇÃO.
     assert digitais.picota(300, 10.8, 10.0, 11.0)
