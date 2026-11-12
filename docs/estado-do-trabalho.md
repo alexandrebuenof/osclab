@@ -1,5 +1,26 @@
 # Onde o trabalho está
 
+## Resumo da manhã — 12/11/2026
+
+**No main (sem push; GitHub em 2d95590 = 0.8.0):** tudo junto, suíte inteira passando e `ruff check .` limpo.
+
+- Alinhamento manual do «refinar» **gravado** ao lado do registro (`refino.json`); reabrir dá o mesmo km; Ctrl+Z não desfaz.
+- Relação de TC/TP **digitada por grupo**, corrigível por canal, gravada (`relacoes.json`); digita-se em «grupos», em «canais» ou no ⚠ da calculadora. Testada no navegador.
+- Conta nova da calculadora vai **só para a lista** de calculados; eixo com unidades misturadas ou desconhecidas fica **sem título** (unidade na tabela).
+- Roda do mouse no localizador consertada (fator proporcional ao giro; no piso não anda de lado); **engrenagem em todo gráfico**; botões sem a cara do navegador; avisos fora do desenho; caixa da engrenagem mais larga.
+- Revisão geral + caça de bugs (17 achados): consertados os dois graves (renomear gráfico renomeava o registro; sinal de potência + cursor dava erro) e mais 10; teste instável da calculadora estabilizado.
+
+**Para o Alexandre decidir:**
+1. Maquetes: **ajustes do diferencial** (porta 8778; recomendação 03 + quadro vazio da 08) e **equações desenhadas** do «? métodos» (porta 8779; recomendação 03 ou 10).
+2. **B06:** o mesmo evento entra duas vezes no acervo quando chega com e sem `.hdr` (o sha inclui o `.hdr`). Mudar troca o endereço dos registros guardados.
+3. «Vbat» deduzido como fase VB (dedução pelo nome) — corrigir a regra?
+4. Sinal sem unidade vai para o eixo da direita — ok, ou esquerda?
+5. Push do que está no main.
+
+**Defeitos pequenos ainda abertos** (`docs-privados/caca-de-bugs-2026-11-11.md`): B09 mensagem errada na conferência de conta, B13 janela de eventos por cima do «refinar», B14 botão «cores» fora da fileira a 800 px, B15 apelido «CON/PRN» aceito no Windows.
+
+**Testes do 1.0:** `06 - Ferramentas\Oscilografias para testes 1.0\` — 30 casos em 17 pastas, `LEIA-ME.md` com o que testar e o que esperar. O banco não cobre: várias taxas no mesmo arquivo, ABB/NOJA/GE UR, três terminais.
+
 **11/11/2026 — contas e título do eixo (ramo `eixos-unidade`, para revisão):** «= criar» da calculadora põe a conta SÓ na lista («Calculados» do «+ sinal» e «minhas contas»), com uma linha no visor dizendo onde ela está — não entra mais num gráfico sozinha. Eixo cujos sinais não dividem UMA unidade conhecida fica SEM título; a unidade vai só na tabelinha, e o sinal sem unidade escreve `(—)`. O sinal sem unidade nunca é recusado nem abre eixo: vai para a direita quando a esquerda tem unidade (para não achatar a escala dela), ou para a esquerda quando não há unidade conhecida. Terceira unidade CONHECIDA continua recusada. Conta em `serie.titulo_do_eixo`/`titular_eixos` (também depois de juntar IEDs), testes em `tests/test_contas.py` e `tests/test_varios.py`, `CONTRATO` 27. **Pergunta aberta:** o sem-unidade na direita é o certo, ou ele prefere que fique no eixo da esquerda?
 
 **11/11/2026 — relação de TC/TP digitada passa a ser do CANAL (ramo `relacao-tc`, para revisão):** responde a pergunta aberta da calculadora. Digita-se por GRUPO (cartão em «grupos»: vale para as três fases e para o resíduo do vão sem relação declarada) ou por CANAL (coluna «relação» em «canais»; vence o grupo), e o campo ⚠ da calculadora grava no registro. A digitada vence o arquivo; vazio volta ao arquivo. Gravada em `relacoes.json` ao lado do registro e aplicada no `Record` depois do leitor (`formats/relacoes.py`), então vale em gráficos, tabelinha, fasorial, calculadora e localização. Legenda: `digitado` no lugar do aviso de sem relação. `CONTRATO` 26 → 27. Testes em `tests/test_relacoes.py`. **Observação:** canal COMTRADE com `1,1` no par conta como «declarado 1:1» na conversão (não acende o aviso) — comportamento antigo, não mexido.
