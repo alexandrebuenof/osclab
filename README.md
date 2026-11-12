@@ -6,7 +6,7 @@ Lê registros de perturbação de relés de vários fabricantes, analisa a falta
 estima onde ela ocorreu por diferentes métodos e gera relatório. A interface é
 uma página web que roda na própria máquina — nada sai para a internet.
 
-> **Versão 0.9.0.** Lê COMTRADE e o `.CEV` da SEL (testado contra registros
+> **Versão 0.9.1.** Lê COMTRADE e o `.CEV` da SEL (testado contra registros
 > reais de SEL, Siemens, GE e Schneider) e mostra, no navegador: formas de onda
 > com cursores, RMS e filtro de 60 Hz, componentes simétricas, diagrama
 > fasorial, harmônicos, calculadora de sinais, eventos do relé, diferencial
