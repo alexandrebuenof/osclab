@@ -41,9 +41,10 @@ Referência viva (não copiar a técnica, só o resultado):
    «tema», numa versão coerente (marinho profundo), validada pelo
    `tools/paleta.py` como toda cor.
    **Escuro escolhido em 11/11/2026: a paleta 08 «Ardósia clara»** (cinza-
-   azulado médio, barra grafite), com o desenho da subestação no realce 20
-   do tratamento «ajustável» — rodada de dez paletas no ramo `maquete/escuro`
-   (`maquetes/ESCURO.md`). O claro ficou como estava.
+   azulado médio, barra grafite) — rodada de dez paletas no ramo
+   `maquete/escuro` (`maquetes/ESCURO.md`). **O desenho da subestação** tem
+   o traço do «realce» que ele escolheu na mesma maquete: 31 no claro, 19 no
+   escuro (`portal.css`, bloco gerado por `maquetes/exportar_realce.py`).
 
 ## Página a página
 

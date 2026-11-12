@@ -1,5 +1,7 @@
 # Onde o trabalho está
 
+**11/11/2026 — realce do desenho da subestação no ramo `realce-subestacao`, para revisão:** claro 31 (aresta de 0,50 px no início, cor de sempre: traço ÷ título 18 %), escuro 19 (0,51 px, 28 %), colados no `portal.css` como o `exportar_realce.py 31 19` da maquete gerou. Sai o `vector-effect` do escuro; a casca da casa de arquivos e base deixa de sair com 1 px. Conferido contra a maquete: diferença máxima de 3/255.
+
 **11/11/2026 — tema escuro = paleta 08 «Ardósia clara», no ramo `escuro-08`, para revisão:** todos os tokens do escuro (página, milimetrado, gráficos, barra, rodapé, fases, digital, cursores, localizador, calculadora) mais o desenho da subestação no realce 20 (0,79 px, 34 % do título). `tools/paleta.py` atualizado, e as convenções de fase do escuro (`fases.css`) reajustadas ao fundo novo. O claro não mudou.
 
 **11/11/2026 — calculadora em gaveta (variante 10) implementada no ramo `calculadora-10`, para revisão:** domínio fasor, funções novas, nomes padronizados (a fileira IA…VN insere o nome completo do canal; seletor de grupo «G1 · radical» com duas trincas), `{k0}` com origem, TC sem relação digitável, sugestões e «guardar como modelo»; defeito do main corrigido (conta + filtro → erro 500). Teste de navegador com nomes longos (`tests/test_calculadora_navegador.py`). **Perguntas abertas:** conta livre no fasor ou só laços prontos; relação de TC digitada vale só para a conta ou para o canal; conta de unidade nova ganha gráfico próprio; separador `;`.

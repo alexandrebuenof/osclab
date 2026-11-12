@@ -516,9 +516,15 @@ osclab/
   guardada no navegador. Na folha, o claro é o `:root` e o escuro vive sob
   `[data-tema="escuro"]`. **O escuro é a paleta 08 «Ardósia clara»**
   *(11/11/2026)*: grafite azulado aberto, gráficos em `#1f252c`, barra e
-  rodapé grafite; e o desenho da subestação nele leva mais traço (0,79 px que
-  não encolhem, o realce 20 da maquete). Escolhida entre dez paletas na
-  maquete `maquete/escuro`; o claro não mudou.
+  rodapé grafite. Escolhida entre dez paletas na maquete `maquete/escuro`.
+- **O traço do desenho da subestação é o «realce» escolhido na maquete**
+  *(11/11/2026)*: 31 no claro, 19 no escuro, coladas no `portal.css` como
+  `maquetes/exportar_realce.py 31 19` (ramo `maquete/escuro`) gerou. O
+  mecanismo é o do próprio desenho: `stroke-width` em unidades do SVG e um
+  fator sobre o atributo dos cabos — **nada de `vector-effect`**. Foi o
+  `vector-effect` que fez a maquete mostrar um desenho que o programa não
+  mostrava: lá a aresta ficava fixa na tela, aqui ela afina com o desenho.
+  Para mudar a dosagem, gerar o bloco de novo; não editar os números à mão.
 - **A altura de um gráfico é da TELA** *(10/11/2026)*. A alça na borda de
   baixo do analógico (e do localizador) estica de metade a três vezes a
   padrão; clique duplo volta. Como o nome e a ordem, ela mora no painel

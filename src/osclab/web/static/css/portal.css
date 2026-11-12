@@ -61,35 +61,73 @@
   --portal-selo-bom-borda: #366e5f;
   --portal-selo-bom-fundo: #2d4143;
 
-  /* O DESENHO no escuro: o tratamento «ajustável» da maquete no realce 20
-     (escolha dele, 11/11/2026), com os valores já interpolados — traço
-     ÷ título = 34 %. O claro fica como estava (o realce dele é 0). A
-     espessura e o véu das faces da casa estão nas regras logo abaixo. */
-  --se-tinta: #828b95;
-  --se-tinta-longe: #535c66;
-  --se-tela: #828b95;
-  --se-papel: #293038;
-
   --casa-tinta: #b3bdc8;
   --casa-tinta-longe: #77828d;
-  --casa-papel: #2d3743;
   --casa-face-1: #46525e;
   --casa-face-2: #353f4a;
   --casa-face-3: #2d3640;
-  /* o aceso da casa de arquivos e base (no claro, o --aco) */
-  --casa-destaque: #92b1d5;
 }
 
-/* A espessura do desenho no escuro (realce 20): a aresta não encolhe com o
-   desenho — 0,79 px de tela em vez dos ≈ 0,3 px que o desenho reduzido
-   dava, que era o que o deixava apagado. As faces da casa de arquivos e base
-   ficam um pouco mais cheias. */
-:root[data-tema="escuro"] .vitrine-desenho svg.se3d .a,
-:root[data-tema="escuro"] .vitrine-desenho svg.se3d .l,
-:root[data-tema="escuro"] .casa-da-faixa svg.se3d .a,
-:root[data-tema="escuro"] .casa-da-faixa svg.se3d .l { vector-effect: non-scaling-stroke; }
-:root[data-tema="escuro"] svg.se3d .a { stroke-width: .79px; }
-:root[data-tema="escuro"] .faixa-de-titulo .casa-da-faixa svg.se3d [data-camada="casa-casca"] .f { fill-opacity: .61; }
+/* --- O DESENHO DA SUBESTAÇÃO NOS DOIS TEMAS: o «realce» escolhido -------
+ * Rodada de maquetes de 11/11/2026 (ramo maquete/escuro, `maquetes/
+ * ESCURO.md`): o Alexandre escolheu o realce 31 no claro e 19 no escuro
+ * movendo um controle de 0 a 100 cujo 0 é o desenho de antes. O bloco abaixo
+ * foi GERADO por `maquetes/exportar_realce.py 31 19` naquele ramo e colado
+ * sem mexer: são as mesmas regras que a maquete desenhou, com os números
+ * fixos — o que ele viu lá é o que se vê aqui.
+ *
+ * O mecanismo é o do próprio desenho: `stroke-width` em unidades do SVG (o
+ * `px` do CSS dentro de um SVG é unidade dele) e, nos cabos, a espessura do
+ * atributo vezes um fator. Nada de `vector-effect`: a aresta engrossa e
+ * afina junto com o desenho, como sempre fez. A casca da casa tem regra
+ * própria, mais forte que a do aceso que vem dentro do SVG — no escuro de
+ * antes a do aceso vencia e a casca saía com 1 px. */
+/* O desenho da subestação no realce escolhido: claro 31, escuro 19.
+ * Gerado por maquetes/realce.py (exportar_realce.py), ramo maquete/escuro.
+ * Mesmo mecanismo do programa: stroke-width em unidades do SVG e um
+ * multiplicador por atributo nos cabos — sem vector-effect. No escuro,
+ * este bloco SUBSTITUI os --se-*, --casa-papel/--casa-destaque e as regras
+ * de vector-effect, stroke-width e fill-opacity do escuro no portal.css. */
+
+/* claro: realce 31 */
+:root:not([data-tema="escuro"]) { --se-tinta: #8a9bb1; --se-tinta-longe: #c2ccd9; --se-tela: #8a9bb1; --se-papel: #fbfdff; }
+:root:not([data-tema="escuro"]) .casa-da-faixa { --se-destaque: #34618f; --se-papel: #eef2f7; }
+:root:not([data-tema="escuro"]) .vitrine-desenho svg.se3d .a { stroke-width: 1.2732px; }
+:root:not([data-tema="escuro"]) .vitrine-desenho:is(.se-aceso-oscilografia, .se-aceso-base) svg.se3d [data-camada="casa-casca"] .a { stroke-width: 1.3302px; }
+:root:not([data-tema="escuro"]) .casa-da-faixa svg.se3d .a { stroke-width: 0.6201px; }
+:root:not([data-tema="escuro"]) .faixa-de-titulo .casa-da-faixa svg.se3d [data-camada="casa-casca"] .a { stroke-width: 0.7911px; }
+:root:not([data-tema="escuro"]) .vitrine-desenho svg.se3d .l[stroke-width="0.5"] { stroke-width: 0.9818px; }
+:root:not([data-tema="escuro"]) .vitrine-desenho svg.se3d .l[stroke-width="1"] { stroke-width: 1.9637px; }
+:root:not([data-tema="escuro"]) .vitrine-desenho svg.se3d .l[stroke-width="1.5"] { stroke-width: 2.9455px; }
+:root:not([data-tema="escuro"]) .vitrine-desenho svg.se3d .l[stroke-width="2"] { stroke-width: 3.9273px; }
+:root:not([data-tema="escuro"]) .vitrine-desenho svg.se3d .l[stroke-width="2.5"] { stroke-width: 4.9091px; }
+:root:not([data-tema="escuro"]) .casa-da-faixa svg.se3d .l[stroke-width="0.5"] { stroke-width: 0.5326px; }
+:root:not([data-tema="escuro"]) .casa-da-faixa svg.se3d .l[stroke-width="1"] { stroke-width: 1.0652px; }
+:root:not([data-tema="escuro"]) .casa-da-faixa svg.se3d .l[stroke-width="1.5"] { stroke-width: 1.5979px; }
+:root:not([data-tema="escuro"]) .casa-da-faixa svg.se3d .l[stroke-width="2"] { stroke-width: 2.1305px; }
+:root:not([data-tema="escuro"]) .casa-da-faixa svg.se3d .l[stroke-width="2.5"] { stroke-width: 2.6631px; }
+:root:not([data-tema="escuro"]) .faixa-de-titulo .casa-da-faixa.se-aceso-oscilografia svg.se3d [data-camada="casa-casca"] .f { fill-opacity: 0.550; }
+:root:not([data-tema="escuro"]) .faixa-de-titulo .casa-da-faixa.se-aceso-base svg.se3d [data-camada="casa-casca"] .f { fill-opacity: 0.425; }
+
+/* escuro: realce 19 */
+:root[data-tema="escuro"] { --se-tinta: #747d88; --se-tinta-longe: #4c555e; --se-tela: #747d88; --se-papel: #252c34; }
+:root[data-tema="escuro"] .casa-da-faixa { --se-destaque: #8bacd3; --se-papel: #272f38; }
+:root[data-tema="escuro"] .vitrine-desenho svg.se3d .a { stroke-width: 1.2938px; }
+:root[data-tema="escuro"] .vitrine-desenho:is(.se-aceso-oscilografia, .se-aceso-base) svg.se3d [data-camada="casa-casca"] .a { stroke-width: 1.3868px; }
+:root[data-tema="escuro"] .casa-da-faixa svg.se3d .a { stroke-width: 0.6728px; }
+:root[data-tema="escuro"] .faixa-de-titulo .casa-da-faixa svg.se3d [data-camada="casa-casca"] .a { stroke-width: 0.9518px; }
+:root[data-tema="escuro"] .vitrine-desenho svg.se3d .l[stroke-width="0.5"] { stroke-width: 0.7953px; }
+:root[data-tema="escuro"] .vitrine-desenho svg.se3d .l[stroke-width="1"] { stroke-width: 1.5906px; }
+:root[data-tema="escuro"] .vitrine-desenho svg.se3d .l[stroke-width="1.5"] { stroke-width: 2.3859px; }
+:root[data-tema="escuro"] .vitrine-desenho svg.se3d .l[stroke-width="2"] { stroke-width: 3.1813px; }
+:root[data-tema="escuro"] .vitrine-desenho svg.se3d .l[stroke-width="2.5"] { stroke-width: 3.9766px; }
+:root[data-tema="escuro"] .casa-da-faixa svg.se3d .l[stroke-width="0.5"] { stroke-width: 0.5200px; }
+:root[data-tema="escuro"] .casa-da-faixa svg.se3d .l[stroke-width="1"] { stroke-width: 1.0400px; }
+:root[data-tema="escuro"] .casa-da-faixa svg.se3d .l[stroke-width="1.5"] { stroke-width: 1.5600px; }
+:root[data-tema="escuro"] .casa-da-faixa svg.se3d .l[stroke-width="2"] { stroke-width: 2.0800px; }
+:root[data-tema="escuro"] .casa-da-faixa svg.se3d .l[stroke-width="2.5"] { stroke-width: 2.6000px; }
+:root[data-tema="escuro"] .faixa-de-titulo .casa-da-faixa.se-aceso-oscilografia svg.se3d [data-camada="casa-casca"] .f { fill-opacity: 0.573; }
+:root[data-tema="escuro"] .faixa-de-titulo .casa-da-faixa.se-aceso-base svg.se3d [data-camada="casa-casca"] .f { fill-opacity: 0.368; }
 
 /* --- botões do portal ---------------------------------------------------- */
 .botao-da-casa {
@@ -412,7 +450,7 @@ body.portal .botao-da-casa.cheio {
   --se-face-2: var(--casa-face-2);
   --se-face-3: var(--casa-face-3);
   --se-tela: var(--casa-tinta);
-  --se-destaque: var(--casa-destaque, var(--aco));
+  --se-destaque: var(--aco);
 }
 .casa-da-faixa svg { height: 100%; }
 /* Sem esmaecer: a casa É o assunto aqui, não o que está em volta dela. */
