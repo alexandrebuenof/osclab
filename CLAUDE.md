@@ -291,6 +291,21 @@ osclab/
   só. E `navegacao.ampliar` aplica o piso em torno do MOUSE: aplicado em
   torno do centro, cada entalhe a mais no piso deslizava a janela de lado.
   Foi o que fazia a roda no localizador «parecer quebrada».
+- **UM pedido de roda em voo por vez, e resposta velha não se aplica**
+  *(12/11/2026)*. A correção de 11/11 não bastou: com o servidor levando
+  ~1 s por janela, cada pedido saía 70 ms depois do outro a partir da MESMA
+  janela, a resposta seguinte apagava o zoom da anterior e, chegando fora de
+  ordem, punha a janela de volta — dez entalhes ampliavam 0,51× em vez de
+  0,11×, aos trancos. Hoje `mandarZoom` espera o pedido em voo e manda os
+  entalhes acumulados a partir da janela nova (o foco é o instante sob o
+  MESMO pixel, calculado nessa hora); `carregar` numera os pedidos e
+  descarta resposta mais velha que a última aplicada; evento de roda sem
+  `cancelable` (rolagem da página já em curso) não amplia. E o servidor
+  lento era o `digitais.resumos` refeito a cada janela — 0,95 s dos 1,15 s
+  num SEL-411L de 3968 digitais, o dobro com as duas oscilografias do
+  localizador; agora é feito uma vez por registro aberto (1,08 → 0,17 s).
+  Teste: `tests/test_roda_localizador_navegador.py`, com as respostas
+  atrasadas e fora de ordem de propósito.
 - **Estado de desenho não se escreve POR CIMA do desenho** *(11/11/2026)*.
   «Ponha o cursor…», «falta o terminal remoto», «sem linha» iam no canvas,
   sobre a grade e os rótulos, e o rodapé repetia. Hoje vão numa linha logo

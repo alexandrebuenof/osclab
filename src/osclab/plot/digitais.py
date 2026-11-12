@@ -55,6 +55,8 @@ o número de mudanças ao lado.
 
 from __future__ import annotations
 
+import threading
+import weakref
 from dataclasses import dataclass
 
 import numpy as np
@@ -127,13 +129,55 @@ def _transicoes(dados: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return contagem, primeira, ultima
 
 
+#: `resumos` já feitos, por registro aberto:
+#: `id → (referência fraca, impressão, resumos)`. A referência fraca solta a
+#: entrada junto com o registro — o servidor não segura registro nenhum por
+#: causa disto (ver `acervo.ler`). A impressão (`_impressao`) refaz a conta
+#: se alguém trocou a matriz, o tempo ou os canais do objeto.
+_FEITOS: dict[int, tuple[weakref.ref, tuple, tuple[Resumo, ...]]] = {}
+_TRAVA_DOS_FEITOS = threading.Lock()
+
+
 def resumos(registro: Record) -> tuple[Resumo, ...]:
     """Todos os digitais, os que mudaram primeiro.
 
     A ordenação põe na frente quem mudou, por instante; depois os parados, na
     ordem do arquivo. Assim a lista serve às duas coisas: desenhar o começo dela
     e buscar dentro dela inteira.
+
+    **Feito uma vez por registro aberto** (12/11/2026). O resumo é do registro
+    INTEIRO e não depende da janela, mas era refeito a cada pedido de janela —
+    a cada entalhe da roda e a cada arrasto. Num SEL-411L com 3968 digitais e
+    6000 amostras, `_transicoes` (dois `argmax` sobre a matriz inteira) eram
+    0,95 s dos 1,15 s do pedido; com duas oscilografias na aba (o painel
+    localizador), o dobro. A roda que pede uma janela a cada 70 ms com o
+    servidor levando 2 s por resposta é a roda «quebrada» do localizador. O
+    registro que `acervo.ler` entrega é o mesmo objeto enquanto a pasta não
+    muda, e ninguém pode alterá-lo — então guardar pelo objeto é seguro.
     """
+    chave, impressao = id(registro), _impressao(registro)
+    with _TRAVA_DOS_FEITOS:
+        achado = _FEITOS.get(chave)
+        if achado is not None and achado[0]() is registro and achado[1] == impressao:
+            return achado[2]
+    feitos = _resumos(registro)
+    try:
+        ref = weakref.ref(registro, lambda _r, k=chave: _FEITOS.pop(k, None))
+    except TypeError:            # objeto sem referência fraca: só não se guarda
+        return feitos
+    with _TRAVA_DOS_FEITOS:
+        _FEITOS[chave] = (ref, impressao, feitos)
+    return feitos
+
+
+def _impressao(registro: Record) -> tuple:
+    dados, tempo = registro.status, registro.time
+    return (id(dados), getattr(dados, "shape", None), id(tempo), getattr(tempo, "shape", None),
+            id(registro.status_channels),
+            frozenset(getattr(registro, "digitais_sem_placa", None) or ()))
+
+
+def _resumos(registro: Record) -> tuple[Resumo, ...]:
     dados = registro.status
     tempo = registro.time
     saida: list[Resumo] = []

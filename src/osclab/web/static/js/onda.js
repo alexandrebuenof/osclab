@@ -1056,8 +1056,16 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
 
   // --- carregar -----------------------------------------------------------
 
+  //: Pedidos de janela numerados, e o número do último aplicado.
+  let pedidosDaJanela = 0;
+  let janelaAplicada = 0;
+
   /** Pede uma janela ao servidor. `gesto` é o que o mouse acabou de fazer. */
   async function carregar(gesto = {}) {
+    // Resposta mais VELHA que a última aplicada é descartada: com o servidor
+    // lento, um pedido de antes que chegasse depois punha de volta a janela
+    // de antes — a tela andava para trás sozinha (12/11/2026).
+    const numero = ++pedidosDaJanela;
     const p = new URLSearchParams();
     p.set("colunas", String(colunasDeVerdade()));
     if (lado) p.set("lado", lado);
@@ -1081,7 +1089,10 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         const erro = await r.json().catch(() => ({}));
         throw new Error(erro.erro || `o servidor respondeu ${r.status}`);
       }
-      dados = await r.json();
+      const chegou = await r.json();
+      if (numero < janelaAplicada) return;
+      janelaAplicada = numero;
+      dados = chegou;
       if ((dados.contrato || 0) !== CONTRATO) {
         avisarDeVersao();
         return;
@@ -17628,18 +17639,51 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     // nem está naquele gráfico — quando a mão só queria descer a página.
     // Pedido dele, 22/10/2026.
     if (!noDesenho(a) || arrastando || !temEixoDeTempo(a.canvas)) return;
+    // Evento que não se pode cancelar é de uma rolagem da PÁGINA já em curso
+    // (o Chrome prende o gesto ao primeiro alvo: começou rolando a página,
+    // o resto do giro vem sem `cancelable`). A página vai rolar de qualquer
+    // jeito; ampliar junto faria o gráfico mudar de escala E sair de baixo
+    // do mouse — o localizador, último da página, é aonde se chega rolando.
+    if (!evento.cancelable) return;
     evento.preventDefault();
 
     zoomAcumulado *= fatorDaRoda(evento);
-    zoomFoco = instanteEm(a);
+    // Guarda-se o PIXEL, não o instante: o instante sai na hora de mandar,
+    // contra a janela que estiver na tela então (ver `mandarZoom`).
+    zoomFoco = a;
 
     clearTimeout(zoomPendente);
-    zoomPendente = setTimeout(() => {
-      const gesto = { zoom: zoomAcumulado, foco: zoomFoco };
-      zoomAcumulado = 1;
-      carregar(gesto);
-    }, 70);
+    zoomPendente = setTimeout(mandarZoom, 70);
   }, { passive: false });
+
+  /** Manda o zoom acumulado — UM pedido de roda em voo por vez.
+   *
+   * Cada pedido leva a janela da tela como base. Mandado a cada 70 ms sem
+   * esperar a resposta, dois pedidos seguidos saíam da MESMA janela: a
+   * resposta do segundo apagava o zoom do primeiro, e se chegasse antes dele
+   * a janela ainda voltava para trás. Com o servidor levando ~1 s por janela
+   * (um SEL-411L de 3968 digitais, e o dobro com as duas oscilografias do
+   * localizador), dez entalhes ampliavam 0,51× em vez de 0,11×, aos trancos
+   * — a roda «quebrada» do localizador (12/11/2026). Agora, com um pedido em
+   * voo, os entalhes se acumulam e saem juntos quando ele volta, a partir da
+   * janela nova. O foco é o instante sob o MESMO pixel, calculado nessa
+   * hora: o zoom mantém parado o ponto sob o mouse, então o instante dali é
+   * o mesmo antes e depois da resposta.
+   */
+  let zoomEmVoo = false;
+  async function mandarZoom() {
+    zoomPendente = null;
+    if (zoomEmVoo || zoomAcumulado === 1 || !zoomFoco || !dados) return;
+    const gesto = { zoom: zoomAcumulado, foco: instanteEm(zoomFoco) };
+    zoomAcumulado = 1;
+    zoomEmVoo = true;
+    try {
+      await carregar(gesto);
+    } finally {
+      zoomEmVoo = false;
+      if (zoomAcumulado !== 1 && zoomPendente === null) mandarZoom();
+    }
+  }
 
   // Arrastar: a onda segue a mão. Com Shift, desenha a faixa a ampliar.
   area.addEventListener("pointerdown", (evento) => {

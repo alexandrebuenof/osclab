@@ -148,3 +148,17 @@ def test_canal_pedido_que_nao_existe_e_ignorado_em_silencio():
     """A tela manda índices; o servidor não confia neles."""
     assert digitais.tiras(registro([0, 1]), 0, 2, 900, [0, 99, -3]) != []
     assert len(digitais.tiras(registro([0, 1]), 0, 2, 900, [0, 99, -3])) == 1
+
+
+def test_o_resumo_e_feito_uma_vez_por_registro():
+    """O resumo é do registro INTEIRO e era refeito a cada pedido de janela:
+    num SEL-411L de 3968 digitais, 0,95 s dos 1,15 s de cada entalhe da roda
+    (12/11/2026). Agora sai pronto do segundo pedido em diante — e é refeito
+    se a matriz do objeto for trocada."""
+    r = registro([0, 0, 1, 1], [0, 1, 1, 1], nomes=["TRIP", "PARTIDA"])
+    primeiro = digitais.resumos(r)
+    assert digitais.resumos(r) is primeiro
+    r.status = np.array([[1, 1, 1, 1], [0, 0, 0, 1]], dtype=np.int8)
+    refeito = digitais.resumos(r)
+    assert refeito is not primeiro
+    assert [x.nome for x in refeito if x.mudou] == ["PARTIDA"]
