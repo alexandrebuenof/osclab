@@ -362,7 +362,8 @@ def _eventos(inicio, plato, assentado):
 
 def test_a_regiao_da_falta_vai_do_inicio_ao_fim_do_assentado_com_folga():
     """Falta no meio do registro: do início ao fim do trecho em que a curva
-    mede, com folga dos dois lados (um pouco do hachurado). Começa no INÍCIO, não no platô: quem amplia quer
+    mede, com folga dos dois lados (um pouco do hachurado). Começa no
+    INÍCIO, não no platô: quem amplia quer
     ver a falta entrar."""
     ev = _eventos(0.100, [0.1333, 0.1800], [0.1167, 0.1925])
     z = localizador.janela_da_falta(ev, 0.0, 0.5, CICLO, 1 / 2000)

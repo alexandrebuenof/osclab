@@ -182,7 +182,8 @@ def janela_da_falta(eventos: dict | None, t0: float, t1: float, ciclo: float,
     Do início da falta até o FIM do trecho em que a curva mede
     (`eventos.assentado`: a abertura ou o fim da falta, o que vier antes),
     com folga dos dois lados: `FOLGA_DO_ZOOM` ciclos ou `FOLGA_RELATIVA` da
-    duração, o que for maior — um pouco do hachurado aparece de cada lado. Começa no INÍCIO e não no platô de propósito: o
+    duração, o que for maior — um pouco do hachurado aparece de cada lado.
+    Começa no INÍCIO e não no platô de propósito: o
     platô é de onde sai a mediana e leva folga dos dois lados; quem amplia
     «para ver de perto a região da falta» quer ver a falta ENTRAR — o degrau,
     a DC, o ciclo que as curvas levam para assentar — e o disjuntor abrir.
