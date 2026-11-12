@@ -426,3 +426,79 @@ def test_a_harmonica_segue_o_estimador_cosseno():
         cosseno = abs(diferencial._harmonica(x, trechos, 60.0, 2)[-1])
     # Os dois medem a mesma 2.ª em regime (0,3 de pico), por caminhos diferentes.
     assert fourier == pytest.approx(0.3, rel=1e-3) and cosseno == pytest.approx(0.3, rel=2e-2)
+
+
+# ---------------------------------------------------------------------------
+# A gaveta de ajustes (variante 10, 12/11/2026): a prévia e a origem
+# ---------------------------------------------------------------------------
+
+def test_a_previa_desenha_com_o_que_se_sabe_e_marca_o_que_falta():
+    """O que falta entra com valor de DESENHO e vem listado em `exemplo` — a
+    tela escreve «?» ali, nunca o número de desenho como se fosse ajuste."""
+    p = diferencial.previa({"pickup": "0,35", "slp1": 30})
+    assert p["entradas"] == {"pickup": 0.35, "slp1": 30.0}
+    assert p["marcas"]["pickup"] == 0.35
+    # Forma do 787 sem BP1 nem Slope 2: um slope só, e nada disso «falta».
+    assert p["marcas"]["bp1"] is None and p["marcas"]["slp2"] is None
+    assert p["exemplo"] == ["u87"]
+    irt = np.asarray(p["irt"])
+    assert np.allclose(p["iop"], np.maximum(0.35, 0.30 * irt), rtol=1e-4)
+
+
+def test_a_previa_e_a_mesma_conta_do_painel():
+    valores = {"forma": "tres_trechos", "pickup": 0.3, "slp1": 25, "bp1": 2,
+               "slp2": 60, "bp2": 6, "u87": 10}
+    p = diferencial.previa(valores)
+    assert p["exemplo"] == []
+    irt = np.asarray(p["irt"])
+    esperado = diferencial.limiar(irt, 0.3, 25, 2, 60, "tres_trechos", 6)
+    assert np.allclose(p["iop"], esperado, rtol=1e-4)
+    assert p["eixos"]["irt"] >= 6 * 1.6
+
+
+def test_a_previa_nao_le_lixo_como_numero():
+    """Texto que não é número (meio digitado, `abc`) e número negativo valem
+    como «ainda não dado»: desenho com «?», sem erro."""
+    p = diferencial.previa({"pickup": "abc", "slp1": "-5", "forma": "inexistente",
+                            "bp1": "2", "slp2": ""})
+    assert "pickup" in p["exemplo"] and "slp1" in p["exemplo"]
+    assert p["forma"] == "origem_quebra" and "forma" not in p["entradas"]
+    # BP1 dado sem Slope 2: os dois entram, e o Slope 2 vai como «?».
+    assert p["marcas"]["bp1"] == 2.0 and "slp2" in p["exemplo"]
+    assert diferencial.previa(None)["entradas"] == {}
+
+
+def test_o_pacote_traz_a_previa_e_a_origem_de_cada_ajuste():
+    painel = paineis.Painel(id="pd", tipo=paineis.DIFERENCIAL, nome="",
+                            sinais=("A", "B", "C"),
+                            ajustes87={"valores": {"pickup": 0.4}})
+    p = _montado(_registro("carga"), painel)
+    assert not p["pronto"]
+    assert p["previa"]["entradas"]["pickup"] == 0.4
+    assert set(p["previa"]["campos"]) >= {"pickup", "slp1", "u87", "forma"}
+    campos = {c["id"]: c for c in p["ajustes"]}
+    # O lado de cada ajuste do trafo, e o rótulo curto para o desenho dele.
+    assert campos["rtc1"]["lado"] == "1" and campos["tap2"]["lado"] == "2"
+    assert campos["pickup"]["lado"] == "" and campos["mva"]["lado"] == ""
+    assert campos["rtc1"]["curto"] == "RTC"
+    assert campos["forma"]["curtas"]["origem"] == "um slope"
+
+
+def test_a_rota_da_previa_conta_no_servidor(cliente):
+    """A prévia ao vivo da gaveta vai ao servidor a cada tecla: a conta é a
+    de `diferencial.previa`, e corpo que não é dicionário não derruba."""
+    r = cliente.post("/api/diferencial/previa", json={"valores": {"pickup": "0,5"}})
+    assert r.status_code == 200
+    assert r.get_json()["marcas"]["pickup"] == 0.5
+    assert cliente.post("/api/diferencial/previa", json=[1, 2]).status_code == 200
+
+
+def test_o_lido_fica_guardado_com_digitado_por_cima():
+    """A tela diz a origem: «digitado; o arquivo diz CTR1 := 60»."""
+    r = _registro("carga")
+    campos = {c["id"]: c for c in diferencial.resolver(
+        r, {"CTR1": "60"}, {"valores": {"rtc1": 40.0}}, "SEL")}
+    assert campos["rtc1"]["estado"] == diferencial.DIGITADO
+    assert campos["rtc1"]["lido"] == {"valor": 60.0, "variavel": "CTR1",
+                                      "bruto": "CTR1 := 60"}
+    assert campos["rtc2"]["lido"] is None

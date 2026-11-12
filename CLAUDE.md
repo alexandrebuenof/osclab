@@ -655,6 +655,23 @@ osclab/
   «Nada entra num gráfico porque o programa sabe calcular» vale também para
   a conta que o usuário escreveu. Uma linha no visor diz onde ela está; quem
   a põe num gráfico é o «+ sinal» ou o → de «minhas contas».
+- **Os ajustes do diferencial (87T) são uma GAVETA** *(variante 10,
+  12/11/2026)*. O botão «ajustes» abre à direita, embaixo da barra de cima,
+  como a calculadora (a coluna encolhe; uma gaveta por vez — evento
+  `osclab:gaveta`): desenho do trafo com os campos de cada lado e a potência,
+  a característica AO VIVO (cada tecla vai a `/api/diferencial/previa` →
+  `diferencial.previa`) e a lista do resto, com «mais ajustes» para o
+  opcional e o não usado. A origem é a MOLDURA do campo (lido, deduzido,
+  digitado, a conferir, falta) e por extenso no hover — o digitado diz o que
+  o arquivo dizia (`campo["lido"]`); o «?» traz a legenda. Janela de edição:
+  fecha só pelo ×, Esc ou o próprio botão, e se refaz com o pacote novo a
+  cada número sem perder o que se digitava noutro campo. O grupo de cada
+  lado é SÓ `G1` — o radical (`I*W1`) fica no hover, nunca escrito na
+  gaveta (pedido dele). Sem todos os ajustes, o painel mostra a
+  característica APAGADA (`pacote["previa"]`, o que falta tracejado e com
+  «?», nunca o número de desenho) e o que falta numa linha ABAIXO dele, um
+  botão por ajuste. O contrato dos ajustes não mudou: `ajustes87` do painel,
+  da tela, no corpo. Teste de navegador: `tests/test_diferencial_navegador.py`.
 - **«+ adicionar gráfico» fica ao lado de «+ adicionar oscilografia»**, no pé
   do bloco do registro, o mesmo botão nos dois; o gráfico novo continua
   entrando no FIM da lista. O menu de tipos tem um ícone de traço por tipo

@@ -279,6 +279,36 @@ OPCOES = {
     "iop": tuple((c, f"{f} — {q}") for c, f, q in EQUACOES_IOP),
     "irt": tuple((c, f"{f} — {q}") for c, f, q in EQUACOES_IRT),
 }
+#: O rótulo curto de cada ajuste, para a gaveta: no desenho do trafo o lado
+#: já está dito pela coluna, e «RTC 1» sob «lado 1» repete. O rótulo inteiro
+#: continua no hover e na lista.
+ROTULO_CURTO = {
+    "mva": "Potência", "v1": "V nominal", "v2": "V nominal",
+    "rtc1": "RTC", "rtc2": "RTC", "con1": "Conexão", "con2": "Conexão",
+    "ctc1": "Compensação", "ctc2": "Compensação", "tap1": "TAP", "tap2": "TAP",
+}
+#: O rótulo curto das opções, para caber no campo estreito da gaveta. O
+#: inteiro (com o fabricante) fica no hover.
+_COMPENSACAO_CURTA = {str(m): "0 (nenhuma)" if m == 0 else f"{m} ({m * 30}°)"
+                      for m in range(13)}
+OPCOES_CURTAS = {
+    "forma": {"origem_quebra": "dois slopes, quebra no BP1",
+              "origem": "um slope", "origem_dupla": "dois slopes, BP1–BP2",
+              "tres_trechos": "três trechos", "p632": "P632"},
+    "modo": {"fase": "por fase", "cruzado": "cruzado", "restricao": "restrição",
+             "ambos": "cruzado + restrição"},
+    "iop": {"entrando": "|I1 + I2|", "invertido": "|I1 − I2|"},
+    "irt": {"soma": "|I1| + |I2|", "media": "(|I1| + |I2|) / 2",
+            "maximo": "máx(|I1|, |I2|)", "meia": "|I1 − I2| / 2",
+            "comum": "máx nas três fases"},
+    "con1": {"Y": "Y", "D": "Δ"}, "con2": {"Y": "Y", "D": "Δ"},
+    "ctc1": _COMPENSACAO_CURTA, "ctc2": _COMPENSACAO_CURTA,
+    "ordens": {"2": "2ª", "24": "2ª + 4ª"},
+}
+#: O lado do trafo de cada ajuste que é de um lado só (o resto é `""`).
+LADO = {"v1": "1", "rtc1": "1", "con1": "1", "ctc1": "1", "tap1": "1",
+        "v2": "2", "rtc2": "2", "con2": "2", "ctc2": "2", "tap2": "2"}
+
 #: Os que nascem DEDUZIDOS quando ninguém os deu. A conexão de TC em estrela
 #: é o caso de quase todo trafo da distribuição, mas é palpite: entra como
 #: deduzido, com a frase dizendo isso.
@@ -467,8 +497,17 @@ def resolver(registro: Record, lidos: dict, manuais: dict, fab: str,
                  "minimo": minimo, "maximo": maximo,
                  "opcoes": [list(o) for o in OPCOES.get(id_, ())],
                  "valor": None, "estado": FALTA, "variavel": "", "bruto": "",
-                 "motivo": "", "como": "", "sugestao": None}
+                 "motivo": "", "como": "", "sugestao": None, "lido": None,
+                 "curto": ROTULO_CURTO.get(id_, rotulo), "lado": LADO.get(id_, ""),
+                 "curtas": OPCOES_CURTAS.get(id_, {})}
         variavel = por_terminal.get(id_, var_sel) if fab == "SEL" else ""
+        # O que o arquivo diz fica guardado MESMO com digitado por cima: a
+        # tela diz a origem («digitado; o arquivo diz CTR1 := 60»).
+        if variavel and variavel in lidos:
+            lido = _interpretar(id_, lidos[variavel])
+            if lido is not None:
+                campo["lido"] = {"valor": lido, "variavel": variavel,
+                                 "bruto": f"{variavel} := {lidos[variavel]}"}
         if id_ in valores:
             campo.update(valor=valores[id_], estado=DIGITADO)
         elif variavel and variavel in lidos:
@@ -861,6 +900,78 @@ def _arredondar(valores) -> list:
 
 
 # ---------------------------------------------------------------------------
+# A prévia da característica (a gaveta de ajustes e o painel ainda vazio)
+# ---------------------------------------------------------------------------
+
+#: Os ajustes que a prévia lê.
+DA_PREVIA = ("forma", "pickup", "slp1", "bp1", "slp2", "bp2", "u87")
+#: Os valores com que se DESENHA o trecho de um ajuste que ainda não foi dado.
+#: Só desenho: a resposta diz quais entraram assim (`exemplo`), e a tela pinta
+#: esse trecho apagado e escreve «?» no lugar do número — nunca um palpite
+#: com cara de ajuste.
+EXEMPLO = {"pickup": 0.3, "slp1": 25.0, "bp1": 3.0, "slp2": 50.0, "bp2": 6.0,
+           "u87": 8.0}
+#: Quantos pontos a curva da prévia leva.
+PONTOS_DA_PREVIA = 161
+
+
+def previa(valores: dict | None) -> dict:
+    """A característica com o que já se sabe, para a gaveta e o painel vazio.
+
+    `valores` é `{id: número ou texto}` (o texto digitado vem cru, com
+    vírgula, e é lido aqui). O que falta — ou não se lê como número — entra
+    com `EXEMPLO` e vai listado em `exemplo`; `entradas` devolve o que foi
+    aceito, para a tela juntar a digitação ao vivo por cima. A conta é
+    `limiar`, a mesma do painel.
+    """
+    valores = valores if isinstance(valores, dict) else {}
+    forma = str(valores.get("forma") or "")
+    entradas: dict = {}
+    if forma in _FORMA:
+        entradas["forma"] = forma
+    else:
+        forma = "origem_quebra"
+    v: dict[str, float] = {}
+    exemplo = []
+    for chave in DA_PREVIA[1:]:
+        cru = valores.get(chave)
+        numero = None if cru is None or cru == "" else _numero(cru)
+        if numero is None or numero < 0:
+            numero = EXEMPLO[chave]
+            exemplo.append(chave)
+        else:
+            entradas[chave] = numero
+        v[chave] = numero
+    usados = set(_FORMA[forma][3])
+    um = forma == "origem" or (
+        forma == "origem_quebra" and "bp1" in exemplo and "slp2" in exemplo)
+    if forma == "origem_quebra" and not um:
+        usados |= set(OPCIONAIS)
+    bp1 = v["bp1"] if "bp1" in usados else None
+    bp2 = v["bp2"] if "bp2" in usados else None
+    slp2 = None if um else v["slp2"]
+    if slp2 is not None and "slp2" not in usados:
+        slp2 = None
+    eixo_irt = _redondo(max(1.6 * (bp2 or bp1 or 0.0), 4.0))
+    irt = np.linspace(0.0, eixo_irt, PONTOS_DA_PREVIA)
+    iop = limiar(irt, v["pickup"], v["slp1"], bp1, slp2, forma, bp2)
+    eixo_iop = _redondo(max(1.15 * float(np.nanmax(iop)), 1.0))
+    usados |= {"u87"}
+    return {
+        "forma": forma,
+        "irt": _arredondar(irt),
+        "iop": _arredondar(iop),
+        "eixos": {"irt": eixo_irt, "iop": eixo_iop},
+        "marcas": {"pickup": v["pickup"], "slp1": v["slp1"], "bp1": bp1,
+                   "bp2": bp2, "slp2": slp2, "u87": v["u87"]},
+        "exemplo": [x for x in exemplo if x in usados],
+        "usados": sorted(usados),
+        "entradas": entradas,
+        "campos": list(DA_PREVIA),
+    }
+
+
+# ---------------------------------------------------------------------------
 # O pacote
 # ---------------------------------------------------------------------------
 
@@ -900,6 +1011,7 @@ def montar(registro: Record, painel, ajustes: dict | None = None) -> dict:
         "trajetorias": {},
         "rodape": [],
         "nota": "",
+        "previa": previa({}),
     }
 
     trincas = trincas_de_corrente(registro)
@@ -923,6 +1035,7 @@ def montar(registro: Record, painel, ajustes: dict | None = None) -> dict:
     iop_eq = dict((c, f) for c, f, _ in EQUACOES_IOP).get(valor["iop"], "")
     irt_eq = dict((c, f) for c, f, _ in EQUACOES_IRT).get(valor["irt"], "")
     pacote["equacoes"] = {"iop": f"Iop = {iop_eq}", "irt": f"Irt = {irt_eq}"}
+    pacote["previa"] = previa({i: valor[i] for i in DA_PREVIA})
     if fab == "SEL" and str(lidos.get("E87", "")).strip().upper().startswith("N"):
         pacote["nota"] = ("E87 := N — o diferencial está DESLIGADO neste relé: "
                           "o arquivo não traz os ajustes da característica, e "

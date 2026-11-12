@@ -167,6 +167,8 @@
   async function abrir(painel) {
     if (painel) painelAlvo = painel.id;
     if (!gaveta) { await carregarInfo(); montar(); mostrarAba("calc"); }
+    // Uma gaveta à direita por vez: a dos ajustes do diferencial cede o lugar.
+    document.dispatchEvent(new CustomEvent("osclab:gaveta", { detail: "calc" }));
     // A gaveta começa EMBAIXO da barra de cima, que continua inteira.
     const barra = document.getElementById("barra-de-cima");
     document.documentElement.style.setProperty("--calc-topo", `${barra ? barra.getBoundingClientRect().bottom : 0}px`);
@@ -178,6 +180,10 @@
     document.documentElement.classList.remove("calc-aberta");
     setTimeout(() => window.dispatchEvent(new Event("resize")), 30);
   }
+
+  document.addEventListener("osclab:gaveta", (ev) => {
+    if (ev.detail !== "calc" && aberta()) fechar();
+  });
 
   /* O CLIQUE FORA fecha só com o visor vazio e fora do gráfico. O clique
    * repassado pelo quadro da aba (`abas.js`) chega sem alvo: conta como

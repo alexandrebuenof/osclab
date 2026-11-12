@@ -85,7 +85,7 @@
   //: navegador recarrega o `.js` sozinho: quem troca de versão sem reiniciar
   //: fica com tela nova e servidor velho, e o resultado é uma tela que mostra
   //: coisas que não fazem sentido sem dar erro nenhum. Já custou três rodadas.
-  const CONTRATO = 28;
+  const CONTRATO = 29;
 
   //: A margem de cima abriga a etiqueta numerada dos cursores, que fica FORA da
   //: área de desenho: por dentro ela tapa o pico da onda — e o pico é
@@ -1294,6 +1294,10 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       if (painel.tipo === "diferencial") return blocoDiferencial(painel);
       return bloco(painel, ultimo);
     });
+    // A gaveta de ajustes do 87T de um painel que saiu da tela (Ctrl+Z,
+    // apagado) não tem mais de quem ser.
+    if (ajustesAbertos && ajustesAbertos.dif
+        && !dados.paineis.some((x) => x.id === ajustesAbertos.painel)) fecharAjustes();
     // Escolher e arrastar valem no painel INTEIRO, e por isso são ligados
     // aqui, onde as seções existem — e não no cabeçalho, que é só uma parte
     // dele. As setinhas continuam: teclado e toque precisam delas, e um gesto
@@ -9440,11 +9444,13 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
 
   function fecharAjustes() {
     if (!ajustesAbertos) return;
-    document.removeEventListener("pointerdown", ajustesAbertos.aoApontar, true);
-    window.removeEventListener("resize", ajustesAbertos.posicionar);
-    window.removeEventListener("scroll", ajustesAbertos.posicionar, true);
-    ajustesAbertos.caixa.remove();
+    const aberto = ajustesAbertos;
     ajustesAbertos = null;
+    if (aberto.aoApontar) document.removeEventListener("pointerdown", aberto.aoApontar, true);
+    window.removeEventListener("resize", aberto.posicionar);
+    window.removeEventListener("scroll", aberto.posicionar, true);
+    aberto.caixa.remove();
+    if (aberto.aoFechar) aberto.aoFechar();
   }
 
   const ORIGEM_POR_EXTENSO = {
@@ -13222,19 +13228,16 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   // `plot/diferencial.py`: os ajustes com o estado de cada um, a curva da
   // característica, os limites dos eixos e, para cada ponto, Iop, Irt, o
   // limiar, a 2ª e a 5ª e a DECISÃO. A tela escolhe o ponto do cursor e pinta.
-  // Escolha dele, 22/10/2026: o layout 01 da maquete (Iop × Irt com tabela) e
-  // a caixa flutuante no botão «ajustes» — sem engrenagem, sem resumo no
-  // cabeçalho. Sem todos os ajustes, NÃO há gráfico: há o quadro do que falta.
+  // Escolha dele, 22/10/2026: o layout 01 da maquete (Iop × Irt com tabela).
+  // Os ajustes moram numa GAVETA à direita, aberta pelo botão «ajustes»
+  // (variante 10 da maquete, 12/11/2026). Sem todos os ajustes NÃO há
+  // gráfico: há a característica apagada, com «?» no que falta, e a linha de
+  // baixo dizendo o que falta.
 
   //: A altura do quadro, em pixels de CSS. A largura é a da coluna.
   const ALTURA_DIFERENCIAL = 300;
   const MARGEM_DIFERENCIAL = { esq: 46, dir: 14, topo: 14, baixo: 26 };
 
-  //: O nome de cada estado de ajuste, como a caixa escreve.
-  const NOME_DO_ESTADO_87 = {
-    coletado: "coletado", suspeito: "suspeito", falta: "não coletado",
-    digitado: "digitado", deduzido: "deduzido",
-  };
   //: A classe de cor de cada decisão, na tabela.
   const DECISAO_87 = {
     restringe: "decisao-restringe", opera: "decisao-opera",
@@ -13309,15 +13312,18 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     lado.append(tabela, tempo);
     tabela.hidden = !painel.pronto || !!painel.falta;
 
+    // Sem gráfico (um lado só, ou falta ajuste) a coluna da tabela não tem o
+    // que mostrar: o corpo vira uma coluna só.
+    let fantasma = null;
     if (painel.falta) {
-      caixa.append(quadroDosAjustes87(painel, painel.falta, null));
+      caixa.append(umLadoSoDoDiferencial(painel));
     } else if (!painel.pronto) {
-      const nomes = (painel.faltam || []).map((x) => x.rotulo
-        + (x.estado === "suspeito" ? " (suspeito: aceite ou corrija)" : ""));
-      caixa.append(quadroDosAjustes87(
-        painel, `Faltam ${nomes.length} ajuste${nomes.length === 1 ? "" : "s"} `
-          + `para desenhar: ${nomes.join(", ")}.`,
-        (painel.faltam || [])[0] || null));
+      // A característica APAGADA, com o que já se sabe e «?» no que falta
+      // (variante 10, 12/11/2026). O que falta vai na linha de baixo — nunca
+      // escrito por cima do desenho.
+      fantasma = document.createElement("canvas");
+      fantasma.className = "previa-87 fantasma";
+      caixa.append(fantasma);
     } else {
       caixa.append(canvas);
       const equacoes = criar("div", "equacoes-do-diferencial",
@@ -13326,8 +13332,10 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
                      + "grupo «cálculo».";
       caixa.append(equacoes);
     }
+    corpo.classList.toggle("sem-tabela", !painel.pronto || !!painel.falta);
     corpo.append(caixa, lado);
     el.append(corpo);
+    if (fantasma) el.append(faltamDoDiferencial(painel));
     comMolduras(el, corpo);
     for (const m of el._molduras) m.so = qual - 1;
 
@@ -13338,25 +13346,81 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
 
     el._painel = painel;
     el._canvas = painel.pronto && !painel.falta ? canvas : null;
+    el._fantasma = fantasma;
     el._tabela = tabela;
     el._tempo = tempo;
     if (el._canvas) ligarPlanoDiferencial(el);
+    // A gaveta de ajustes aberta para ESTE painel se refaz com o pacote novo:
+    // ela fica aberta enquanto se mexe no resto da tela (fecha só pelo ×).
+    if (ajustesAbertos && ajustesAbertos.dif && ajustesAbertos.painel === painel.id) {
+      requestAnimationFrame(() => montarGaveta87(painel));
+    }
     return el;
   }
 
-  /** O quadro que ocupa o lugar do gráfico quando falta algo. */
-  function quadroDosAjustes87(painel, texto, primeiro) {
-    const q = criar("div", "faltam-ajustes");
-    q.style.minHeight = `${ALTURA_DIFERENCIAL}px`;
-    q.append(criar("p", null, texto));
-    if (painel.nota) q.append(criar("p", "nota-do-quadro", painel.nota));
-    if (primeiro) {
-      const b = criar("button", "medida", `preencher «${primeiro.rotulo}»`);
+  /** A linha logo abaixo da característica apagada: o que falta para
+   *  desenhar, um botão por ajuste, e o que abre a gaveta. */
+  function faltamDoDiferencial(painel) {
+    const faltam = painel.faltam || [];
+    const linha = criar("div", "faltam-ajustes");
+    const abrir = criar("button", "medida", "preencher ajustes");
+    abrir.type = "button";
+    abrir.title = "Abre a gaveta dos ajustes do 87T.";
+    abrir.addEventListener("click", () => abrirAjustesDoDiferencial(painel, (faltam[0] || {}).id || "__manter__"));
+    linha.append(abrir, criar("span", "faltam-87-texto",
+      `Faltam ${faltam.length} ajuste${faltam.length === 1 ? "" : "s"} para desenhar:`));
+    const campos = new Map((painel.ajustes || []).map((c) => [c.id, c]));
+    for (const x of faltam) {
+      const suspeito = x.estado === "suspeito";
+      const b = criar("button", `falta-87${suspeito ? " suspeito" : ""}`,
+                      (suspeito ? "▲ " : "") + x.rotulo);
       b.type = "button";
-      b.addEventListener("click", () => abrirAjustesDoDiferencial(painel, primeiro.id));
-      q.append(b);
+      const c = campos.get(x.id);
+      b.title = c ? dicaDoAjuste87(c, painel) : x.rotulo;
+      b.addEventListener("click", () => abrirAjustesDoDiferencial(painel, x.id));
+      linha.append(b);
     }
+    if (painel.nota) linha.append(criar("p", "nota-do-quadro", painel.nota));
+    return linha;
+  }
+
+  /** O registro com UMA trinca de corrente: o trafo com o segundo lado
+   *  apagado, no lugar do gráfico (não há desenho por baixo). */
+  function umLadoSoDoDiferencial(painel) {
+    const q = criar("div", "um-lado-87");
+    q.append(svgDoTrafo87(150, 64, true));
+    const t = criar("div");
+    const g = painel.lado1;
+    const titulo = criar("b", null, `Um lado só${g ? ` — ${g.rotulo}` : ""}`);
+    if (g) titulo.title = g.nome;            // o radical só no hover
+    t.append(titulo, criar("p", null, painel.falta),
+             criar("p", "apagado-87", "Para olhar a corrente desta trinca, um gráfico analógico serve."));
+    q.append(t);
     return q;
+  }
+
+  /** O símbolo do trafo: dois enrolamentos e um TC em cada fio. */
+  function svgDoTrafo87(larg, alt, semLado2 = false) {
+    const ns = "http://www.w3.org/2000/svg";
+    const s = document.createElementNS(ns, "svg");
+    s.setAttribute("viewBox", `0 0 ${larg} ${alt}`);
+    s.setAttribute("width", larg);
+    s.setAttribute("height", alt);
+    s.classList.add("trafo-87");
+    const meio = alt / 2, r = alt * 0.26;
+    const por = (tag, at) => {
+      const e = document.createElementNS(ns, tag);
+      for (const [k, v] of Object.entries(at)) e.setAttribute(k, v);
+      s.append(e);
+    };
+    const ausente = semLado2 ? " ausente" : "";
+    por("line", { x1: 0, y1: meio, x2: larg / 2 - r * 1.6, y2: meio, class: "fio" });
+    por("line", { x1: larg / 2 + r * 1.6, y1: meio, x2: larg, y2: meio, class: `fio${ausente}` });
+    por("circle", { cx: larg / 2 - r * 0.6, cy: meio, r, class: "enrol" });
+    por("circle", { cx: larg / 2 + r * 0.6, cy: meio, r, class: `enrol${ausente}` });
+    por("circle", { cx: larg * 0.13, cy: meio, r: 4.5, class: "tc" });
+    por("circle", { cx: larg * 0.87, cy: meio, r: 4.5, class: `tc${ausente}` });
+    return s;
   }
 
   /** A escolha da trinca de um lado. */
@@ -13417,196 +13481,558 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     });
   }
 
-  /** A caixa de ajustes, flutuante (como a do plano de impedância).
+  /** A GAVETA de ajustes do 87T (variante 10 da maquete, 12/11/2026).
    *
-   * Cada ajuste com o seu estado: coletado (com a variável do relé e o texto
-   * lido), suspeito (com o motivo e as ações), não coletado, digitado,
-   * deduzido. Mexer num campo vai ao servidor — é ele quem resolve os
-   * estados e refaz a conta — e a caixa é refeita com a resposta. */
+   * Presa à direita, embaixo da barra de cima, como a calculadora: a coluna
+   * dos gráficos encolhe e o painel continua à vista enquanto se digita. Em
+   * cima, o desenho do trafo com os ajustes de cada lado; no meio, a
+   * característica ao vivo (a cada tecla, contada pelo servidor:
+   * `/api/diferencial/previa`); embaixo, a lista do resto. A ORIGEM de cada
+   * número está na moldura do campo (lido, deduzido, digitado, a conferir,
+   * falta) e por extenso no hover; o «?» traz a legenda.
+   *
+   * É janela de EDIÇÃO: fecha só pelo ×, pelo Esc ou pelo próprio botão
+   * «ajustes» — fechar no clique fora perderia o que se digitava. Mexer num
+   * campo vai ao servidor, que resolve os estados e refaz a conta; o painel
+   * volta com o pacote novo e a gaveta se refaz com ele (`montarGaveta87`).
+   *
+   * O grupo de cada lado aparece só como `G1`: o radical (`I*W1`) fica no
+   * hover, como no seletor da calculadora (pedido dele, 12/11/2026). */
   function abrirAjustesDoDiferencial(painel, focar = null) {
-    const ancoraId = `ancora-ajustes-dif-${painel.id}`;
-    const mesmo = ajustesAbertos && ajustesAbertos.painel === painel.id;
+    const aberta = ajustesAbertos && ajustesAbertos.dif && ajustesAbertos.painel === painel.id;
+    if (aberta && !focar) { fecharAjustes(); return; }     // o botão que abre também fecha
+    if (aberta) { montarGaveta87(painel, focar); return; }
     fecharAjustes();
-    if (mesmo && !focar) return;             // o botão que abre também fecha
+    if (!painelPorId(painel.id)) return;
+    // Uma gaveta à direita por vez: a calculadora cede o lugar.
+    document.dispatchEvent(new CustomEvent("osclab:gaveta", { detail: "dif" }));
 
+    const caixa = criar("aside", "gaveta-87");
+    caixa.setAttribute("aria-label", "ajustes do diferencial");
+    document.body.append(caixa);
+    const barra = document.getElementById("barra-de-cima");
+    document.documentElement.style.setProperty(
+      "--calc-topo", `${barra ? barra.getBoundingClientRect().bottom : 0}px`);
+    document.documentElement.classList.add("dif-aberta");
+    const aoTeclar = (ev) => {
+      if (ev.key !== "Escape") return;
+      ev.stopPropagation();
+      ev.preventDefault();
+      fecharAjustes();
+    };
+    document.addEventListener("keydown", aoTeclar, true);
+    // Sem o painel (apagado), a gaveta não tem de quem ser.
+    const posicionar = () => {
+      if (!document.getElementById(`ancora-ajustes-dif-${painel.id}`)) fecharAjustes();
+    };
+    ajustesAbertos = {
+      dif: true, painel: painel.id, caixa, posicionar, aoApontar: null,
+      aoFechar() {
+        document.removeEventListener("keydown", aoTeclar, true);
+        document.documentElement.classList.remove("dif-aberta");
+        setTimeout(() => window.dispatchEvent(new Event("resize")), 30);
+      },
+    };
+    setTimeout(() => window.dispatchEvent(new Event("resize")), 30);
+    montarGaveta87(painel, focar);
+  }
+
+  // A calculadora abrindo fecha a gaveta do diferencial (e vice-versa, lá).
+  document.addEventListener("osclab:gaveta", (ev) => {
+    if (ev.detail !== "dif" && ajustesAbertos && ajustesAbertos.dif) fecharAjustes();
+  });
+
+  //: O «?» da gaveta aberto ou fechado, e o «mais ajustes»: duram enquanto a
+  //: aba estiver aberta (a gaveta é refeita a cada número).
+  let ajudaDaGaveta87 = false;
+  let maisDaGaveta87 = false;
+
+  //: O nome de cada origem, como a legenda e o hover escrevem.
+  const ORIGEM_87 = {
+    lido: "lido do arquivo", deduzido: "deduzido (sugestão)", digitado: "digitado",
+    suspeito: "lido, a conferir", falta: "falta", fora: "não usado",
+  };
+  //: O título de cada grupo do servidor, na lista da gaveta.
+  const GRUPO_87 = {
+    "característica": "Característica", "harmônicas": "Bloqueio por harmônica",
+    "cálculo": "Cálculo",
+  };
+
+  /** A origem que a tela mostra: a do servidor, mais «fora» (o opcional em
+   *  branco e o que a forma escolhida não usa). */
+  function origemDoAjuste87(c, painel) {
+    if ((painel.nao_usados || []).includes(c.id)) return "fora";
+    if (c.estado === "falta" && (painel.opcionais || []).includes(c.id)) return "fora";
+    return { coletado: "lido", suspeito: "suspeito", falta: "falta",
+             digitado: "digitado", deduzido: "deduzido" }[c.estado] || "falta";
+  }
+
+  /** O hover de um ajuste: o que é, e de onde veio o número. */
+  function dicaDoAjuste87(c, painel) {
+    const o = origemDoAjuste87(c, painel);
+    const linhas = [c.rotulo + (c.unidade ? ` (${c.unidade})` : "")];
+    if (c.dica) linhas.push(c.dica);
+    if (o === "lido") linhas.push(`lido do arquivo: ${c.bruto}`);
+    if (o === "suspeito") linhas.push(`lido do arquivo: ${c.bruto} — ${c.motivo}`);
+    if (o === "deduzido") linhas.push(`deduzido: ${c.como}. Digite para corrigir.`);
+    if (o === "digitado") {
+      linhas.push("digitado aqui" + (c.lido ? ` (o arquivo diz ${c.lido.bruto})` : "")
+        + (c.motivo ? ` — atenção: ${c.motivo}` : ""));
+    }
+    if (o === "falta") linhas.push("o arquivo não traz: digite");
+    if (o === "fora") {
+      linhas.push((painel.nao_usados || []).includes(c.id)
+        ? "a forma escolhida não usa este ajuste" : "opcional: em branco, não entra");
+    }
+    return linhas.join("\n");
+  }
+
+  /** O número como foi dado, sem arredondar o que alguém digitou: até seis
+   *  algarismos significativos, vírgula decimal. */
+  function textoDoNumero87(v) {
+    if (v === null || v === undefined || v === "") return "";
+    if (typeof v !== "number") return String(v);
+    return String(+v.toPrecision(6)).replace(".", ",");
+  }
+
+  /** Um campo com a moldura da origem. `api.definir(id, valor)` grava. */
+  function campo87(c, painel, api) {
+    const o = origemDoAjuste87(c, painel);
+    let entrada;
+    if (c.tipo === "op") {
+      entrada = criar("select", "entrada-87");
+      if (c.valor === null || c.valor === undefined) {
+        const vazio = criar("option", null, "—");
+        vazio.value = "";
+        entrada.append(vazio);
+      }
+      for (const [v, r] of (c.opcoes || [])) {
+        const op = criar("option", null, (c.curtas || {})[v] || r);
+        op.value = v;
+        op.title = r;
+        op.selected = String(c.valor) === String(v);
+        entrada.append(op);
+      }
+    } else {
+      entrada = criar("input", "entrada-87");
+      entrada.type = "text";
+      entrada.inputMode = "decimal";
+      entrada.placeholder = "—";
+      entrada.value = textoDoNumero87(c.valor);
+      entrada.addEventListener("keydown", (ev) => { if (ev.key === "Enter") entrada.blur(); });
+      entrada.addEventListener("input", () => api.digitando(c.id, entrada.value));
+    }
+    entrada.dataset.id = c.id;
+    entrada.dataset.inicial = entrada.value;
+    entrada.title = dicaDoAjuste87(c, painel);
+    entrada.addEventListener("focus", () => api.foco(c.id));
+    entrada.addEventListener("change", () => {
+      const bruto = entrada.value;
+      if (bruto === "") { api.definir(c.id, null); return; }
+      if (c.tipo === "op") { api.definir(c.id, bruto); return; }
+      const n = numeroDigitado(bruto);
+      if (n === null) { entrada.classList.add("invalido"); return; }
+      api.definir(c.id, n);
+    });
+    const caixa = criar("span", `campo-87 o-${o}`);
+    caixa.title = entrada.title;
+    caixa.append(entrada);
+    if (c.unidade) caixa.append(criar("span", "unidade-87", c.unidade));
+    return caixa;
+  }
+
+  /** O suspeito: uma linha só, com as duas saídas. */
+  function suspeito87(c, api) {
+    const a = criar("div", "suspeito-87");
+    a.append(criar("span", "motivo-87", `▲ ${c.motivo}`));
+    if (c.sugestao) {
+      const usar = criar("button", "medida", c.sugestao.texto);
+      usar.type = "button";
+      usar.addEventListener("click", () => api.definir(c.id, c.sugestao.valor));
+      a.append(usar);
+    }
+    const manter = criar("button", "medida", "manter o lido");
+    manter.type = "button";
+    manter.title = "Aceita o valor do arquivo assim mesmo.";
+    manter.addEventListener("click", () => api.aceitar(c.id));
+    a.append(manter);
+    return a;
+  }
+
+  /** Uma linha da lista: rótulo, campo, e o aviso do suspeito embaixo. */
+  function linha87(c, painel, api) {
+    const l = criar("div", `linha-87 o-${origemDoAjuste87(c, painel)}`);
+    const r = criar("span", "rotulo-87", c.rotulo);
+    r.title = dicaDoAjuste87(c, painel);
+    l.append(r, campo87(c, painel, api));
+    if (c.estado === "suspeito") l.append(suspeito87(c, api));
+    return l;
+  }
+
+  /** O desenho do trafo com os ajustes de cada lado e a potência no meio. */
+  function unifilar87(painel, api) {
+    const u = criar("div", "unifilar-87");
+    const centro = criar("div", "centro-87");
+    centro.append(svgDoTrafo87(96, 60));
+    const mva = (painel.ajustes || []).find((c) => c.id === "mva");
+    if (mva) {
+      const l = criar("label", `mini-87 o-${origemDoAjuste87(mva, painel)}`);
+      const r = criar("span", "rotulo-87", mva.curto || mva.rotulo);
+      r.title = dicaDoAjuste87(mva, painel);
+      l.append(r, campo87(mva, painel, api));
+      centro.append(l);
+      if (mva.estado === "suspeito") centro.append(suspeito87(mva, api));
+    }
+    u.append(centro);
+    for (const lado of ["1", "2"]) {
+      const col = criar("div", "lado-87");
+      const g = painel[`lado${lado}`];
+      const cab = criar("div", "cab-lado-87");
+      cab.append(criar("b", null, `lado ${lado}`));
+      // SÓ o rótulo do grupo; o radical no hover.
+      const grupo = criar("span", "grupo-87", g ? g.rotulo : "—");
+      if (g) grupo.title = g.nome;
+      cab.append(grupo);
+      col.append(cab);
+      for (const c of (painel.ajustes || []).filter((x) => x.lado === lado)) {
+        const l = criar("label", `mini-87 o-${origemDoAjuste87(c, painel)}`);
+        const r = criar("span", "rotulo-87", c.curto || c.rotulo);
+        r.title = dicaDoAjuste87(c, painel);
+        l.append(r, campo87(c, painel, api));
+        col.append(l);
+        if (c.estado === "suspeito") col.append(suspeito87(c, api));
+      }
+      u.append(col);
+    }
+    return u;
+  }
+
+  /** A lista do que não é de um lado do trafo, por grupo; o que está fora
+   *  (opcional em branco, não usado pela forma) vai para «mais ajustes». */
+  function lista87(painel, api) {
+    const corpo = criar("div", "lista-87");
+    const faltam = new Set((painel.faltam || []).map((x) => x.id));
+    const fora = [];
+    const grupos = new Map();
+    for (const c of (painel.ajustes || [])) {
+      if (c.lado || c.id === "mva") continue;
+      if (origemDoAjuste87(c, painel) === "fora") { fora.push(c); continue; }
+      if (!grupos.has(c.grupo)) grupos.set(c.grupo, []);
+      grupos.get(c.grupo).push(c);
+    }
+    for (const [grupo, campos] of grupos) {
+      const g = criar("div", "grupo-de-ajustes-87");
+      const t = criar("div", "titulo-87", GRUPO_87[grupo] || grupo);
+      const n = campos.filter((c) => faltam.has(c.id)).length;
+      if (n) t.append(criar("span", "conta-87", ` · faltam ${n}`));
+      g.append(t);
+      for (const c of campos) g.append(linha87(c, painel, api));
+      if (grupo === "cálculo" && painel.equacoes) {
+        g.append(criar("div", "equacao-87", painel.equacoes.iop),
+                 criar("div", "equacao-87", painel.equacoes.irt));
+      }
+      corpo.append(g);
+    }
+    if (fora.length) {
+      const d = criar("details", "mais-87");
+      d.open = maisDaGaveta87;
+      d.addEventListener("toggle", () => { maisDaGaveta87 = d.open; });
+      d.append(criar("summary", null,
+        `mais ajustes (${fora.length}) — opcionais e os que esta forma não usa`));
+      for (const c of fora) d.append(linha87(c, painel, api));
+      corpo.append(d);
+    }
+    return corpo;
+  }
+
+  /** O cabeçalho: título, quanto falta, «?» e ×; embaixo, a legenda. */
+  function cabecaDaGaveta87(painel) {
+    const topo = criar("div", "topo-87");
+    const cab = criar("div", "cabeca");
+    cab.append(criar("h3", null, "Ajustes do diferencial"));
+    const n = (painel.faltam || []).length;
+    cab.append(n ? criar("span", "faltam-87", `faltam ${n}`)
+                 : criar("span", "completo-87", "completo"));
+    const ajuda = criar("button", "ajuda-87", "?");
+    ajuda.type = "button";
+    ajuda.title = "O que cada moldura quer dizer";
+    const fechar = criar("button", "fechar", "×");
+    fechar.type = "button";
+    fechar.title = "Fechar (Esc)";
+    fechar.addEventListener("click", () => fecharAjustes());
+    cab.append(ajuda, fechar);
+    const texto = criar("div", "legenda-87");
+    texto.hidden = !ajudaDaGaveta87;
+    ajuda.addEventListener("click", () => {
+      ajudaDaGaveta87 = !ajudaDaGaveta87;
+      texto.hidden = !ajudaDaGaveta87;
+    });
+    texto.append(criar("p", null, painel.fabricante
+      ? `Relé ${painel.fabricante}: o que o arquivo trouxe aparece com a variável dele no hover; o resto se digita.`
+      : "Fabricante não identificado: nada foi lido. Digite os ajustes; o deduzido é sugestão e se corrige."));
+    const marcas = criar("div", "marcas-87");
+    for (const o of ["lido", "deduzido", "digitado", "suspeito", "falta"]) {
+      const item = criar("span", "marca-87");
+      const amostra = criar("span", `campo-87 o-${o} amostra`);
+      amostra.append(criar("span", "entrada-87", o === "falta" ? "—" : "25"));
+      item.append(amostra, criar("span", null, ORIGEM_87[o]));
+      marcas.append(item);
+    }
+    texto.append(marcas, criar("p", null, "Nada aqui bloqueia: o gráfico aparece quando todo "
+      + "ajuste usado tem valor. O deduzido e o lido também se corrigem — basta digitar por cima."));
+    topo.append(cab, texto);
+    if (painel.nota) topo.append(criar("p", "nota-87", painel.nota));
+    return topo;
+  }
+
+  /** (Re)monta o conteúdo da gaveta com o pacote do painel. Guarda a rolagem
+   *  e o campo em que se estava digitando — com o texto ainda não gravado. */
+  function montarGaveta87(painel, focar = null) {
+    if (!ajustesAbertos || !ajustesAbertos.dif || ajustesAbertos.painel !== painel.id) return;
+    const caixa = ajustesAbertos.caixa;
     const meu = painelPorId(painel.id);
-    if (!meu) return;
+    if (!meu) { fecharAjustes(); return; }
     if (!meu.ajustes87) meu.ajustes87 = {};
     const guardado = meu.ajustes87;
     if (!guardado.valores) guardado.valores = {};
     if (!guardado.aceitos) guardado.aceitos = [];
 
-    // Refaz a caixa com o pacote NOVO, que traz os estados resolvidos.
-    const refazer = (focoId) => {
-      recarregar().then(() => {
-        const novo = (dados.paineis || []).find((x) => x.id === painel.id);
-        if (novo) abrirAjustesDoDiferencial(novo, focoId || "__manter__");
-      });
+    const corpoVelho = caixa.querySelector(".corpo-87");
+    const rolagem = corpoVelho ? corpoVelho.scrollTop : 0;
+    const ativo = caixa.contains(document.activeElement) ? document.activeElement : null;
+    const emCurso = ativo && ativo.dataset && ativo.dataset.id
+      ? { id: ativo.dataset.id, valor: ativo.value, sujo: ativo.value !== ativo.dataset.inicial,
+          ini: ativo.selectionStart, fim: ativo.selectionEnd }
+      : null;
+    const alvo = focar && focar !== "__manter__" ? focar : ajustesAbertos.foco || null;
+    ajustesAbertos.foco = null;
+
+    // A prévia ao vivo: o que o servidor já sabe, mais o que se está
+    // digitando (cru — quem lê o número é o servidor).
+    const previa = criar("div", "previa-87-caixa");
+    const tela = document.createElement("canvas");
+    tela.className = "previa-87";
+    previa.append(tela);
+    const sobre = {};
+    let ultimo = painel.previa || null;
+    let realce = null;
+    let espera = null;
+    let pedido = 0;
+    const pintar = () => {
+      if (!ultimo || !tela.isConnected) return;
+      pintarPrevia87(tela, Math.max(240, previa.clientWidth - 10), 180, ultimo, { foco: realce });
+    };
+    const pedir = async () => {
+      const meuPedido = ++pedido;
+      const entradas = { ...((painel.previa || {}).entradas || {}) };
+      for (const [k, v] of Object.entries(sobre)) {
+        if (v === null || v === "") delete entradas[k];
+        else entradas[k] = v;
+      }
+      try {
+        const r = await fetch("/api/diferencial/previa", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ valores: entradas }),
+        });
+        const p = await r.json();
+        if (meuPedido === pedido && r.ok) { ultimo = p; pintar(); }
+      } catch (_e) { /* a prévia é só ajuda: sem resposta, fica a anterior */ }
+    };
+    const daPrevia = new Set((painel.previa || {}).campos || []);
+
+    const api = {
+      definir(id, valor) {
+        if (valor === null || valor === undefined || valor === "") delete guardado.valores[id];
+        else guardado.valores[id] = valor;
+        if (ajustesAbertos) ajustesAbertos.foco = id;
+        recarregar();
+      },
+      aceitar(id) {
+        if (!guardado.aceitos.includes(id)) guardado.aceitos.push(id);
+        if (ajustesAbertos) ajustesAbertos.foco = id;
+        recarregar();
+      },
+      digitando(id, texto) {
+        if (!daPrevia.has(id)) return;
+        sobre[id] = texto;
+        clearTimeout(espera);
+        espera = setTimeout(pedir, 90);
+      },
+      foco(id) { realce = id; pintar(); },
     };
 
-    const caixa = criar("div", "menu-suspenso ajustes-do-plano ajustes-87");
-    caixa.append(criar("p", "cabeca-menu", "ajustes do diferencial"));
-    if (painel.nota) caixa.append(criar("p", "nota-do-menu", painel.nota));
-    caixa.append(criar("p", "nota-do-menu", painel.fabricante
-      ? `Relé ${painel.fabricante}: o que o arquivo trouxe aparece com a `
-        + "variável dele; o resto se digita."
-      : "Fabricante não identificado: digite os ajustes."));
-
-    // O placar e a legenda dos estados — dentro da caixa, não no cabeçalho.
-    const placar = criar("div", "placar-87");
-    for (const e of ["coletado", "suspeito", "falta", "digitado", "deduzido"]) {
-      const n = (painel.placar || {})[e] || 0;
-      if (!n) continue;
-      placar.append(criar("span", `estado-87 ${e}`, `${n} ${NOME_DO_ESTADO_87[e]}`));
-    }
-    caixa.append(placar);
-
-    let grupoAtual = "";
-    let alvoDoFoco = null;
-    for (const c of (painel.ajustes || [])) {
-      if (c.grupo !== grupoAtual) {
-        grupoAtual = c.grupo;
-        caixa.append(criar("div", "titulo-de-grupo", c.grupo));
-        if (c.grupo === "característica") {
-          caixa.append(criar("p", "nota-do-menu",
-            "A forma da curva é de cada fabricante. Os ajustes que a forma "
-            + "escolhida não usa ficam marcados «não usado»."
-            + (painel.slopes === 1 ? " Esta é de UM slope." : "")));
-        }
-        if (c.grupo === "cálculo") {
-          caixa.append(criar("p", "equacao-87",
-            `${painel.equacoes.iop}   ·   ${painel.equacoes.irt}`));
-        }
-      }
-      const linha = criar("div", `ajuste-87 ${c.estado}`);
-      linha.dataset.id = c.id;
-      const rotulo = criar("span", "rotulo-87", c.rotulo);
-      rotulo.title = c.dica || "";
-      if (c.variavel) rotulo.append(criar("small", "variavel-87", ` ← ${c.variavel}`));
-
-      let campo;
-      if (c.tipo === "op") {
-        campo = document.createElement("select");
-        if (c.valor === null || c.valor === undefined) {
-          const vazio = document.createElement("option");
-          vazio.value = "";
-          vazio.textContent = "escolha";
-          campo.append(vazio);
-        }
-        for (const [v, r] of (c.opcoes || [])) {
-          const o = document.createElement("option");
-          o.value = v;
-          o.textContent = r;
-          o.selected = String(c.valor) === v;
-          campo.append(o);
-        }
-      } else {
-        campo = document.createElement("input");
-        campo.type = "text";
-        campo.inputMode = "decimal";
-        campo.placeholder = "digite";
-        campo.value = c.valor === null || c.valor === undefined
-          ? "" : formatar(c.valor, Math.abs(c.valor) < 10 ? 3 : 2);
-      }
-      campo.className = "campo-87";
-      campo.addEventListener("change", () => {
-        const bruto = campo.value;
-        if (bruto === "") delete guardado.valores[c.id];
-        else if (c.tipo === "op") guardado.valores[c.id] = bruto;
-        else {
-          const n = numeroDigitado(bruto);
-          if (n === null) return;
-          guardado.valores[c.id] = n;
-        }
-        refazer(c.id);
-      });
-      if (focar && focar === c.id) alvoDoFoco = campo;
-
-      const opcional = (painel.nao_usados || []).includes(c.id);
-      const emBrancoPodeFicar = c.estado === "falta" && (painel.opcionais || []).includes(c.id);
-      const chip = opcional || emBrancoPodeFicar
-        ? criar("span", "estado-87 falta", opcional ? "não usado" : "opcional")
-        : criar("span", `estado-87 ${c.estado}`, NOME_DO_ESTADO_87[c.estado]);
-      linha.append(rotulo, campo, criar("span", "unidade-87", c.unidade || ""), chip);
-
-      // A segunda linha: o texto lido, o motivo da suspeita, ou a conta.
-      const sub = criar("div", "sub-87");
-      if (c.bruto) sub.append(criar("code", null, c.bruto));
-      if (c.estado === "deduzido" && c.como) sub.append(criar("span", null, c.como));
-      if (c.motivo) sub.append(criar("span", "motivo-87", c.motivo));
-      if (c.estado === "suspeito") {
-        const aceitar = criar("button", "medida", "aceitar assim");
-        aceitar.type = "button";
-        aceitar.addEventListener("click", () => {
-          if (!guardado.aceitos.includes(c.id)) guardado.aceitos.push(c.id);
-          refazer(c.id);
-        });
-        sub.append(aceitar);
-        if (c.sugestao) {
-          const usar = criar("button", "medida", c.sugestao.texto);
-          usar.type = "button";
-          usar.addEventListener("click", () => {
-            guardado.valores[c.id] = c.sugestao.valor;
-            refazer(c.id);
-          });
-          sub.append(usar);
-        }
-      }
-      if (sub.children.length) linha.append(sub);
-      caixa.append(linha);
-    }
-
-    const limpar = criar("button", "medida largo", "voltar ao do arquivo");
+    const corpo = criar("div", "corpo-87");
+    corpo.append(unifilar87(painel, api), previa, lista87(painel, api));
+    const pe = criar("div", "pe-87");
+    const limpar = criar("button", "medida", "voltar ao do arquivo");
     limpar.type = "button";
     limpar.disabled = !Object.keys(guardado.valores).length && !guardado.aceitos.length;
     limpar.title = "Apaga o que foi digitado e aceito aqui e volta ao que o "
                  + "arquivo trouxe (ou ao deduzido).";
     limpar.addEventListener("click", () => {
       meu.ajustes87 = {};
-      fecharAjustes();
       recarregar();
     });
-    const pe = criar("div", "linha-de-ajuste");
     pe.append(limpar);
-    caixa.append(pe);
+    caixa.replaceChildren(cabecaDaGaveta87(painel), corpo, pe);
+    corpo.scrollTop = rolagem;
+    requestAnimationFrame(pintar);
 
-    // Pendurada no corpo, como a do plano: a resposta do servidor refaz o
-    // painel inteiro, e um menu dentro dele sumiria a cada número.
-    document.body.append(caixa);
-    const posicionar = () => {
-      const ancora = document.getElementById(ancoraId);
-      const gatilho = ancora && ancora.previousElementSibling;
-      if (!gatilho) { fecharAjustes(); return; }
-      const r = gatilho.getBoundingClientRect();
-      const larg = caixa.offsetWidth;
-      const esq = Math.max(8, Math.min(window.innerWidth - larg - 8, r.left));
-      caixa.style.left = `${esq}px`;
-      caixa.style.top = `${Math.min(r.bottom + 6, window.innerHeight - 120)}px`;
-      caixa.style.maxHeight = `${Math.max(200, window.innerHeight - r.bottom - 16)}px`;
-    };
-    const aoApontar = (e) => {
-      if (caixa.contains(e.target)) return;
-      const ancora = document.getElementById(ancoraId);
-      const gatilho = ancora && ancora.previousElementSibling;
-      if (gatilho && gatilho.contains(e.target)) return;
-      // O botão «preencher» do quadro também abre a caixa: não a fecha.
-      if (e.target.closest && e.target.closest(".faltam-ajustes")) return;
-      fecharAjustes();
-    };
-    document.addEventListener("pointerdown", aoApontar, true);
-    window.addEventListener("resize", posicionar);
-    window.addEventListener("scroll", posicionar, true);
-    ajustesAbertos = { painel: painel.id, caixa, posicionar, aoApontar };
-    posicionar();
-    if (alvoDoFoco) {
-      alvoDoFoco.scrollIntoView({ block: "nearest" });
-      alvoDoFoco.focus();
+    let foco = null;
+    if (emCurso) {
+      foco = caixa.querySelector(`.entrada-87[data-id="${emCurso.id}"]`);
+      if (foco && emCurso.sujo && foco.tagName === "INPUT") {
+        foco.value = emCurso.valor;
+        try { foco.setSelectionRange(emCurso.ini, emCurso.fim); } catch (_e) { /* select */ }
+      }
+    } else if (alvo) {
+      foco = caixa.querySelector(`.entrada-87[data-id="${alvo}"]`);
+      if (foco && focar && focar !== "__manter__") foco.scrollIntoView({ block: "nearest" });
     }
+    if (foco) foco.focus({ preventScroll: !focar || focar === "__manter__" });
+  }
+
+  /** A característica da prévia — na gaveta e, apagada, no painel que ainda
+   *  não tem todos os ajustes. Tudo vem pronto do servidor (`p`, de
+   *  `diferencial.previa`): a curva, os eixos, as marcas e quais ajustes
+   *  entraram com valor de desenho (`exemplo`). O trecho que depende de um
+   *  ajuste que falta sai tracejado e o rótulo dele diz «?». */
+  function pintarPrevia87(canvas, larg, alt, p, opcoes = {}) {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.style.width = `${larg}px`;
+    canvas.style.height = `${alt}px`;
+    dimensionar(canvas, Math.round(larg * dpr), Math.round(alt * dpr));
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, larg, alt);
+    const m = opcoes.margem || { esq: 36, dir: 10, topo: 12, baixo: 22 };
+    const x0 = m.esq, y0 = alt - m.baixo, w = larg - m.esq - m.dir, h = y0 - m.topo;
+    if (w < 60 || h < 40) return;
+    const ex = p.eixos.irt, ey = p.eixos.iop;
+    const X = (v) => x0 + w * Math.min(Math.max(v, 0), ex) / ex;
+    const Y = (v) => y0 - h * Math.min(Math.max(v, 0), ey) / ey;
+    const apagado = !!opcoes.fantasma;
+    const exemplo = new Set(p.exemplo || []);
+    const fonte = (px) => `${px}px ui-monospace, Consolas, monospace`;
+
+    ctx.save();
+    ctx.globalAlpha = apagado ? 0.05 : 0.08;
+    ctx.fillStyle = token("--ruim");
+    ctx.fillRect(x0, m.topo, w, h);
+    ctx.beginPath();
+    ctx.moveTo(X(0), y0);
+    p.irt.forEach((v, i) => ctx.lineTo(X(v), Y(p.iop[i])));
+    ctx.lineTo(X(ex), y0);
+    ctx.closePath();
+    ctx.globalAlpha = apagado ? 0.08 : 0.15;
+    ctx.fillStyle = token("--bom");
+    ctx.fill();
+
+    ctx.strokeStyle = token("--linha");
+    ctx.fillStyle = token("--suave");
+    ctx.font = fonte(10);
+    ctx.lineWidth = 1;
+    for (let k = 0; k <= 4; k += 1) {
+      const vx = ex * k / 4, vy = ey * k / 4;
+      ctx.globalAlpha = 0.45;
+      ctx.beginPath();
+      ctx.moveTo(X(vx), m.topo); ctx.lineTo(X(vx), y0);
+      ctx.moveTo(x0, Y(vy)); ctx.lineTo(x0 + w, Y(vy));
+      ctx.stroke();
+      ctx.globalAlpha = apagado ? 0.6 : 1;
+      ctx.textAlign = "center"; ctx.textBaseline = "top";
+      ctx.fillText(textoDoNumero87(+vx.toFixed(2)), X(vx), y0 + 4);
+      ctx.textAlign = "right"; ctx.textBaseline = "middle";
+      ctx.fillText(textoDoNumero87(+vy.toFixed(2)), x0 - 5, Y(vy));
+    }
+
+    // A curva: cheia com tudo dado; tracejada onde entra valor de desenho.
+    const usados = new Set(p.usados || []);
+    const temExemplo = [...exemplo].some((x) => usados.has(x) && x !== "u87");
+    ctx.strokeStyle = token(temExemplo ? "--suave" : "--tinta");
+    ctx.globalAlpha = apagado ? 0.55 : 1;
+    ctx.lineWidth = 1.6;
+    if (temExemplo) ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    p.irt.forEach((v, i) => (i ? ctx.lineTo(X(v), Y(p.iop[i])) : ctx.moveTo(X(v), Y(p.iop[i]))));
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+
+    // Onde fica o rótulo de cada ajuste.
+    const mk = p.marcas;
+    const n = p.irt.length - 1;
+    const naCurva = (irt) => Y(p.iop[Math.max(0, Math.min(n, Math.round(irt / ex * n)))]);
+    const encosta = Math.min(mk.pickup / Math.max(mk.slp1 / 100, 1e-6), ex);
+    const quebra = Math.min(mk.bp1 || mk.bp2 || ex, ex);
+    const meioS1 = (encosta + quebra) / 2;
+    const ancoras = {
+      pickup: { x: x0 + 4, y: Y(mk.pickup) - 3 },
+      slp1: { x: X(meioS1) - 6, y: naCurva(meioS1) - 4 },
+      u87: { fora: mk.u87 > ey, y: mk.u87 <= ey ? Y(mk.u87) : m.topo },
+    };
+    if (mk.slp2 !== null && mk.slp2 !== undefined) {
+      const xa = ((mk.bp2 || mk.bp1 || ex * 0.5) + ex) / 2;
+      ancoras.slp2 = { x: X(xa) - 6, y: naCurva(xa) - 4 };
+    }
+
+    // Os breakpoints e o 87U.
+    ctx.setLineDash([3, 4]);
+    for (const chave of ["bp1", "bp2"]) {
+      const v = mk[chave];
+      if (!(v > 0) || v >= ex) continue;
+      ctx.strokeStyle = token(opcoes.foco === chave ? "--destaque" : "--suave");
+      ctx.beginPath(); ctx.moveTo(X(v), m.topo); ctx.lineTo(X(v), y0); ctx.stroke();
+    }
+    if (!ancoras.u87.fora) {
+      ctx.strokeStyle = token(opcoes.foco === "u87" ? "--destaque" : "--ruim");
+      ctx.beginPath(); ctx.moveTo(x0, ancoras.u87.y); ctx.lineTo(x0 + w, ancoras.u87.y); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    // Os rótulos dos ajustes: «?» no que entrou com valor de desenho.
+    ctx.font = fonte(10.5);
+    const rot = (chave, texto, x, y, alinhar = "left", base = "bottom") => {
+      const falta = exemplo.has(chave);
+      ctx.fillStyle = token(opcoes.foco === chave ? "--destaque" : falta ? "--atencao" : "--tinta");
+      ctx.globalAlpha = apagado && !falta ? 0.7 : 1;
+      ctx.textAlign = alinhar; ctx.textBaseline = base;
+      ctx.fillText(texto, x, y);
+      ctx.globalAlpha = 1;
+    };
+    const v = (chave, unidade = "") => (exemplo.has(chave) ? "?" : textoDoNumero87(mk[chave]) + unidade);
+    // Num desenho estreito o rótulo do S1 cai em cima do do pickup: sobe.
+    const fimPickup = ancoras.pickup.x + ctx.measureText(`pickup ${v("pickup")}`).width + 6;
+    const inicioS1 = ancoras.slp1.x - ctx.measureText(`S1 ${v("slp1", " %")}`).width;
+    if (inicioS1 < fimPickup && Math.abs(ancoras.slp1.y - ancoras.pickup.y) < 13) {
+      ancoras.slp1.y = ancoras.pickup.y - 13;
+    }
+    rot("pickup", `pickup ${v("pickup")}`, ancoras.pickup.x, ancoras.pickup.y);
+    rot("slp1", `S1 ${v("slp1", " %")}`, ancoras.slp1.x, ancoras.slp1.y, "right");
+    if (ancoras.slp2) rot("slp2", `S2 ${v("slp2", " %")}`, ancoras.slp2.x, ancoras.slp2.y, "right");
+    if (mk.bp1 > 0 && mk.bp1 < ex) rot("bp1", `BP1 ${v("bp1")}`, X(mk.bp1) + 3, y0 - 3);
+    if (mk.bp2 > 0 && mk.bp2 < ex) rot("bp2", `BP2 ${v("bp2")}`, X(mk.bp2) + 3, y0 - 15);
+    rot("u87", `87U ${v("u87")}${ancoras.u87.fora ? " ↑" : ""}`, x0 + w - 4,
+        ancoras.u87.fora ? m.topo + 2 : ancoras.u87.y + 3, "right", "top");
+    ctx.fillStyle = token("--suave");
+    ctx.font = fonte(10);
+    ctx.textAlign = "left"; ctx.textBaseline = "top";
+    ctx.fillText("Iop (pu)", x0 + 3, m.topo + 1);
+    ctx.textAlign = "right"; ctx.textBaseline = "bottom";
+    ctx.fillText("Irt (pu)", x0 + w - 3, y0 - 2);
+    ctx.restore();
   }
 
   function pintarDiferencial(bloco) {
     const canvas = bloco._canvas;
     const painel = bloco._painel;
+    if (bloco._fantasma && painel.previa) {
+      // Ainda sem todos os ajustes: a característica apagada, do tamanho do
+      // gráfico que vai ocupar o lugar dela.
+      const larg = bloco._fantasma.parentElement.clientWidth || 600;
+      pintarPrevia87(bloco._fantasma, larg, ALTURA_DIFERENCIAL, painel.previa,
+                     { fantasma: true, margem: MARGEM_DIFERENCIAL });
+    }
     if (!canvas || !painel.pronto) { escreverTabelaDoDiferencial(bloco, -1, null); return; }
     // Medido do PAI, como o espectro: a coluna é `minmax(0, 1fr)` de uma
     // grade, e a largura dela não depende do canvas.
