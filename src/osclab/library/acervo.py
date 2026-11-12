@@ -916,6 +916,91 @@ def gravar_vinculos(sha: str, escolhas: dict) -> dict[int, str]:
 
 
 # ---------------------------------------------------------------------------
+# O alinhamento escolhido a mao no «refinar» (decidido em 11/11/2026)
+# ---------------------------------------------------------------------------
+#
+# O deslocamento MANUAL entre dois terminais muda o km da seq. negativa que
+# vai para o laudo. Como a correcao de fase, ele e' GRAVADO ao lado do
+# registro: reabrir o par tem que dar o mesmo km. Nao entra no Ctrl+Z (e'
+# dado gravado); desfaz-se voltando ao automatico no «refinar».
+#
+# Mora na pasta do registro A, num `refino.json` `{sha de B: {"d": s}}`, com
+# `d` no sentido de `alinhamento.deslocamento`: o instante `t` de A cai em
+# `t + d` em B. O PAR e' um so': abrir B com A ao lado le' o mesmo numero com
+# o sinal trocado (`-d`), e gravar por um lado apaga o que o outro lado
+# tivesse -- duas copias do mesmo dado e' como elas divergem.
+
+REFINO = "refino.json"
+
+
+def _ler_refino(sha: str) -> dict:
+    arquivo = _raiz() / sha / REFINO
+    if not arquivo.is_file():
+        return {}
+    try:
+        cru = json.loads(arquivo.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return cru if isinstance(cru, dict) else {}
+
+
+def _d_valido(entrada) -> float | None:
+    try:
+        d = float((entrada or {}).get("d"))
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return d if d == d and abs(d) != float("inf") else None
+
+
+def _escrever_refino(sha: str, dados: dict) -> None:
+    arquivo = _raiz() / sha / REFINO
+    if dados:
+        arquivo.write_text(json.dumps(dados, ensure_ascii=False, indent=2, sort_keys=True),
+                           encoding="utf-8")
+    elif arquivo.is_file():
+        arquivo.unlink()
+
+
+def refino_gravado(sha: str, outro: str) -> float | None:
+    """O `d` (s) gravado para o par `sha` (a aba) e `outro` (o B), ou `None`.
+
+    Procura primeiro na pasta de `sha`; senao, na de `outro`, com o sinal
+    trocado (o par visto do outro lado).
+    """
+    if obter(sha) is None or obter(outro) is None or sha == outro:
+        return None
+    d = _d_valido(_ler_refino(sha).get(outro))
+    if d is not None:
+        return d
+    d = _d_valido(_ler_refino(outro).get(sha))
+    return -d if d is not None else None
+
+
+def gravar_refino(sha: str, outro: str, d) -> float | None:
+    """Grava (ou, com `d` `None`, apaga) o alinhamento manual do par.
+
+    Devolve o que ficou valendo. Grava na pasta de `sha` e apaga a entrada
+    espelhada na de `outro`, para o par ter uma copia so'.
+    """
+    if obter(sha) is None or obter(outro) is None or sha == outro:
+        raise FormatError("Este registro nao esta' no acervo.")
+    valor = _d_valido({"d": d}) if d is not None else None
+    if d is not None and valor is None:
+        raise ValueError("O deslocamento tem que ser um numero finito (s).")
+    meus = _ler_refino(sha)
+    if valor is None:
+        meus.pop(outro, None)
+    else:
+        meus[outro] = {"d": valor}
+    _escrever_refino(sha, meus)
+    dele = _ler_refino(outro)
+    if sha in dele:
+        dele.pop(sha)
+        _escrever_refino(outro, dele)
+    return valor
+
+
+# ---------------------------------------------------------------------------
 # O apelido: como o registro se chama NA TELA
 # ---------------------------------------------------------------------------
 #

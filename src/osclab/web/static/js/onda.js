@@ -11472,8 +11472,6 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
 
   //: O pacote da localização que alimenta os painéis, e o pedido em voo.
   let pacoteLoc = null;
-  //: O deslocamento MANUAL escolhido no «refinar», `{b, d}` (s), ou null.
-  let refinoManual = null;
   let lendoLoc = false;
   let deNovoLoc = false;
   //: O que, mudando, exige refazer a legenda e o rodapé (e não só repintar).
@@ -11497,7 +11495,6 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
           // A linha é a MESMA escolhida na tela «localizar falta»: o número
           // não pode mudar de uma tela para a outra.
           fonte: estadoLoc.fonte, manual: estadoLoc.manual, linha_base: estadoLoc.linha_base,
-          refino: refinoManual,
           estimador: filtroEscolhido !== FILTROS[0][0] ? filtroEscolhido : null,
           colunas: colunasLoc(largura), colunas_ondas: colunasLoc(largura / 2),
           painel: true, rele_manual: meu.rele_manual ?? null,
@@ -12378,9 +12375,10 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   // oscilografia: as teclas globais daqui (1, 2, setas, Esc) têm outro sentido
   // lá dentro. O contexto — a linha em uso, a MESMA do painel — vai pela
   // sessão do navegador. O deslocamento MANUAL escolhido lá VALE para o
-  // painel (11/11/2026): chega por mensagem, mora aqui (`refinoManual`, da
-  // TELA, como o arranjo) e vai no corpo de cada pedido da localização; o
-  // automático o desfaz. Ver `plot/refino.py` e `faultloc/refino.py`.
+  // painel (11/11/2026) e fica GRAVADO ao lado do registro, como a correção
+  // de fase: o refino o grava, a mensagem só manda pedir a localização de
+  // novo, e o servidor o lê do disco. Não entra no Ctrl+Z; o automático do
+  // refino o apaga. Ver `plot/refino.py` e `faultloc/refino.py`.
   let quadroRefino = null;
   function fecharRefino() {
     if (!quadroRefino) return;
@@ -12391,10 +12389,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const b = (outrosRegistros[0] || {}).sha;
     if (!b || !pacoteLoc) return;
     try {
-      sessionStorage.setItem(`osclab:refino:${sha}:${b}`, JSON.stringify({
-        linha: pacoteLoc.linha || null,
-        manual: refinoManual && refinoManual.b === b ? refinoManual.d : null,
-      }));
+      sessionStorage.setItem(`osclab:refino:${sha}:${b}`, JSON.stringify({ linha: pacoteLoc.linha || null }));
     } catch (_e) { /* sem sessão: o refino abre sem a linha, e diz isso */ }
     fecharRefino();
     const fundo = criar("div", "rf-casa");
@@ -12410,11 +12405,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   window.addEventListener("message", (e) => {
     if (e.origin !== location.origin || !e.data) return;
     if (e.data.tipo === "refino-fechar") fecharRefino();
-    else if (e.data.tipo === "refino-alinhamento") {
-      const d = e.data.d;
-      refinoManual = (typeof d === "number" && isFinite(d)) ? { b: e.data.b, d } : null;
-      recalcularLoc();
-    }
+    else if (e.data.tipo === "refino-alinhamento") recalcularLoc();   // já gravado
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && quadroRefino) { e.stopImmediatePropagation(); fecharRefino(); }
@@ -12432,7 +12423,8 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   function seloAlinhadoAMao(m) {
     const s = criar("span", "rf-selo-mao", "alinhado à mão");
     s.title = `B deslocado de ${m.txt.d} ms, escolhido no «refinar» (o automático dá ${m.txt.auto} ms). `
-            + "Vale para a seq. negativa deste painel; volte ao automático no «refinar» para desfazer.";
+            + "Vale para a seq. negativa deste painel e está gravado ao lado do registro "
+            + "(reabrir dá o mesmo km; o Ctrl+Z não o desfaz). Volte ao automático no «refinar» para apagar.";
     return s;
   }
 
@@ -17535,7 +17527,6 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         body: JSON.stringify({
           registros: outrosRegistros, alinhar: alinharPor, t: cursores[0],
           fonte: estadoLoc.fonte, manual: estadoLoc.manual, linha_base: estadoLoc.linha_base,
-          refino: refinoManual,
           estimador: filtroEscolhido !== FILTROS[0][0] ? filtroEscolhido : null,
           colunas: colunasLoc(larga), colunas_ondas: colunasLoc(larga / 2 - 20),
         }),

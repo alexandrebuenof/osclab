@@ -23,9 +23,11 @@ esse alinhamento e o número:
 **O deslocamento escolhido aqui VALE para o painel** (decidido pelo
 Alexandre em 11/11/2026): o manual — arrastado, marcado ou o «usar» da
 correlação — passa a ser o `d` do painel localizador, que o diz com o selo
-«alinhado à mão». É da TELA, como o arranjo dos painéis: vai no corpo de cada
-pedido (`deslocamento_do_painel`) e não se grava ao lado do registro. Voltar
-ao automático no refino desfaz.
+«alinhado à mão». Fica GRAVADO ao lado do registro, como a correção de fase
+(`acervo.gravar_refino`, um `refino.json` na pasta de A chaveado pelo sha de
+B; o par visto de B lê `−d`): reabrir dá o mesmo km, o Ctrl+Z não o desfaz, e
+voltar ao automático no refino o apaga. A conta do `d` do painel é
+`deslocamento_do_painel`.
 
 Tudo em PRIMÁRIO e em fasor EFICAZ, como em `ldl.py`.
 """

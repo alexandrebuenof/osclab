@@ -571,8 +571,29 @@ def create_app() -> Flask:
         outro = acervo.obter(request.args.get("com") or "")
         if item is None or outro is None:
             return render_template("nao-achei.html", versao=version.read()), 404
+        # O alinhamento manual GRAVADO do par: a janela abre já nele.
+        gravado = acervo.refino_gravado(item.sha, outro.sha)
         return render_template("refino.html", versao=version.read(),
-                               a=item.como_dicionario(), b=outro.como_dicionario())
+                               a=item.como_dicionario(), b=outro.como_dicionario(),
+                               manual="" if gravado is None else repr(gravado))
+
+    @app.post("/api/onda/<sha>/refino-alinhamento")
+    def refino_alinhamento(sha: str):
+        """Grava (`d` em s) ou apaga (`d` nulo) o alinhamento MANUAL do par
+        `sha` × `b`, ao lado do registro (`acervo.gravar_refino`). É dado
+        gravado, como a correção de fase: o Ctrl+Z não o desfaz, e quem o
+        apaga é voltar ao automático no «refinar»."""
+        corpo = request.get_json(silent=True) or {}
+        d = corpo.get("d")
+        if d is not None and (isinstance(d, bool) or not isinstance(d, (int, float))):
+            return jsonify(erro="o deslocamento tem que ser um número (s)"), 400
+        try:
+            valor = acervo.gravar_refino(sha, str(corpo.get("b") or ""), d)
+        except FormatError as exc:
+            return jsonify(erro=str(exc)), 404
+        except ValueError as exc:
+            return jsonify(erro=str(exc)), 400
+        return jsonify(d=valor)
 
     @app.post("/api/onda/<sha>/refino")
     def refino_api(sha: str):
@@ -610,19 +631,25 @@ def create_app() -> Flask:
 
         nome_a = _nome_do_terminal(sha, registro, acervo.apelido(sha))
         terminais = [{"letra": "A", "nome": nome_a, "registro": registro, "sha": sha, "d": 0.0}]
-        # O deslocamento MANUAL escolhido no «refinar» (decidido em 11/11/2026):
-        # vale para este painel enquanto a tela o mandar, e só para o B dele.
-        pedido_refino = corpo.get("refino") if isinstance(corpo.get("refino"), dict) else {}
+        # O deslocamento MANUAL escolhido no «refinar» (decidido em 11/11/2026),
+        # GRAVADO ao lado do registro: vale só para o B do par. Um `refino`
+        # no corpo vence o gravado (a tela de hoje não o manda mais).
+        pedido_refino = corpo.get("refino") if isinstance(corpo.get("refino"), dict) else None
         alinhado_a_mao = None
         for letra, (outro, apelido, sha_outro) in zip("B", outros, strict=False):
             desl = alinhamento_mod.deslocamento(registro, outro, modo)
             d = desl["d"]
-            if pedido_refino.get("b") == sha_outro:
-                escolha = refino_conta.deslocamento_do_painel(outro, d, pedido_refino.get("d"))
+            if pedido_refino is not None and pedido_refino.get("b") == sha_outro:
+                pedido_d = pedido_refino.get("d")
+            else:
+                pedido_d = acervo.refino_gravado(sha, sha_outro)
+            if pedido_d is not None:
+                escolha = refino_conta.deslocamento_do_painel(outro, d, pedido_d)
                 if escolha["manual"]:
                     d = escolha["d"]
                     alinhado_a_mao = {
                         "d": d, "auto": escolha["auto"],
+                        "gravado": pedido_refino is None or pedido_refino.get("b") != sha_outro,
                         "txt": {"d": refino_mod.txt(d * 1000.0, 2),
                                 "auto": refino_mod.txt(escolha["auto"] * 1000.0, 2)}}
             terminais.append({"letra": letra,
