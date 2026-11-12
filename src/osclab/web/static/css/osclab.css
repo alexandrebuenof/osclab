@@ -4729,6 +4729,55 @@ a.chave, .tema, .voltar, #exportar { text-decoration: none; }
   color: var(--suave);
 }
 
+/* O `.medida` em QUALQUER lugar. O desenho dele morava em três contextos
+   (`.grafico-titulo`, `.novo-painel`, `.menu-suspenso`), e um botão `medida`
+   fora deles saía com a cara de botão do navegador — o «preencher «Potência
+   nominal»» do quadro do diferencial sem ajustes, cinza e grande no meio do
+   painel (11/11/2026). `:where` deixa a especificidade em zero: os desenhos
+   de contexto continuam mandando, e este só cobre o que ficou sem nenhum. */
+:where(.medida) {
+  padding: 3px 8px;
+  border: 1px solid var(--linha);
+  border-radius: 4px;
+  background: none;
+  color: var(--suave);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 400;
+  cursor: pointer;
+}
+:where(.medida:hover:not(:disabled)) { color: var(--tinta); border-color: var(--suave); }
+:where(.medida:disabled) { opacity: .45; cursor: default; }
+
+/* A caixa da ENGRENAGEM, de todo gráfico: larga e baixa, não alta e
+   estreita. Com os 230 px do menu comum, a explicação de cada ajuste do plano
+   alfa quebrava em quatro, cinco linhas e a caixa passava da borda de baixo
+   da tela (11/11/2026). A largura sai do conteúdo, com teto de 520 px: a
+   explicação corre em uma ou duas linhas, e a engrenagem com um botão só
+   continua pequena. A altura é a da janela, e o resto rola por dentro (ver
+   `menuSuspenso`, `fixo`). */
+.menu-suspenso.menu-de-ajustes {
+  width: max-content;
+  min-width: 230px;
+  max-width: min(520px, calc(100vw - 16px));
+  box-sizing: border-box;
+}
+/* Muitos grupos só de botões: duas colunas, e a caixa fica quadrada. */
+.menu-suspenso.menu-de-ajustes.em-colunas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(200px, 1fr));
+  column-gap: 10px;
+  align-items: start;
+}
+.menu-suspenso.menu-de-ajustes.em-colunas .cabeca-menu { grid-column: 1 / -1; }
+/* Um título e as linhas dele: a unidade que vai para uma coluna. */
+.menu-suspenso .grupo-de-ajuste { min-width: 0; }
+.menu-suspenso.menu-de-ajustes .nota-do-menu,
+.menu-suspenso.menu-de-ajustes .nada-a-ajustar {
+  max-width: none;
+  width: auto;
+}
+
 /* Ligado. A regra de aceso dos botões de gráfico (`.grafico-titulo .medida
    .escolhido`) não alcança o menu, que mora fora do título — sem esta linha o
    botão de «ver amostras» continuava apagado depois de ligado, e o clique

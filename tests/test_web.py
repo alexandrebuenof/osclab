@@ -2735,6 +2735,45 @@ def test_ADICIONAR_GRAFICO_mora_ao_lado_do_adicionar_oscilografia():
            ".tira-dos-ieds .barra-dos-ieds .novo-grafico {" in css
 
 
+def test_TODO_tipo_de_grafico_tem_a_ENGRENAGEM():
+    """O lugar dos ajustes é o mesmo em todo gráfico: procurar a engrenagem
+    num e não achar é pior que achá-la com pouco dentro. Faltava no
+    diferencial e no localizador (11/11/2026). Cada tipo do menu é seguido
+    até a função que monta o bloco dele, e ela tem de chamar
+    `engrenagemDoPainel`."""
+    import re
+    js = _onda_js()
+    lista = js[js.index("const TIPOS_DE_PAINEL"):]
+    lista = lista[:lista.index("\n  ];")]
+    tipos = re.findall(r'^    \["([a-z]+)", "', lista, re.M)
+    despacho = dict(re.findall(
+        r'if \(painel\.tipo === "([a-z]+)"\) return (bloco[A-Za-z]*)\(', js))
+    # O espectro é o painel de harmônicos com outro desenho; o analógico é o
+    # `bloco` do fim do despacho.
+    apelido = {"espectro": "harmonicos"}
+    assert len(tipos) == 11, tipos
+    for tipo in tipos:
+        funcao = despacho.get(apelido.get(tipo, tipo), "bloco")
+        inicio = js.index(f"\n  function {funcao}(")
+        fim = js.index("\n  function ", inicio + 10)
+        assert "engrenagemDoPainel(" in js[inicio:fim], (tipo, funcao)
+
+
+def test_ESTADO_do_desenho_nao_se_escreve_por_cima_dele():
+    """«Ponha o cursor», «falta o terminal remoto», «escolha o vínculo», «sem
+    o comprimento da linha»: escritos no canvas, caíam em cima da grade, dos
+    anéis e dos rótulos — e o rodapé ainda repetia. Agora vão para UMA linha
+    abaixo do corpo do painel (`avisoDoDesenho`), ou ficam só no rodapé."""
+    import re
+    js = _onda_js()
+    for frase in ("ponha o cursor", "falta o terminal remoto", "escolha o vínculo",
+                  "não há eixo de km", "calculando a localização", "faltam tensões"):
+        achou = re.findall(r"fillText\([^;]*" + re.escape(frase), js, re.I | re.S)
+        achou += re.findall(r"dizer\([^;]*" + re.escape(frase) + r"[^;]*, -?\d+\)", js, re.I)
+        assert not achou, frase
+    assert "function avisoDoDesenho(canvas, texto)" in js
+
+
 def test_a_ALTURA_esticavel_e_da_TELA_e_o_gesto_usa_a_mesma_conta():
     """A altura do gráfico é do arranjo da tela, como o nome: entra no Ctrl+Z
     e não vai ao servidor. Quem desenha e quem mede o gesto (roda, arrasto,

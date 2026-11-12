@@ -528,7 +528,11 @@
       const p = noDesenho(b, ev);
       if (!p.dentro) return;
       ev.preventDefault();
-      pedir({ zoom: ev.deltaY < 0 ? 0.8 : 1.25, foco: emT(p.G, p.x) });
+      // Proporcional ao deltaY, como em `onda.js` (`fatorDaRoda`): roda de
+      // alta resolução manda vários eventos pequenos por entalhe.
+      const escala = ev.deltaMode === 1 ? 33 : ev.deltaMode === 2 ? 600 : 1;
+      const px = Math.max(-300, Math.min(300, (ev.deltaY || 0) * escala));
+      pedir({ zoom: Math.pow(0.8, -px / 100), foco: emT(p.G, p.x) });
     }, { passive: false });
     cv.addEventListener("contextmenu", (ev) => { ev.preventDefault(); pedir({ tudo: true }); });
     cv.addEventListener("pointerleave", () => { mouseT = null; });
