@@ -48,8 +48,11 @@ O critério é de COMPORTAMENTO, nunca de nome nem de fabricante: mais de
 dos digitais que mudam mudam até 6 vezes; o sinal de proteção de verdade que
 mais mudou foi o bloqueio por harmônico do 87 numa energização (51
 transições, até o fim de um registro de 1 s). As supervisões que picotam vão
-de 415 a 486. Daí 200: quatro vezes o bloqueio de harmônico, metade da
-supervisão. O picotando não some: fica no «+ sinal», num bloco próprio, com
+de 415 a 486, e o fator de potência adiantado/atrasado da medição
+(`LD_DPF*`, `LG_DPF*`) de 32 a 42. Daí 20 (decidido pelo Alexandre em
+12/11/2026): o dobro do maior trip/52/79/partida (10), abaixo do fator de
+potência — e o bloqueio por harmônico do 87 numa energização vai junto para
+o «+ sinal», de propósito. O picotando não some: fica no «+ sinal», num bloco próprio, com
 o número de mudanças ao lado.
 """
 
@@ -90,7 +93,7 @@ class Resumo:
 
 #: Acima de quantas transições um digital pode estar picotando. Ver o
 #: cabeçalho do módulo para a medição que deu este número.
-PICOTA_MUDANCAS = 200
+PICOTA_MUDANCAS = 20
 #: E a última transição tem que cair depois desta fração da duração: quem
 #: picotou só durante a falta e parou faz parte da história dela.
 PICOTA_FIM = 0.75

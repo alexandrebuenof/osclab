@@ -561,7 +561,7 @@ osclab/
   IN301–IN324 assim mesmo, com um contador de amostras em IN317–IN324. Fica
   fora da tela padrão e aparece riscado na busca, com o porquê
   (`formats/ajustes.digitais_sem_placa`, 24/10/2026). **A segunda exceção é o
-  digital que PICOTA** *(12/11/2026)*: mais de 200 transições
+  digital que PICOTA** *(12/11/2026)*: mais de 20 transições
   (`digitais.PICOTA_MUDANCAS`) E ainda mudando no último quarto do registro
   (`PICOTA_FIM`) — pelo COMPORTAMENTO, nunca pelo nome. Motivo: o `ENX2AG/BG/CG`
   de um SEL-411L (supervisão da reatância do quadrilateral de terra) muda 415 a
@@ -569,7 +569,10 @@ osclab/
   registros de teste reais (1916 digitais que mudaram, 35 registros): 98 % mudam
   até 6 vezes; trip, 52, 79, OUT, 21, 67, 50 e 51 nunca passam de 10; o maior
   sinal de proteção foi o bloqueio por harmônico do 87 numa energização (51,
-  até o fim de um registro de 1 s) — 200 é quatro vezes ele. Fica fora do
+  até o fim de um registro de 1 s). O limite era 200 (só os ENX) e baixou
+  para 20 por decisão dele, para levar também o fator de potência da medição
+  (`LD_DPF*`/`LG_DPF*`, 32 a 42): o dobro do maior trip/52/79/partida, e o
+  bloqueio do 87 numa energização vai junto, de propósito. Fica fora do
   gráfico padrão e vai para o bloco «picotando» do «+ sinal», com
   «· N mudanças» ao lado; nada no cabeçalho do painel. Sem placa vence
   picotando (o contador do 487E fica «sem placa»).
@@ -584,6 +587,13 @@ osclab/
   inteiro. Teclas `1` e `2` põem e tiram os cursores de medição no ponto do
   mouse, `←`/`→` andam uma amostra (com Shift, um ciclo), `Esc` tira os dois. O navegador manda o *gesto* em segundos; quem decide a janela que
   sai disso é `plot/navegacao.py` — inclusive o piso de amostras e as bordas.
+  **Clique duplo no painel localizador amplia a REGIÃO DA FALTA em todos os
+  gráficos** *(12/11/2026)*: a janela é a da aba, e QUAL é a da falta sai de
+  `plot/localizador.janela_da_falta` (início da falta − 2 ciclos até o fim do
+  `assentado` + 2 ciclos; cortada na borda, sem deslizar; sem platô, sem zoom,
+  e o `title`/linha de baixo do desenho diz por quê), em `painel.zoom_falta`.
+  De novo, com a tela ainda nela, volta à janela de antes. Como a roda, não
+  entra no Ctrl+Z; os dois cliques não põem cursor e a seleção volta à de antes.
 - **A escala vertical se ajusta à janela visível**, por grupo. Ampliar a
   pré-falta tem que mostrar a corrente de carga, não um fio reto no zero.
 - **Tema claro é o padrão desde 10/11/2026** — o da identidade nova (f10),
@@ -626,7 +636,8 @@ osclab/
   quando os ajustes do relé diferem da linha comparada em Z1, Z0/k0 ou LL. O
   gráfico hachura onde a curva não mede (sem texto, e a curva não é
   desenhada ali), marca o platô com um colchete acima da moldura e traz o
-  número do relé em âmbar (`--loc-rele`); o rodapé diz SÓ o trecho a
+  número do relé em âmbar (`--loc-rele`); clique duplo no desenho amplia a
+  região da falta em todos os gráficos (ver «Os gestos do gráfico»); o rodapé diz SÓ o trecho a
   patrulhar — «a partir de SE X», «a partir deste terminal» sem a estação,
   «a partir do IED A» com mais de uma oscilografia (nunca «IED A» com um
   só). A janela «parâmetros» compara Relé · Base de dados · Digitado em
@@ -1197,7 +1208,7 @@ Três consequências para quem programa isto:
 | 0.7+ | **Calculadora em gaveta** (variante 10): domínio FASOR (`a`, `conj`, `mod`, `ang`, `re`, `im`, `polar`), funções de onda (`rms`, `delta`, `deriv`, `integ`, `f60`, `media`, `atrasar`, `maxjan`), nomes padronizados com grupo, `{k0}` com a origem e «usar o do relé», relação de TC digitável para canal sem relação (desde 11/11/2026 gravada no registro, por grupo ou canal — ver «A relação DIGITADA»), sugestões (modelos que dizem se cabem no registro) e «guardar como modelo». Corrigido de passagem: conta do usuário + filtro de 60 Hz dava erro 500 (`catalogo.efetivo`) | **feito** — entra na `0.8.0` |
 | **0.8** | **Rodada de 11/11/2026.** Janela de **eventos do relé** (`.hdr` da Schneider sozinho; SER da SEL, `.eev` da GE e texto com hora pelo «+ arquivo», sem gravar; trilha da distribuição no tempo); **calculadora em gaveta**; **tema escuro** «Ardósia clara» e o realce da subestação; **«refinar»** a seq. negativa de dois terminais, com o alinhamento manual valendo no painel localizador; janelas flutuantes que cabem na tela | **feito** — `0.8.0` |
 | **0.9** | **Rodada de 12/11/2026.** **Ajustes do diferencial em gaveta** (variante 10: unifilar do trafo, característica ao vivo, origem de cada número na moldura); **«? métodos» com as equações desenhadas** (variante 06, métodos à esquerda com o km, «neste registro» como conta); **relação de TC/TP digitada** por grupo ou canal, gravada com o registro; **alinhamento manual do refino gravado**; eixo ambíguo sem título; engrenagem em todo gráfico, roda do localizador proporcional; correções da caça de bugs | **feito** — `0.9.0` |
-| 0.9+ | Correções de uso: digital que **picota** (mais de 200 mudanças até o fim do registro) sai do gráfico padrão e fica no «+ sinal», bloco «picotando»; **roda do localizador** com um pedido por vez e resposta velha descartada, e o resumo dos digitais feito uma vez por registro (janela de 1,08 s → 0,17 s no SEL-411L); seletores de trinca só com «G1» | **feito** — `0.9.1` |
+| 0.9+ | Correções de uso: digital que **picota** (mais de 20 mudanças até o fim do registro) sai do gráfico padrão e fica no «+ sinal», bloco «picotando»; **roda do localizador** com um pedido por vez e resposta velha descartada, e o resumo dos digitais feito uma vez por registro (janela de 1,08 s → 0,17 s no SEL-411L); seletores de trinca só com «G1» | **feito** — `0.9.1` |
 | 0.5 | Bruto/filtrado, descontinuidade, alinhamento | |
 | 0.6 | Localização de faltas (um e dois terminais) | |
 | 0.7 | Mini relatório | |

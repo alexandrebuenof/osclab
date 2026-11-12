@@ -341,3 +341,62 @@ def test_a_linha_de_tres_terminais_entra_pelo_caminho_A_B_com_o_aviso(tmp_path, 
                           json={"acao": "papeis", "nome": "LD VG - POCONE",
                                 "papeis": ["A", "A", "B"]})
     assert errado.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# O zoom do duplo clique: a região da falta (12/11/2026)
+# ---------------------------------------------------------------------------
+
+CICLO = 1 / 60
+FOLGA = localizador.FOLGA_DO_ZOOM * CICLO
+
+
+def _eventos(inicio, plato, assentado):
+    return {"inicio": inicio, "plato": plato, "assentado": assentado,
+            "abre_a": None, "fim_falta": None}
+
+
+def test_a_regiao_da_falta_vai_do_inicio_ao_fim_do_assentado_com_folga():
+    """Falta no meio do registro: do início − 2 ciclos ao fim do trecho em que
+    a curva mede + 2 ciclos. Começa no INÍCIO, não no platô: quem amplia quer
+    ver a falta entrar."""
+    ev = _eventos(0.100, [0.1333, 0.1800], [0.1167, 0.1925])
+    z = localizador.janela_da_falta(ev, 0.0, 0.5, CICLO, 1 / 2000)
+    assert z["motivo"] == ""
+    assert z["de"] == pytest.approx(0.100 - FOLGA)
+    assert z["ate"] == pytest.approx(0.1925 + FOLGA)
+
+
+def test_falta_colada_no_inicio_ou_no_fim_corta_na_borda_sem_deslizar():
+    """Na borda a janela é cortada; deslizar para dentro poria do outro lado um
+    pedaço que não é da falta."""
+    z = localizador.janela_da_falta(_eventos(0.010, [0.043, 0.08], [0.027, 0.09]),
+                                    0.0, 0.5, CICLO, 1 / 2000)
+    assert z["de"] == pytest.approx(0.0)
+    assert z["ate"] == pytest.approx(0.09 + FOLGA)
+    z = localizador.janela_da_falta(_eventos(0.400, [0.433, 0.49], [0.417, 0.5]),
+                                    0.0, 0.5, CICLO, 1 / 2000)
+    assert z["de"] == pytest.approx(0.400 - FOLGA)
+    assert z["ate"] == pytest.approx(0.5)
+
+
+def test_sem_plato_ou_sem_falta_nao_ha_zoom_e_diz_por_que():
+    z = localizador.janela_da_falta(_eventos(0.1, None, [0.117, 0.13]), 0.0, 0.5, CICLO)
+    assert z["de"] is None and z["ate"] is None
+    assert "platô" in z["motivo"]
+    z = localizador.janela_da_falta(None, 0.0, 0.5, CICLO)
+    assert z["de"] is None and "início de falta" in z["motivo"]
+    # o aviso da conta, quando houver, é o motivo
+    aviso = "o registro não mostra o início"
+    z = localizador.janela_da_falta(None, 0.0, 0.5, CICLO, aviso=aviso)
+    assert z["motivo"] == aviso
+
+
+def test_a_regiao_da_falta_de_uma_falta_simulada_contem_o_inicio_e_o_plato(pacote):
+    """Na falta AG do fixture: a janela contém o início (com a folga) e o platô
+    inteiro, e é menor que o registro — é zoom de verdade."""
+    ev = pacote["eventos"]
+    z = localizador.janela_da_falta(ev, 0.0, 10.0, CICLO, 1 / 2000)
+    assert z["de"] == pytest.approx(max(ev["inicio"] - FOLGA, 0.0))
+    assert z["de"] < ev["plato"][0] and z["ate"] > ev["plato"][1]
+    assert z["ate"] - z["de"] < 10.0

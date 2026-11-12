@@ -85,7 +85,7 @@
   //: navegador recarrega o `.js` sozinho: quem troca de versão sem reiniciar
   //: fica com tela nova e servidor velho, e o resultado é uma tela que mostra
   //: coisas que não fazem sentido sem dar erro nenhum. Já custou três rodadas.
-  const CONTRATO = 31;
+  const CONTRATO = 32;
 
   //: A margem de cima abriga a etiqueta numerada dos cursores, que fica FORA da
   //: área de desenho: por dentro ela tapa o pico da onda — e o pico é
@@ -12590,7 +12590,8 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     parametros.addEventListener("click", abrirParametrosLoc);
     const ajuda = criar("button", "medida", "? métodos");
     ajuda.type = "button";
-    ajuda.title = "Como cada método calcula, quando cada um vale, e de onde sai o trecho a patrulhar.";
+    ajuda.title = "Como cada método calcula, quando cada um vale, e de onde sai o trecho a patrulhar. "
+                + "Clique duplo no gráfico amplia a região da falta em todos os gráficos.";
     ajuda.addEventListener("click", abrirAjudaMetodosLoc);
     const doCabecalho = [chave, parametros, ajuda, comprimentoLoc()];
     const selo = seloDivLoc();
@@ -12717,18 +12718,19 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     ctx.textBaseline = "middle";
 
     const p = pacoteLoc && pacoteLoc.painel;
+    canvas.title = dicaDoZoomNaFalta(p);
     if (!p || !p.regua) {
       ctx.strokeStyle = corLinha;
       ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
       // Nada escrito sobre a grade: «sem linha» já está no cabeçalho e «sem
       // trecho a patrulhar» no rodapé. Só a espera vai para a linha de baixo.
-      avisoDoDesenho(canvas, !pacoteLoc ? "Calculando a localização…" : null);
+      avisoDoDesenho(canvas, !pacoteLoc ? "Calculando a localização…" : avisoDoZoomNaFalta(p));
       pintarEtiquetas(ctx, emX, x0, x1, y0);
       pintarRodapeDoTempo(ctx, emX, x0, x1, y1, ultimo);
       if (b._ladoLoc) b._ladoLoc.replaceChildren();
       return;
     }
-    avisoDoDesenho(canvas, null);
+    avisoDoDesenho(canvas, avisoDoZoomNaFalta(p));
     const pct = meu.unidade_loc === "%" && !!p.linha_km;
     const lo = p.regua.min, hi = p.regua.max;
     const Y = (km) => y1 - ((km - lo) / (hi - lo || 1)) * (y1 - y0);
@@ -17799,6 +17801,11 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     // `parado` nunca mexeu em `arrastoPx`: o clique vale sempre, e não depende
     // de um valor que é de OUTRO painel.
     if (arrastando_parado || (!faixa && Math.abs(arrastoPx) < 4)) {
+      // A seleção de ANTES do primeiro clique de um possível duplo: o duplo
+      // no localizador a devolve (ver `zoomNaFalta`).
+      const agoraMs = performance.now();
+      if (agoraMs - ultimoCliqueParado > 600) selecaoAntesDoPar = selecionados.slice();
+      ultimoCliqueParado = agoraMs;
       const agora = medir(a.canvas, evento);
       escolherSinal(a.canvas, agora ? agora.x : xInicial,
                     evento.clientY - a.canvas.getBoundingClientRect().top,
@@ -17875,6 +17882,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     if (!a || !noDesenho(a)) return;
     const bloco = blocos.find((b) => b._canvas === a.canvas);
     const painel = bloco && bloco._painel;
+    if (painel && painel.tipo === "localizador") { zoomNaFalta(); return; }
     if (!painel || painel.tipo !== "digital") return;
     const achado = digitalPerto(painel, a.y);
     if (!achado) return;
@@ -17883,6 +17891,66 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       ? [...selecionados.filter((x) => !mesmoSinal(x, achado)), achado]
       : [achado]);
   });
+
+  /* Clique DUPLO no LOCALIZADOR: amplia a REGIÃO DA FALTA (12/11/2026).
+   *
+   * A janela é a da aba — a mesma da roda e do Shift+faixa —, então vale
+   * para TODOS os gráficos. QUAL janela é a da falta sai do servidor
+   * (`plot/localizador.janela_da_falta`: do início da falta − 2 ciclos ao fim
+   * do trecho em que a curva mede + 2 ciclos); a tela só a pede. Duplo
+   * clique de novo, com a tela ainda nela, volta à janela de antes; o botão
+   * direito continua voltando ao registro inteiro. Como a roda, não entra no
+   * Ctrl+Z: zoom é vista, não arranjo.
+   *
+   * Os dois cliques do duplo já passaram pelo `soltar`, que escolheu e
+   * desescolheu uma curva: a seleção volta à de antes do primeiro clique.
+   * Cursor o clique não põe (no localizador, como nas ondas, cursor é tecla
+   * 1/2 ou arrasto da linha), então não há cursor a desfazer.
+   */
+  let ultimoCliqueParado = -Infinity;
+  let selecaoAntesDoPar = [];
+  //: `{antes, falta}`: a janela de antes do zoom e a que ele pôs.
+  let zoomDaFalta = null;
+  //: O duplo clique foi pedido e não havia região: a linha de baixo diz por quê.
+  let pediuZoomSemFalta = false;
+
+  function dicaDoZoomNaFalta(p) {
+    const z = p && p.zoom_falta;
+    if (z && z.de != null) {
+      return "Clique duplo: amplia a região da falta em todos os gráficos "
+           + "(do início da falta ao fim do trecho que mede, com dois ciclos de "
+           + "folga) · de novo volta · botão direito volta ao registro inteiro";
+    }
+    return z && z.motivo ? `Clique duplo: sem zoom na falta — ${z.motivo}` : "";
+  }
+
+  function avisoDoZoomNaFalta(p) {
+    const z = p && p.zoom_falta;
+    if (!pediuZoomSemFalta || (z && z.de != null)) return null;
+    return z && z.motivo ? `Sem zoom na falta: ${z.motivo}.` : null;
+  }
+
+  async function zoomNaFalta() {
+    marcarSelecao(selecaoAntesDoPar);
+    if (!dados) return;
+    if (zoomDaFalta && dados.de === zoomDaFalta.falta.de
+        && dados.ate === zoomDaFalta.falta.ate) {
+      const antes = zoomDaFalta.antes;
+      zoomDaFalta = null;
+      await carregar(antes.inteiro ? { tudo: true } : { de: antes.de, ate: antes.ate });
+      return;
+    }
+    const z = pacoteLoc && pacoteLoc.painel && pacoteLoc.painel.zoom_falta;
+    if (!z || z.de == null) {
+      pediuZoomSemFalta = true;
+      repintar();
+      return;
+    }
+    pediuZoomSemFalta = false;
+    const antes = { de: dados.de, ate: dados.ate, inteiro: !!dados.inteiro };
+    await carregar({ de: z.de, ate: z.ate });
+    zoomDaFalta = { antes, falta: { de: dados.de, ate: dados.ate } };
+  }
 
   /* A JANELA DE AJUDA.
    *

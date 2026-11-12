@@ -834,6 +834,12 @@ def create_app() -> Flask:
                 pacote, pacote.get("cursor") if t is not None else None, cursor2,
                 lido, _numero(str(corpo.get("rele_manual")))
                 if corpo.get("rele_manual") is not None else None)
+            # O duplo clique no painel: a região da falta, no tempo de A (o
+            # da aba). A regra é de `plot/localizador.janela_da_falta`.
+            frequencia = registro.line_frequency or 60.0
+            pacote["painel"]["zoom_falta"] = localizador_mod.janela_da_falta(
+                pacote.get("eventos"), *navegacao.extensao(registro), 1.0 / frequencia,
+                navegacao.passo(registro), pacote.get("aviso") or "")
         return jsonify(pacote)
 
     @app.get("/api/onda/<sha>/linhas-da-base")
