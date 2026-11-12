@@ -1,5 +1,24 @@
 # Onde o trabalho está
 
+**12/11/2026 — clique duplo no LOCALIZADOR amplia a região da falta (ramo do agente, para
+revisão):** pedido dele: «ao clicar duas vezes no gráfico de localizador de faltas ele dá
+um zoom automático… mas o zoom seria em todos os gráficos». A janela é a da aba (a mesma
+da roda e do Shift+faixa), então todos os gráficos ampliam juntos. QUAL janela sai do
+Python: `plot/localizador.janela_da_falta` — do INÍCIO da falta − 2 ciclos ao fim do
+trecho em que a curva mede (`eventos.assentado`: abertura ou fim da falta) + 2 ciclos;
+na borda do registro a janela é cortada, não desliza; sem platô (ou sem início de falta)
+não há zoom, e o `title` do desenho e a linha de baixo dele dizem por quê. Vai em
+`painel.zoom_falta` da rota `/localizar`; `CONTRATO` 31 → 32. Duplo clique de novo (com
+a tela ainda na janela da falta) volta à janela de antes; botão direito continua voltando
+ao registro inteiro; não entra no Ctrl+Z (como a roda). Os dois cliques do duplo não
+põem cursor (clique nunca pôs) e a seleção volta à de antes deles. Testes em
+`tests/test_localizador.py` e `tests/test_zoom_falta_navegador.py`
+(`tests/navegador/zoom-falta.mjs`).
+**Para ele decidir:** (1) a folga de 2 ciclos de cada lado (`FOLGA_DO_ZOOM`); (2) começar
+no início da falta e não no platô (o platô sozinho esconderia a falta entrando); (3) o
+segundo duplo clique volta à janela de ANTES e não ao registro inteiro; (4) sem platô
+não há zoom, mesmo havendo início de falta reconhecido.
+
 **12/11/2026 — a roda do localizador, de novo (ramo do agente, para revisão):** «difícil
 dar zoom; quando damos, o gráfico movimenta e some». Causa medida: (1) cada pedido de
 janela refazia `digitais.resumos` do registro inteiro — 0,95 s dos 1,15 s num SEL-411L de

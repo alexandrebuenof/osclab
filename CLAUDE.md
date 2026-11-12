@@ -587,6 +587,13 @@ osclab/
   inteiro. Teclas `1` e `2` põem e tiram os cursores de medição no ponto do
   mouse, `←`/`→` andam uma amostra (com Shift, um ciclo), `Esc` tira os dois. O navegador manda o *gesto* em segundos; quem decide a janela que
   sai disso é `plot/navegacao.py` — inclusive o piso de amostras e as bordas.
+  **Clique duplo no painel localizador amplia a REGIÃO DA FALTA em todos os
+  gráficos** *(12/11/2026)*: a janela é a da aba, e QUAL é a da falta sai de
+  `plot/localizador.janela_da_falta` (início da falta − 2 ciclos até o fim do
+  `assentado` + 2 ciclos; cortada na borda, sem deslizar; sem platô, sem zoom,
+  e o `title`/linha de baixo do desenho diz por quê), em `painel.zoom_falta`.
+  De novo, com a tela ainda nela, volta à janela de antes. Como a roda, não
+  entra no Ctrl+Z; os dois cliques não põem cursor e a seleção volta à de antes.
 - **A escala vertical se ajusta à janela visível**, por grupo. Ampliar a
   pré-falta tem que mostrar a corrente de carga, não um fio reto no zero.
 - **Tema claro é o padrão desde 10/11/2026** — o da identidade nova (f10),
@@ -629,7 +636,8 @@ osclab/
   quando os ajustes do relé diferem da linha comparada em Z1, Z0/k0 ou LL. O
   gráfico hachura onde a curva não mede (sem texto, e a curva não é
   desenhada ali), marca o platô com um colchete acima da moldura e traz o
-  número do relé em âmbar (`--loc-rele`); o rodapé diz SÓ o trecho a
+  número do relé em âmbar (`--loc-rele`); clique duplo no desenho amplia a
+  região da falta em todos os gráficos (ver «Os gestos do gráfico»); o rodapé diz SÓ o trecho a
   patrulhar — «a partir de SE X», «a partir deste terminal» sem a estação,
   «a partir do IED A» com mais de uma oscilografia (nunca «IED A» com um
   só). A janela «parâmetros» compara Relé · Base de dados · Digitado em
