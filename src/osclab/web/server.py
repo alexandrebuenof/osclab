@@ -310,6 +310,7 @@ def create_app() -> Flask:
                     lado=request.args.get("lado", "arquivo"),
                     filtro=request.args.get("filtro") in ("1", "sim", "true"),
                     layout=arranjo, contas=_contas(),
+                    atracoes=request.args.get("imas"),
                     ajustes=_ajustes_do_registro(sha, registro, arranjo)), selo))
             return jsonify(janela.sem_repetir(janela.montar(
                 registro,
@@ -320,6 +321,8 @@ def create_app() -> Flask:
                 filtro=request.args.get("filtro") in ("1", "sim", "true"),
                 layout=arranjo,
                 contas=_contas(),
+                # Os pontos do ímã que a tela usa agora (`janela._atracoes`).
+                atracoes=request.args.get("imas"),
                 # Os ajustes do relé só são lidos quando há um painel que precisa
                 # deles. Ler o `.hdr` a cada arrasto de janela seria um arquivo a
                 # mais aberto em todo gesto, para nada na maioria das telas.

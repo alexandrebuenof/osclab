@@ -249,7 +249,7 @@ def tempo_das_colunas(registro: Record, i0: int, i1: int,
     if i1 <= i0:
         return []
     inicios = _fatias(i1 - i0, max(colunas, 1))
-    return [round(float(registro.time[i0 + int(k)]), 9) for k in inicios]
+    return [round(x, 9) for x in registro.time[i0 + inicios].tolist()]
 
 
 def tiras(registro: Record, i0: int, i1: int, colunas: int,

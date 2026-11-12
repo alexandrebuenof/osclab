@@ -1147,6 +1147,8 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     // O selo do que a tela já tem (o catálogo, a lista de todos os
     // digitais): igual, o servidor não manda de novo. Ver `janela.sem_repetir`.
     if (estaticos) p.set("estaticos", estaticos.selo);
+    const pontos = pontosDasOndas();
+    p.set("imas", pontos);
 
     try {
       const r = await fetch(`/api/onda/${sha}?${p}`, pedidoComLayout());
@@ -1173,6 +1175,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         }
       }
       janelaAplicada = numero;
+      pontosDaJanela = pontos;
       dados = chegou;
       if ((dados.contrato || 0) !== CONTRATO) {
         avisarDeVersao();
@@ -15608,6 +15611,24 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     if (!magnetico) { presos[0] = presos[1] = null; }
     marcarBotoes();
     repintar();
+    pedirPontosDoIma();
+  }
+
+  /** Os pontos das ONDAS em que o ímã gruda agora, como a janela os pede
+   *  (`imas=pico,zero`; `-` para nenhum). O servidor só acha os picos e as
+   *  passagens por zero pedidos — ver `janela._atracoes`. */
+  function pontosDasOndas() {
+    const q = magnetico ? ["pico", "zero"].filter((k) => atracoes.has(k)) : [];
+    return q.length ? q.join(",") : "-";
+  }
+
+  //: Os pontos das ondas que a janela na tela trouxe.
+  let pontosDaJanela = null;
+
+  /** Ligou o ímã, ou um tipo de ponto dele: se a janela na tela não os
+   *  trouxe, pede de novo. */
+  function pedirPontosDoIma() {
+    if (dados && pontosDaJanela !== null && pontosDasOndas() !== pontosDaJanela) carregar();
   }
 
   /** Abre (ou fecha) um menu pendurado num botão.
@@ -15851,6 +15872,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
           guardarAtracoes();
           travarAUltima();
           marcarBotoes();
+          pedirPontosDoIma();
         });
         marcas.set(chave, marca);
         linha.append(marca, criar("span", null, rotulo));

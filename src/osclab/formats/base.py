@@ -373,8 +373,11 @@ def amostras_do_registro(registro: Record) -> tuple:
             registro.status_channels, registro.status, registro.sample_rates)
 
 
-#: Quantas colunas de amostra entram na `impressao_das_amostras`.
-_AMOSTRAS_DA_IMPRESSAO = 2048
+#: Quantas colunas de amostra, e quantas linhas (canais), no máximo, entram
+#: na `impressao_das_amostras`. Ela é feita a CADA consulta a uma conta
+#: lembrada: tem de custar microssegundos.
+_AMOSTRAS_DA_IMPRESSAO = 512
+_LINHAS_DA_IMPRESSAO = 32
 
 
 def impressao_das_amostras(registro: Record) -> tuple:
@@ -384,7 +387,9 @@ def impressao_das_amostras(registro: Record) -> tuple:
     altera NO LUGAR (`r.analog[:, 300:] *= 4`, o que só os testes fazem)
     passaria pela conferência com a conta velha. Esta soma umas duas mil
     colunas espalhadas pelo registro inteiro — microssegundos — e pega a
-    alteração de qualquer trecho mais largo que o passo entre elas.
+    alteração de qualquer trecho mais largo que o passo entre elas. `NaN`
+    fica de fora da soma: `nan != nan`, e uma impressão com `NaN` nunca
+    bateria consigo mesma.
     """
     saida = []
     for m in (registro.analog, registro.status):
@@ -392,9 +397,10 @@ def impressao_das_amostras(registro: Record) -> tuple:
             saida.append(0.0)
             continue
         passo = max(1, m.shape[1] // _AMOSTRAS_DA_IMPRESSAO)
-        linhas = max(1, m.shape[0] // 64)
+        linhas = max(1, m.shape[0] // _LINHAS_DA_IMPRESSAO)
+        amostra = np.asarray(m[::linhas, ::passo], dtype=np.float64)
         with np.errstate(all="ignore"):
-            saida.append(float(np.nansum(m[::linhas, ::passo], dtype=np.float64)))
+            saida.append(float(amostra[np.isfinite(amostra)].sum()))
     return tuple(saida)
 
 

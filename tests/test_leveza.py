@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import json
 
+import numpy as np
+
 from osclab.analysis import presenca
 from osclab.formats import conjuntos, registry
-from osclab.plot import catalogo, digitais, imas, janela, unidades
+from osclab.plot import catalogo, digitais, imas, janela, serie, unidades
 from tests.fabrica import escrever_comtrade
 
 
@@ -98,3 +100,43 @@ def test_o_selo_sem_a_tela_nao_tira_nada(tmp_path):
     assert "estaticos_omitidos" not in pacote
     for campo in janela.ESTATICOS:
         assert campo in pacote
+
+
+def test_a_piramide_reduz_igual_as_amostras(tmp_path):
+    """`serie.reduzir_canal` (miolo pelos blocos, pontas amostra a amostra) dá
+    coluna por coluna o mesmo mínimo e máximo de `serie.reduzir` sobre as
+    amostras — com NaN no meio, coluna que começa e acaba no meio de um
+    bloco, e janela que não começa no zero."""
+    r = _registro(tmp_path, na=3, n=200_000, taxa=20_000.0)
+    gerador = np.random.default_rng(11)
+    r.analog = r.analog + gerador.normal(0.0, 3.0, r.analog.shape)
+    r.analog[1, 50_000:50_003] = np.nan
+    for i0, i1, colunas in ((0, 200_000, 700), (12_345, 187_001, 601), (99, 100_099, 300),
+                            (0, 200_000, 1), (5, 70_005, 271)):
+        cheia = serie.reduzir(r.time[i0:i1], r.analog[:, i0:i1], colunas).valores
+        for canal in range(3):
+            pela = serie.reduzir_canal(r, canal, i0, i1, colunas)
+            assert pela is not None
+            np.testing.assert_array_equal(pela, cheia[canal])
+
+
+def test_a_piramide_nao_entra_em_coluna_estreita(tmp_path):
+    r = _registro(tmp_path, na=3, n=20_000, taxa=20_000.0)
+    assert serie.reduzir_canal(r, 0, 0, 20_000, 1300) is None     # 15 amostras por coluna
+
+
+def test_sem_pico_nem_zero_pedidos_a_janela_nao_os_acha(tmp_path):
+    """O ímã vem só com as transições: os picos e os zeros, que custam uma
+    passada pela série cheia, só são achados quando pedidos. E as curvas
+    saem iguais com e sem eles (com a pirâmide no caminho)."""
+    r = _registro(tmp_path, na=3, n=200_000, taxa=20_000.0)
+    todos = janela.montar(r, colunas=600)
+    nenhum = janela.montar(r, colunas=600, atracoes="-")
+    so_pico = janela.montar(r, colunas=600, atracoes="pico")
+    for a, b, c in zip(todos["paineis"], nenhum["paineis"], so_pico["paineis"], strict=True):
+        for sa, sb, sc in zip(a.get("sinais") or [], b.get("sinais") or [],
+                              c.get("sinais") or [], strict=True):
+            assert sa["picos"] and sa["zeros"]
+            assert sb["picos"] == [] and sb["zeros"] == []
+            assert sc["picos"] == sa["picos"] and sc["zeros"] == []
+            assert sa["serie"] == sb["serie"] == sc["serie"]

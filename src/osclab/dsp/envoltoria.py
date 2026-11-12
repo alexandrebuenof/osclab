@@ -135,19 +135,22 @@ def media_do_ciclo(v: np.ndarray, por_ciclo: float) -> np.ndarray:
     acumulado = np.concatenate(
         (np.zeros(v.shape[:-1] + (1,), dtype=v.dtype), np.cumsum(v, axis=-1)),
         axis=-1)
-    # `i` percorre as posições em que a janela cabe inteira.
-    i = np.arange(largura - 1, n)
-    inicio = i - largura + 1                      # a amostra mais antiga dela
-
+    # `i` percorre as posições em que a janela cabe inteira, `largura − 1` a
+    # `n − 1`, e `inicio = i − largura + 1` (a amostra mais antiga dela) vai
+    # de 0 a `n − largura`. São FATIAS contíguas: escritas como fatia, e não
+    # como vetor de índices, o numpy não copia nada (12/11/2026: os cinco
+    # «gathers» eram 6 dos 14 s de abrir um registro de um milhão de amostras
+    # por canal). A conta é a mesma, na mesma ordem.
+    m = n - largura + 1                           # quantas janelas cabem
     if largura == int(round(por_ciclo)):
         # Taxa que fecha: soma retangular das `largura` amostras, como sempre.
-        total = acumulado[..., i + 1] - acumulado[..., inicio]
+        total = acumulado[..., largura:largura + m] - acumulado[..., 0:m]
     else:
         # O miolo (pesos 1) por soma acumulada, e as três pontas na mão.
-        total = (acumulado[..., i] - acumulado[..., inicio + 2]
-                 + pesos[0] * v[..., inicio]
-                 + pesos[1] * v[..., inicio + 1]
-                 + pesos[-1] * v[..., i])
+        total = (acumulado[..., largura - 1:largura - 1 + m] - acumulado[..., 2:2 + m]
+                 + pesos[0] * v[..., 0:m]
+                 + pesos[1] * v[..., 1:1 + m]
+                 + pesos[-1] * v[..., largura - 1:largura - 1 + m])
     saida[..., largura - 1:] = total / float(por_ciclo)
     if tem_furo:
         # Soma retangular da máscara: quantos NaN em cada janela de `largura`.

@@ -72,10 +72,17 @@ def _digitais(nd: int, n: int) -> np.ndarray:
     return ((idx[None, :] >> np.arange(nd)[:, None]) & 1).astype(np.int8)
 
 
-def _degraus(nd: int, n: int) -> np.ndarray:
-    """(nd, n) de 0/1. O canal k liga na amostra `(k+1)·n/(nd+1)` e fica."""
-    liga = (np.arange(1, nd + 1) * n) // (nd + 1)
-    return (np.arange(n)[None, :] >= liga[:, None]).astype(np.int8)
+def _degraus(nd: int, n: int, mudam: int | None = None) -> np.ndarray:
+    """(nd, n) de 0/1. Os `mudam` primeiros canais (todos, sem `mudam`) ligam
+    UMA vez — o k-ésimo na amostra `(k+1)·n/(mudam+1)` — e ficam; os outros
+    ficam em 0 o registro inteiro, como as milhares de entradas paradas de um
+    SEL-487E."""
+    mudam = nd if mudam is None else min(mudam, nd)
+    saida = np.zeros((nd, n), dtype=np.int8)
+    if mudam:
+        liga = (np.arange(1, mudam + 1) * n) // (mudam + 1)
+        saida[:mudam] = np.arange(n)[None, :] >= liga[:, None]
+    return saida
 
 
 #: Os terminais de corrente de um relé, na ordem em que ele os grava. São
@@ -124,6 +131,7 @@ def escrever_comtrade(
     escala_primaria: bool = False,
     taxas: list[tuple[float, int]] | None = None,
     degraus: bool = False,
+    mudam: int | None = None,
 ) -> Path:
     """Escreve um par `.cfg`/`.dat` e devolve o caminho do `.cfg`."""
     pasta = Path(pasta)
@@ -137,7 +145,7 @@ def escrever_comtrade(
     # registro (o k-ésimo em (k+1)/(nd+1) do caminho) — como os de um evento
     # de verdade, que entram todos na tela padrão. Sem isso, a contagem binária
     # (o padrão, que confere o desempacotamento bit a bit) picota.
-    digital = _degraus(nd, n) if degraus else _digitais(nd, n)
+    digital = _degraus(nd, n, mudam) if degraus else _digitais(nd, n)
     crus = np.rint(analog / ESCALA).astype(np.int64)
 
     ps = "P" if escala_primaria else "S"

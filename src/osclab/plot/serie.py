@@ -32,7 +32,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from osclab.formats.base import Record
+from osclab.formats.base import Record, lembrado_do_registro
 from osclab.plot import escala
 
 #: Quantas amostras por coluna a redução espera antes de entrar.
@@ -104,6 +104,117 @@ def reduzir(tempo: np.ndarray, valores: np.ndarray, colunas: int) -> Reducao:
 
     return Reducao(tempo=saida_tempo, valores=saida, reduzido=True,
                    amostras_na_janela=n)
+
+
+# ---------------------------------------------------------------------------
+# A pirâmide: mínimo e máximo por BLOCO, feitos uma vez por registro
+# ---------------------------------------------------------------------------
+
+#: Amostras por bloco da pirâmide de mínimos e máximos (`piramide`).
+BLOCO = 64
+
+#: A partir de quantas amostras por coluna a redução usa a pirâmide. Abaixo
+#: disso a coluna tem poucos blocos inteiros, e as bordas — lidas amostra a
+#: amostra — são quase a coluna toda.
+COLUNA_PARA_PIRAMIDE = 4 * BLOCO
+
+
+def piramide(registro: Record) -> tuple[np.ndarray, np.ndarray]:
+    """`(mínimos, máximos)` de cada bloco de `BLOCO` amostras, por canal.
+
+    Feita UMA vez por registro aberto (`base.lembrado_do_registro`) — uma
+    passada pela matriz — e guardada: são `2/BLOCO` do tamanho dela (num
+    registro de 12 canais × 3 milhões de amostras, 9 MB). Cada linha termina
+    com um bloco-sentinela neutro (+∞ / −∞), para `reduceat` poder apontar o
+    fim. É o que torna a redução de um pedido de janela proporcional às
+    COLUNAS da tela e não às amostras dela (ver `reduzir_canal`).
+    """
+    def fazer():
+        a = np.asarray(registro.analog)
+        if a.ndim != 2:
+            vazio = np.empty((0, 1))
+            return vazio, vazio
+        blocos = a.shape[1] // BLOCO
+        corpo = a[:, :blocos * BLOCO].reshape(a.shape[0], blocos, BLOCO)
+        minimos = np.empty((a.shape[0], blocos + 1), dtype=np.float64)
+        maximos = np.empty((a.shape[0], blocos + 1), dtype=np.float64)
+        minimos[:, :blocos] = corpo.min(axis=2)
+        maximos[:, :blocos] = corpo.max(axis=2)
+        minimos[:, blocos] = np.inf
+        maximos[:, blocos] = -np.inf
+        minimos.setflags(write=False)
+        maximos.setflags(write=False)
+        return minimos, maximos
+    return lembrado_do_registro(registro, "serie.piramide", (BLOCO,), fazer)
+
+
+def reduzir_canal(registro: Record, canal: int, i0: int, i1: int,
+                  colunas: int) -> np.ndarray | None:
+    """O mínimo e o máximo de cada coluna da janela `[i0, i1)` de UM canal cru.
+
+    O MESMO resultado de `reduzir` sobre as amostras do canal — mesmas
+    colunas (`_fatias`), mesmo mínimo e máximo de cada uma, intercalados
+    (mínimo, máximo) —, sem passar por elas: o miolo de cada coluna sai dos
+    blocos inteiros da `piramide`, e só as duas pontas (menos de `BLOCO`
+    amostras cada) são lidas amostra a amostra. O custo é das colunas, não
+    da janela: num registro de ondas viajantes, milhões de amostras por canal.
+
+    `None` quando a coluna é estreita demais para valer a pena
+    (`COLUNA_PARA_PIRAMIDE`) ou quando nem há redução — aí vale `reduzir`.
+    Os valores são os CRUS do arquivo: converter (TC/TP, prefixo) é
+    multiplicar por um número positivo, e quem chama converte depois — o
+    mínimo de cada coluna continua sendo a mesma amostra.
+    """
+    n = int(i1 - i0)
+    colunas = max(int(colunas), 1)
+    if n <= colunas * LIMITE_SEM_REDUZIR or n < colunas * COLUNA_PARA_PIRAMIDE:
+        return None
+    minimos_b, maximos_b = piramide(registro)
+    x = registro.analog[canal]
+    inicio = i0 + _fatias(n, colunas)
+    fim = np.append(inicio[1:], i1)
+    # Os blocos INTEIROS dentro de cada coluna: de `ba` (inclusive) a `bb`.
+    ba = -(-inicio // BLOCO)
+    bb = fim // BLOCO
+    tem_miolo = ba < bb
+    # As pontas: da borda da coluna até o primeiro bloco inteiro, e do fim do
+    # último bloco inteiro até a outra borda. Sem bloco inteiro, a coluna
+    # toda é uma ponta só.
+    esq_fim = np.where(tem_miolo, ba * BLOCO, fim)
+    dir_ini = np.where(tem_miolo, bb * BLOCO, fim)
+
+    def pontas(reduzir, neutro, segmentos):
+        saida = np.full(inicio.size, neutro, dtype=np.float64)
+        de, ate = segmentos
+        comp = ate - de
+        cheios = comp > 0
+        if not cheios.any():
+            return saida
+        de, comp = de[cheios], comp[cheios]
+        # Os índices de todas as amostras das pontas, um segmento atrás do
+        # outro, e o começo de cada segmento dentro dessa lista.
+        partida = np.concatenate(([0], np.cumsum(comp)[:-1]))
+        indices = np.repeat(de - partida, comp) + np.arange(int(comp.sum()))
+        saida[cheios] = reduzir.reduceat(np.asarray(x[indices], dtype=np.float64), partida)
+        return saida
+
+    def lado(reduzir, neutro, blocos):
+        esq = pontas(reduzir, neutro, (inicio, esq_fim))
+        dir_ = pontas(reduzir, neutro, (dir_ini, fim))
+        # O miolo: `reduceat` sobre os blocos, com as bordas intercaladas
+        # (ba₀, bb₀, ba₁, bb₁…) — só os pares (ba, bb) interessam.
+        miolo = np.full(inicio.size, neutro, dtype=np.float64)
+        if tem_miolo.any():
+            pares = np.empty(2 * int(tem_miolo.sum()), dtype=np.int64)
+            pares[0::2] = ba[tem_miolo]
+            pares[1::2] = bb[tem_miolo]
+            miolo[tem_miolo] = reduzir.reduceat(blocos, pares)[0::2]
+        return reduzir(reduzir(esq, miolo), dir_)
+
+    saida = np.empty(2 * inicio.size, dtype=np.float64)
+    saida[0::2] = lado(np.minimum, np.inf, minimos_b[canal])
+    saida[1::2] = lado(np.maximum, -np.inf, maximos_b[canal])
+    return saida
 
 
 def recortar(registro: Record, de: float | None,

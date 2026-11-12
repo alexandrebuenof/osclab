@@ -18,7 +18,7 @@ import json
 
 import numpy as np
 
-from osclab.dsp import fasor
+from osclab.dsp import envoltoria, fasor
 from osclab.formats import conjuntos, fases
 from osclab.formats import relacoes as relacoes_mod
 from osclab.formats.base import Record, Trecho
@@ -52,8 +52,12 @@ CONTRATO = 33
 def montar(registro: Record, *, de: float | None = None, ate: float | None = None,
            colunas: int = 900, lado: str = "arquivo", filtro: bool = False,
            layout: list | None = None, contas: list | None = None,
-           ajustes: dict | None = None, outros: list | None = None) -> dict:
+           ajustes: dict | None = None, outros: list | None = None,
+           atracoes: str | None = None) -> dict:
     """O pacote de uma janela, pronto para o navegador.
+
+    `atracoes` diz em que pontos o ímã da tela gruda agora (`"pico,zero"`,
+    `"-"` para nenhum): só esses são calculados. `None` calcula todos.
 
     `layout` é a lista de painéis que a tela montou (ver `plot/paineis.py`).
     Sem ela, sai o arranjo padrão: um painel por unidade do arquivo e um com os
@@ -105,6 +109,7 @@ def montar(registro: Record, *, de: float | None = None, ate: float | None = Non
     tempo_digitais = digitais.tempo_das_colunas(registro, i0, i1, colunas)
     todos_digitais = digitais.resumos(registro)
 
+    pontos = _atracoes(atracoes)
     saida = []
     for painel in arranjo:
         if painel.tipo == paineis.DIGITAL:
@@ -151,7 +156,7 @@ def montar(registro: Record, *, de: float | None = None, ate: float | None = Non
         else:
             saida.append(_painel_analogico(
                 registro, painel, por_id, escalas, lado, filtro,
-                tempo, j0, i0, i1, janela_de_trechos, colunas))
+                tempo, j0, i0, i1, janela_de_trechos, colunas, pontos))
 
     # O eixo do tempo é reduzido do mesmo jeito que os canais, para os dois
     # ficarem com o mesmo comprimento. Um canal fictício de zeros serve: o que
@@ -347,13 +352,16 @@ def _painel_digital(registro: Record, painel, i0: int, i1: int,
     """Um painel de tiras digitais."""
     indices = paineis.indices_digitais(painel)
     tiras = digitais.tiras(registro, i0, i1, colunas, indices)
+    # As transições de TODOS os digitais, de uma vez (lembradas no registro).
+    transicoes = digitais.trocas(registro)
     # Cada tira leva as suas transições, para o ímã dos cursores. Vão JUNTO da
     # tira, e não numa lista à parte, porque é assim que a tela consegue
     # obedecer só ao digital que o usuário selecionou.
     for tira in tiras:
-        amostras = imas.afinar(imas.transicoes(registro, tira["indice"]),
+        amostras = imas.afinar(transicoes[tira["indice"]],
                                i0, i1, colunas)
-        tira["transicoes"] = [round(float(registro.time[k]), 9) for k in amostras]
+        tira["transicoes"] = ([round(x, 9) for x in registro.time[amostras].tolist()]
+                              if amostras else [])
     return {
         "id": painel.id,
         "tipo": paineis.DIGITAL,
@@ -364,9 +372,30 @@ def _painel_digital(registro: Record, painel, i0: int, i1: int,
     }
 
 
+#: Os pontos do ímã que saem das ONDAS (as transições dos digitais são
+#: baratas e vão sempre).
+ATRACOES_DAS_ONDAS = frozenset({"pico", "zero"})
+
+
+def _atracoes(texto: str | None) -> frozenset[str]:
+    """`"pico,zero"` → os pontos das ondas pedidos; `None` → todos.
+
+    **Os picos e as passagens por zero só são achados quando o ímã gruda
+    neles** (12/11/2026). Achá-los é uma passada pela série de resolução
+    cheia de cada sinal, em todo pedido de janela — num registro de ondas
+    viajantes (milhões de amostras) eram 70 % de cada entalhe da roda —, e o
+    ímã vem só com as transições ligadas (ver o CLAUDE.md). Ligar o pico ou o
+    zero na setinha do ímã pede a janela de novo.
+    """
+    if texto is None:
+        return ATRACOES_DAS_ONDAS
+    return frozenset(x.strip() for x in str(texto).split(",")) & ATRACOES_DAS_ONDAS
+
+
 def _painel_analogico(registro: Record, painel, por_id: dict, escalas: dict,
                       lado: str, filtro: bool, tempo, j0: int, i0: int, i1: int,
-                      janela_de_trechos, colunas: int) -> dict:
+                      janela_de_trechos, colunas: int,
+                      pontos: frozenset[str] = ATRACOES_DAS_ONDAS) -> dict:
     """Um painel de ondas: os sinais, as duas escalas e os avisos.
 
     A unidade do painel é a do PRIMEIRO sinal DE UNIDADE CONHECIDA que entrou
@@ -411,19 +440,29 @@ def _painel_analogico(registro: Record, painel, por_id: dict, escalas: dict,
             avisos.append(f"{alvo.nome} ({alvo.unidade_mostrada}) não cabe: "
                           "o gráfico já tem dois eixos.")
             continue
-        valores = catalogo.serie(registro, alvo, j0, i1, janela_de_trechos,
-                                 lado, escalas)[i0 - j0:]
-        escolhidos.append((identidade, alvo, valores, eixo))
+        # O canal CRU numa janela larga sai já reduzido da pirâmide do
+        # registro (`serie.reduzir_canal`): custo das colunas, não das
+        # amostras. Só quando o ímã não pede picos nem zeros — esses saem da
+        # série de resolução cheia.
+        reduzida = (_pela_piramide(registro, alvo, i0, i1, colunas, lado, escalas)
+                    if not pontos else None)
+        valores = (None if reduzida is not None else
+                   catalogo.serie(registro, alvo, j0, i1, janela_de_trechos,
+                                  lado, escalas)[i0 - j0:])
+        escolhidos.append((identidade, alvo, valores, eixo, reduzida))
 
     def faixa(quais):
         if not quais:
             return None
-        pilha = np.vstack([v for _, _, v, _ in quais])
-        reducao = serie.reduzir(tempo, pilha, colunas)
-        finitos = reducao.valores[np.isfinite(reducao.valores)]
+        # Cada linha reduzida sozinha: a redução é coluna a coluna, por canal,
+        # e dá o mesmo que reduzir a pilha inteira de uma vez.
+        pilha = np.vstack([r if r is not None
+                           else serie.reduzir(tempo, v[None, :], colunas).valores[0]
+                           for _, _, v, _, r in quais])
+        finitos = pilha[np.isfinite(pilha)]
         base, topo = escala.faixa(float(finitos.min()) if finitos.size else -1.0,
                                   float(finitos.max()) if finitos.size else 1.0)
-        return reducao, base, topo
+        return pilha, base, topo
 
     pela_esquerda = [x for x in escolhidos if x[3] == "esq"]
     pela_direita = [x for x in escolhidos if x[3] == "dir"]
@@ -450,13 +489,13 @@ def _painel_analogico(registro: Record, painel, por_id: dict, escalas: dict,
     canais = {c.index: c for c in registro.analog_channels}
     sinais_json = []
     k_esq = k_dir = 0
-    for identidade, alvo, serie_inteira, eixo in escolhidos:
+    for identidade, alvo, serie_inteira, eixo, _ in escolhidos:
         if eixo == "esq":
-            valores = serie.arredondar(esq[0].valores[k_esq], intervalo)
+            valores = serie.arredondar(esq[0][k_esq], intervalo)
             k_esq += 1
             unidade_mostrada = mostrada_esq
         else:
-            valores = serie.arredondar(dir_[0].valores[k_dir],
+            valores = serie.arredondar(dir_[0][k_dir],
                                        eixo_dir["maximo"] - eixo_dir["minimo"])
             k_dir += 1
             unidade_mostrada = eixo_dir["unidade"]
@@ -510,9 +549,11 @@ def _painel_analogico(registro: Record, painel, por_id: dict, escalas: dict,
             # passagens por zero. Saem da série de RESOLUÇÃO CHEIA, antes da
             # redução por coluna de pixel — o pico da onda é uma amostra do
             # arquivo, não o extremo de um traço desenhado.
-            "picos": _instantes(tempo, imas.picos(serie_inteira), colunas),
-            "zeros": _instantes(tempo, imas.passagens_por_zero(serie_inteira),
-                                colunas),
+            # Só os que o ímã está usando (ver `_atracoes`).
+            "picos": (_instantes(tempo, imas.picos(serie_inteira), colunas)
+                      if "pico" in pontos else []),
+            "zeros": (_instantes(tempo, imas.passagens_por_zero(serie_inteira), colunas)
+                      if "zero" in pontos else []),
         })
 
     saida = {
@@ -539,6 +580,34 @@ def _painel_analogico(registro: Record, painel, por_id: dict, escalas: dict,
     }
     serie.titular_eixos(saida)
     return saida
+
+
+def _pela_piramide(registro: Record, alvo, i0: int, i1: int, colunas: int,
+                   lado: str, escalas: dict) -> np.ndarray | None:
+    """O canal do IED, CRU, reduzido pela pirâmide e convertido — ou `None`.
+
+    A mesma conta de `catalogo.serie` seguida de `serie.reduzir`, na outra
+    ordem: reduzir e depois converter. Converter (TC/TP, prefixo `k`) é
+    multiplicar e dividir por números positivos, então o mínimo de cada
+    coluna é a mesma amostra, e o número que sai é o mesmo, bit a bit
+    (`tests/test_leveza.py`).
+    """
+    if alvo.id[:1] != "c" or envoltoria.CURVAS.get(alvo.conta) is not None:
+        return None
+    # O canal sai do id, como em `catalogo.serie`.
+    try:
+        k = int(alvo.id[1:].split(":")[0])
+    except ValueError:
+        return None
+    canal = next((c for c in registro.analog_channels if c.index == k), None)
+    if canal is None:
+        return None
+    reduzida = serie.reduzir_canal(registro, canal.index, i0, i1, colunas)
+    if reduzida is None:
+        return None
+    divisor, _ = escalas.get(alvo.unidade, (1.0, alvo.unidade))
+    convertido, _, _ = conversao.converter(reduzida, canal, lado)
+    return convertido / divisor
 
 
 def _medida_aplicavel(painel, por_id: dict) -> bool:
@@ -571,8 +640,10 @@ def _medida_aplicavel(painel, por_id: dict) -> bool:
 
 def _instantes(tempo, amostras, colunas: int) -> list[float]:
     """Os instantes de uma lista de amostras, afinada por coluna de pixel."""
-    return [round(float(tempo[k]), 9)
-            for k in imas.afinar(amostras, 0, tempo.size, colunas)]
+    # `tolist()` e o `round` do Python: o mesmo número, sem um escalar do
+    # numpy por ponto.
+    escolhidas = imas.afinar(amostras, 0, tempo.size, colunas)
+    return [round(x, 9) for x in tempo[escolhidas].tolist()] if escolhidas else []
 
 
 #: O fecho do rodapé, quando o painel tem componente simétrica. Uma vez, no
