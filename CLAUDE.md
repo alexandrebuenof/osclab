@@ -584,7 +584,7 @@ osclab/
   do gráfico (pôr cursor é usar a calculadora). A FILEIRA tem sempre as oito
   teclas padronizadas IA…VN, de largura fixa, e **insere o nome COMPLETO do
   canal** (`[TC BUC 69kV:I A]`, não `[IA]`) do grupo escolhido no seletor
-  «G1 · radical» — nunca «alta/baixa». `[IA]` digitado vira o nome do canal no
+  «G1» (o radical no hover) — nunca «alta/baixa». `[IA]` digitado vira o nome do canal no
   visor; modelos e «guardar como modelo» falam `[IA]` (`calculadora.expandir`
   ⇄ `generalizar`). `[IN]` é o RESÍDUO da trinca, nunca o neutro medido.
   Domínio fasor: o `giro` decide se o ângulo é absoluto (Z, S) ou contra a

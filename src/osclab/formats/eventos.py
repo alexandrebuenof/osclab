@@ -69,6 +69,12 @@ MINIMO_LIDO = 0.8
 #: O texto cru vai à tela até este tamanho: o `.hdr` maior do banco tem
 #: 68 kB; um arquivo de dez megas travaria o painel.
 LIMITE_DO_CRU = 2_000_000   # o .eev da GE passa de 800 kB
+#: Texto ao lado do registro só vale como «lista que o programa não leu»
+#: com pelo menos tantas linhas com hora de relógio. O `.hdr` da SEL é o
+#: resumo do evento mais os ajustes — 3316 linhas e só DUAS com hora (a do
+#: disparo e a do trip) — e não é lista de eventos nenhuma (11/11/2026).
+MINIMO_DE_LINHAS_COM_HORA = 3
+_HORA_NA_LINHA = re.compile(r"(?<![\d:])\d{1,2}:\d{2}:\d{2}(?![\d:])")
 
 
 @dataclass(frozen=True)
@@ -216,12 +222,19 @@ def de_texto(texto: str, de: str = "") -> Lista | None:
 _ONDE_PROCURAR = (".hdr", ".txt")
 
 
+def _parece_lista(texto: str) -> bool:
+    """Tem cara de lista de eventos: várias linhas com hora de relógio."""
+    com_hora = sum(1 for linha in texto.splitlines() if _HORA_NA_LINHA.search(linha))
+    return com_hora >= MINIMO_DE_LINHAS_COM_HORA
+
+
 def do_registro(pasta: Path, arquivos) -> Lista | None:
     """A lista de eventos que veio com o registro.
 
-    Sem tabela reconhecida, mas com um arquivo de texto ao lado, devolve a
-    lista VAZIA com o arquivo cru: a tela mostra o texto como veio em vez de
-    dizer que não há nada. `None` só quando não há arquivo de texto nenhum.
+    Sem tabela reconhecida, mas com um arquivo de texto ao lado que TEM CARA
+    de lista (`_parece_lista`), devolve a lista VAZIA com o arquivo cru: a
+    tela mostra o texto como veio em vez de dizer que não há nada. Texto sem
+    cara de lista (o `.hdr` da SEL: resumo e ajustes) não é evento: `None`.
     """
     from osclab.formats.ajustes import _texto
 
@@ -240,7 +253,7 @@ def do_registro(pasta: Path, arquivos) -> Lista | None:
                 lista = None
             if lista is not None:
                 return lista
-            if sem_tabela is None and texto.strip():
+            if sem_tabela is None and _parece_lista(texto):
                 sem_tabela = Lista(de=str(arquivo), cru=texto[:LIMITE_DO_CRU])
     return sem_tabela
 

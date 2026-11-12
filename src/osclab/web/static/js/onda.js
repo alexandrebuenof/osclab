@@ -1784,7 +1784,8 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   //: `pintando` é por painel: dois painéis de digitais na tela podem estar um
   //: em modo de pintar e o outro não. A COR é uma só — é a tinta carregada no
   //: pincel, e trocá-la em cada painel seria guardar a mesma coisa duas vezes.
-  const pincel = { pintando: {}, cor: "--atencao" };
+  //: A tinta de fábrica é o VERMELHO (`--ruim`), pedido dele em 11/11/2026.
+  const pincel = { pintando: {}, cor: "--ruim" };
   const pintando = (id) => !!pincel.pintando[id];
 
   //: `NOME DO SINAL → categoria`. Chega uma vez, quando alguma coisa precisa
@@ -10363,11 +10364,12 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         ctx.stroke();
       }
       ctx.beginPath();
-      ctx.arc(bx, by, n === qualCursor ? 6.5 : 5, 0, 2 * Math.PI);
+      // Menor desde 11/11/2026: a bola de 6,5 px tapava a trajetória (pedido dele).
+      ctx.arc(bx, by, n === qualCursor ? 4 : 3.2, 0, 2 * Math.PI);
       ctx.fillStyle = n === qualCursor && !fora ? cor : token("--fundo");
       ctx.fill();
       ctx.strokeStyle = cor;
-      ctx.lineWidth = n === qualCursor ? 2.5 : 2;
+      ctx.lineWidth = n === qualCursor ? 1.8 : 1.5;
       if (fora) ctx.setLineDash([3, 2]);
       ctx.stroke();
       ctx.setLineDash([]);

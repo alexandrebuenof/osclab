@@ -92,8 +92,9 @@ for (const tema of ["claro", "escuro"]) {
   confere(fileira.length === 8 && fileira.map((x) => x[0]).join(" ") === "IA IB IC IN VA VB VC VN",
     `${tema}: a fileira tem as 8 teclas padronizadas (${fileira.map((x) => x[0]).join(" ")})`);
   confere(new Set(fileira.map((x) => x[1])).size === 1, `${tema}: as 8 teclas têm a MESMA largura (${[...new Set(fileira.map((x) => x[1]))]})`);
-  const seletor = await avaliar(`[...document.querySelectorAll('.calc-grupos.I .calc-grupo')].map(b => b.textContent)`);
-  confere(seletor.length === 2 && seletor[0].includes("G1 · TC BUC 69kV:I *"), `${tema}: o seletor mostra grupo e radical (${seletor.join(" | ")})`);
+  const seletor = await avaliar(`[...document.querySelectorAll('.calc-grupos.I .calc-grupo')].map(b => [b.textContent, b.title])`);
+  confere(seletor.length === 2 && seletor[0][0] === "G1" && seletor[0][1].includes("G1 · TC BUC 69kV:I *"),
+    `${tema}: o seletor mostra só o grupo, e o radical no hover (${seletor.map((x) => x.join(" / ")).join(" | ")})`);
   confere(!(await avaliar("!!document.querySelector('.calc-grupos.V')")), `${tema}: sem seletor de tensão (uma trinca só)`);
   // [IA G1] - [IA G2], só com as teclas, trocando o seletor no meio
   await avaliar(`(async () => {

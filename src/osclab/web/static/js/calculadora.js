@@ -23,7 +23,7 @@
  * completo. «guardar como modelo» faz o caminho de volta (`generalizar`).
  *
  * Com mais de uma trinca da mesma grandeza, um seletor acima da fileira
- * escolhe o GRUPO — «G1 · I*W», o radical do nome dos canais, nunca «alta» ou
+ * escolhe o GRUPO — «G1» (o radical do nome, «I*W», no hover), nunca «alta» ou
  * «baixa» (o programa não diz lado). Corrente e tensão têm seletores
  * próprios, e a escolha vale até ser trocada. O IN da fileira é o RESÍDUO da
  * trinca escolhida.
@@ -279,18 +279,20 @@
         if (lista.length < 2) continue;
         const sel = criar("div", `calc-grupos ${g}`);
         sel.append(criar("span", "calc-grupos-g", g === "I" ? "I" : "V"));
-        const rotulo = (gr) => `${gr} · ${rotulos[gr] || ""}`.replace(/ · $/, "");
+        // Na tela só o grupo (pedido dele, 11/11/2026); o radical fica no hover.
+        const rotulo = (gr) => gr;
+        const dica = (gr) => `${gr} · ${rotulos[gr] || ""}`.replace(/ · $/, "");
         if (lista.length > 3) {
           // Mais de três trincas (um 487E tem cinco): lista suspensa curta.
           const s = criar("select", "calc-grupos-lista");
-          for (const gr of lista) { const o = new Option(rotulo(gr), gr); o.title = rotulo(gr); s.append(o); }
+          for (const gr of lista) { const o = new Option(rotulo(gr), gr); o.title = dica(gr); s.append(o); }
           s.value = grupoEscolhido[g];
-          s.title = rotulo(grupoEscolhido[g]);
+          s.title = dica(grupoEscolhido[g]);
           s.addEventListener("change", () => { grupoEscolhido[g] = s.value; desenharFileira(); });
           sel.append(s);
         } else {
           for (const gr of lista) {
-            const b = botao(rotulo(gr), "calc-grupo" + (gr === grupoEscolhido[g] ? " ligado" : ""), rotulo(gr),
+            const b = botao(rotulo(gr), "calc-grupo" + (gr === grupoEscolhido[g] ? " ligado" : ""), dica(gr),
               () => { grupoEscolhido[g] = gr; desenharFileira(); });
             sel.append(b);
           }

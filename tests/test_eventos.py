@@ -153,6 +153,17 @@ def test_formato_que_nao_conhecemos_vira_TEXTO_CRU_e_nao_tabela_errada(tmp_path)
     assert pacote["motivo"] == eventos_plot.NAO_RECONHECIDA
 
 
+def test_resumo_da_SEL_nao_e_lista_de_eventos(tmp_path):
+    """O `.hdr` da SEL é resumo e ajustes, com a hora só do disparo e do trip:
+    a janela de eventos não o mostra como se fosse lista (11/11/2026)."""
+    (tmp_path / "x.hdr").write_text(
+        "LD UM                Date: 05/11/2026  Time: 18:36:06.048\n"
+        "Event: BG T     FLM: SE\n"
+        "Breaker 1: OPEN          Trip Time: 18:36:06.055\n"
+        "PreFault:   IA   IB   IC\n", encoding="utf-8")
+    assert eventos.do_registro(tmp_path, ["x.cfg", "x.hdr"]) is None
+
+
 def test_tabela_lida_pela_metade_tambem_vira_texto_cru():
     """Se muitas linhas com hora não se deixam ler, o dialeto não é o nosso."""
     metade = EASERGY.replace("| 0.040    |", "| quarenta |").replace(
