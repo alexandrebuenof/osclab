@@ -6,9 +6,12 @@ Lê registros de perturbação de relés de vários fabricantes, analisa a falta
 estima onde ela ocorreu por diferentes métodos e gera relatório. A interface é
 uma página web que roda na própria máquina — nada sai para a internet.
 
-> **Versão 0.2 — o leitor.** Já lê COMTRADE de verdade (testado contra
-> registros reais de GE, Schneider e SEL), mas a tela de formas de onda só chega
-> no marco 0.3. Por enquanto o resultado sai no terminal.
+> **Versão 0.9.0.** Lê COMTRADE e o `.CEV` da SEL (testado contra registros
+> reais de SEL, Siemens, GE e Schneider) e mostra, no navegador: formas de onda
+> com cursores, RMS e filtro de 60 Hz, componentes simétricas, diagrama
+> fasorial, harmônicos, calculadora de sinais, eventos do relé, diferencial
+> percentual e localização de falta por um e dois terminais. A 1.0.0 é a
+> primeira versão para uso geral.
 
 ## Requisitos
 
