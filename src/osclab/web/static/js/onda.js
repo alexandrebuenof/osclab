@@ -243,7 +243,23 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   let arrastando = null;
 
   //: Deslocamento visual em pixels enquanto a mão arrasta (ver cabeçalho).
+  //: Sai SEMPRE de `arrastoS` (`acertarArrasto`): o deslocamento de verdade
+  //: é em SEGUNDOS, porque uma resposta de roda que chega no meio do arrasto
+  //: muda a escala — em pixels, o arrasto pendente passaria a valer outro
+  //: tempo, e em segundos ele continua sendo o que a mão fez (12/11/2026).
   let arrastoPx = 0;
+  //: O arrasto que a tela mostra e o servidor ainda não aplicou, em segundos:
+  //: o da mão agora mais os soltos cujo pedido está na fila ou em voo.
+  let arrastoS = 0;
+  //: A largura do desenho em pixels, do último arrasto (para converter).
+  let larguraDoArrasto = 0;
+
+  /** `arrastoPx` a partir de `arrastoS`, na escala da janela da tela. */
+  function acertarArrasto() {
+    const largura = dados ? dados.ate - dados.de : 0;
+    arrastoPx = arrastoS && largura > 0 && larguraDoArrasto > 0
+      ? (arrastoS * larguraDoArrasto) / largura : 0;
+  }
 
   //: A faixa sendo selecionada com Shift, em pixels: [inicio, atual].
   let selecao = null;
@@ -1092,7 +1108,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   let janelaEmVoo = false;
   function carregar(gesto = {}) {
     return new Promise((cumprir) => {
-      const so = (g, chave) => Object.keys(g).every((k) => k === chave || k === "px");
+      const so = (g, chave) => Object.keys(g).every((k) => k === chave || k === "s");
       const vazio = !Object.keys(gesto).length;
       const ultimo = filaDaJanela[filaDaJanela.length - 1];
       if (ultimo && vazio && ultimo.vazio) {
@@ -1100,7 +1116,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       } else if (ultimo && !vazio && gesto.andar !== undefined && so(gesto, "andar")
                  && ultimo.gesto.andar !== undefined && so(ultimo.gesto, "andar")) {
         ultimo.gesto.andar += gesto.andar;
-        if (gesto.px !== undefined) ultimo.gesto.px = (ultimo.gesto.px || 0) + gesto.px;
+        if (gesto.s !== undefined) ultimo.gesto.s = (ultimo.gesto.s || 0) + gesto.s;
         ultimo.esperando.push(cumprir);
       } else {
         filaDaJanela.push({ gesto: { ...gesto }, vazio, esperando: [cumprir] });
@@ -1196,17 +1212,12 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       window.__janela = { de: dados.de, ate: dados.ate };   // para teste no navegador
       // O arrasto que este pedido levou já está na janela nova: sai do
       // deslocamento da tela. Só ele — um arrasto feito DEPOIS (com este
-      // pedido em voo) continua deslocando, e vai no pedido seguinte.
-      // Qualquer outro gesto muda a janela inteira, e o arrasto em curso
-      // recomeça de onde a mão está.
-      const consumido = gesto.px !== undefined ? gesto.px : arrastoPx;
-      if (gesto.px === undefined) {
-        // Os arrastos ainda na fila continuam valendo (em segundos), mas o
-        // deslocamento deles na tela já foi zerado aqui.
-        for (const item of filaDaJanela) if (item.gesto.px !== undefined) item.gesto.px = 0;
-      }
-      arrastoPx -= consumido;
-      if (arrastando && arrastando.base !== undefined) arrastando.base -= consumido;
+      // pedido em voo, ou ainda na mão) continua deslocando, em segundos, e
+      // vai no pedido seguinte. A roda que chega no meio de um arrasto muda
+      // só a escala em que esse deslocamento é desenhado.
+      if (gesto.s !== undefined) arrastoS -= gesto.s;
+      if (Math.abs(arrastoS) < 1e-12) arrastoS = 0;
+      acertarArrasto();
       desenharTudo();
       // Os registros da aba e o alinhamento podem ter mudado: quem mostra
       // algo por registro (a lista de eventos) pergunta de novo.
@@ -17978,7 +17989,15 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     // diferencial…) também não: a roda ali ampliava a oscilografia — que
     // nem está naquele gráfico — quando a mão só queria descer a página.
     // Pedido dele, 22/10/2026.
-    if (!noDesenho(a) || arrastando || !temEixoDeTempo(a.canvas)) return;
+    //
+    // Durante um ARRASTO da oscilografia a roda vale (12/11/2026): o arrasto
+    // é guardado em segundos (`arrastoS`), então o zoom que chega no meio só
+    // muda a escala em que ele é desenhado, e os dois gestos se compõem. Era
+    // ignorada — um gesto perdido sem aviso. Com a faixa do Shift ou com um
+    // cursor na mão, continua não valendo: ali o pixel já tem dono.
+    const ocupado = arrastando && (arrastando.faixa || arrastando.parado
+                                   || arrastando.cursor !== undefined);
+    if (!noDesenho(a) || ocupado || !temEixoDeTempo(a.canvas)) return;
     // Evento que não se pode cancelar é de uma rolagem da PÁGINA já em curso
     // (o Chrome prende o gesto ao primeiro alvo: começou rolando a página,
     // o resto do giro vem sem `cancelable`). A página vai rolar de qualquer
@@ -17988,9 +18007,14 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     evento.preventDefault();
 
     zoomAcumulado *= fatorDaRoda(evento);
-    // Guarda-se o PIXEL, não o instante: o instante sai na hora de mandar,
-    // contra a janela que estiver na tela então (ver `mandarZoom`).
-    zoomFoco = a;
+    // O INSTANTE que está sob o mouse AGORA, na tela de agora (com o arrasto
+    // que ainda não voltou do servidor). Era o pixel, convertido na hora de
+    // mandar — e um arrasto feito nos 70 ms entre o giro e o pedido mudava o
+    // que estava sob aquele pixel: o zoom saía em torno de outro ponto, uns
+    // pixels ao lado do que a mão girou (12/11/2026, combinação roda +
+    // arrasto). Um zoom que volta no meio não muda o instante: ele mantém
+    // parado justamente o ponto sob o mouse.
+    zoomFoco = instanteEm(a);
 
     clearTimeout(zoomPendente);
     zoomPendente = setTimeout(mandarZoom, 70);
@@ -18006,15 +18030,15 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
    * localizador), dez entalhes ampliavam 0,51× em vez de 0,11×, aos trancos
    * — a roda «quebrada» do localizador (12/11/2026). Agora, com um pedido em
    * voo, os entalhes se acumulam e saem juntos quando ele volta, a partir da
-   * janela nova. O foco é o instante sob o MESMO pixel, calculado nessa
-   * hora: o zoom mantém parado o ponto sob o mouse, então o instante dali é
+   * janela nova. O foco é o instante que estava sob o mouse no giro (ver o
+   * ouvinte da roda): o zoom mantém parado o ponto sob o mouse, então ele é
    * o mesmo antes e depois da resposta.
    */
   let zoomEmVoo = false;
   async function mandarZoom() {
     zoomPendente = null;
-    if (zoomEmVoo || zoomAcumulado === 1 || !zoomFoco || !dados) return;
-    const gesto = { zoom: zoomAcumulado, foco: instanteEm(zoomFoco) };
+    if (zoomEmVoo || zoomAcumulado === 1 || zoomFoco === null || !dados) return;
+    const gesto = { zoom: zoomAcumulado, foco: zoomFoco };
     zoomAcumulado = 1;
     zoomEmVoo = true;
     try {
@@ -18074,9 +18098,12 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     arrastando = { a, canvas: a.canvas, xInicial: a.x,
                    faixa: evento.shiftKey && !semEixoDeTempo,
                    parado: semEixoDeTempo,
-                   // O arrasto anterior cujo pedido ainda está em voo: a tela
-                   // continua deslocada dele, e este gesto soma por cima.
-                   base: arrastoPx };
+                   // O que ESTE gesto arrastou, em pixels (para o clique
+                   // parado) e em segundos (para o pedido); e onde a mão
+                   // estava no movimento anterior. Um arrasto anterior cujo
+                   // pedido ainda está em voo continua em `arrastoS`.
+                   px: 0, s: 0, ultimoX: a.x };
+    larguraDoArrasto = a.x1 - a.x0;
     if (arrastando.faixa) selecao = [a.x, a.x];
     area.setPointerCapture?.(evento.pointerId);
     area.classList.add(arrastando.faixa ? "selecionando" : "arrastando");
@@ -18117,14 +18144,24 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       selecao = [arrastando.xInicial, Math.min(Math.max(x, arrastando.a.x0),
                                                arrastando.a.x1)];
     } else {
-      arrastoPx = arrastando.base + (x - arrastando.xInicial);
+      // Cada movimento vale em SEGUNDOS na escala da tela de AGORA: se uma
+      // resposta de roda chegou no meio, o resto do gesto anda na escala nova.
+      const d = x - arrastando.ultimoX;
+      arrastando.ultimoX = x;
+      const ds = d * segundosPorPixel(arrastando.a);
+      arrastando.px += d;
+      arrastando.s += ds;
+      arrastoS += ds;
+      acertarArrasto();
     }
     repintar();
   });
 
   function soltar(evento) {
     if (!arrastando) return;
-    const { a, xInicial, faixa, cursor, base } = arrastando;
+    const { a, xInicial, faixa, cursor } = arrastando;
+    const desteS = arrastando.s || 0;
+    const destePx = arrastando.px || 0;
     const arrastando_parado = !!arrastando.parado;
     arrastando = null;
     area.classList.remove("arrastando", "selecionando");
@@ -18141,10 +18178,11 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     // 4 px é o mesmo da faixa — mão nenhuma fica imóvel de verdade.
     // `parado` nunca mexeu em `arrastoPx`: o clique vale sempre, e não depende
     // de um valor que é de OUTRO painel.
-    // O que ESTE gesto arrastou: `arrastoPx` pode trazer, além dele, um
-    // arrasto anterior cujo pedido ainda está em voo (`arrastando.base`).
-    const deste = arrastoPx - (base || 0);
-    if (arrastando_parado || (!faixa && Math.abs(deste) < 4)) {
+    // O que ESTE gesto arrastou: `arrastoS` pode trazer, além dele, um
+    // arrasto anterior cujo pedido ainda está em voo.
+    if (arrastando_parado || (!faixa && Math.abs(destePx) < 4)) {
+      // Clique: o pouco que a mão tremeu volta (não vira pedido).
+      if (desteS) { arrastoS -= desteS; acertarArrasto(); repintar(); }
       // A seleção de ANTES do primeiro clique de um possível duplo: o duplo
       // no localizador a devolve (ver `zoomNaFalta`).
       const agoraMs = performance.now();
@@ -18167,9 +18205,9 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       return;
     }
 
-    if (deste === 0) return;
+    if (desteS === 0) return;
     // Arrastar para a direita traz o passado: a janela anda para trás.
-    carregar({ andar: -deste * segundosPorPixel(a), px: deste });
+    carregar({ andar: -desteS, s: desteS });
   }
 
   // Clicar em qualquer lugar que não seja um sinal limpa a seleção. A regra é
