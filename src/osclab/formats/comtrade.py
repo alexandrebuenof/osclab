@@ -445,9 +445,16 @@ def _desempacotar_digitais(palavras: np.ndarray, n_status: int) -> np.ndarray:
     """
     if n_status == 0 or palavras.size == 0:
         return np.empty((n_status, palavras.shape[0]), dtype=np.int8)
-    bits = (palavras[:, :, None] >> np.arange(16)) & 1        # (amostras, palavras, 16)
-    bits = bits.reshape(palavras.shape[0], -1)[:, :n_status]  # (amostras, canais)
-    return bits.T.astype(np.int8)
+    # Um BYTE por bit, e não oito (12/11/2026). Era `(palavras >> arange(16))
+    # & 1`, com o `arange` em int64: cada bit virava 8 bytes, duas vezes —
+    # 368 MB de pico para abrir um SEL-411L de 3 MB (3968 digitais × 6000
+    # amostras), e um SEL-487E longo passaria de gigabytes. As palavras são
+    # little-endian, então o byte 0 traz os bits 0–7 e o byte 1 os bits 8–15:
+    # `unpackbits` com `bitorder="little"` dá a mesma ordem do deslocamento.
+    bytes_ = np.ascontiguousarray(palavras, dtype="<u2").view(np.uint8)
+    bits = np.unpackbits(bytes_, axis=1, bitorder="little")    # (amostras, palavras·16)
+    # Linha por canal, contígua: as contas sobre um digital correm a linha.
+    return np.ascontiguousarray(bits[:, :n_status].T).view(np.int8)
 
 
 def _ler_binario(bruto: bytes, cfg: _Cfg) -> tuple[np.ndarray, np.ndarray, np.ndarray]:

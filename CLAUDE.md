@@ -229,6 +229,20 @@ osclab/
   (`tests/test_leveza.py`). E o que é do registro e é grande (catálogo, lista
   de todos os digitais) não viaja de novo enquanto não muda
   (`janela.sem_repetir`, por selo do conteúdo).
+- **O canal cru numa janela larga se reduz pela PIRÂMIDE** *(12/11/2026)*:
+  `serie.piramide` guarda mín./máx. por bloco de 64 amostras (uma vez por
+  registro, 2/64 da matriz) e `serie.reduzir_canal` monta cada coluna com
+  os blocos inteiros mais as pontas amostra a amostra — o MESMO resultado de
+  `reduzir`, bit a bit (há teste), com custo das colunas: ondas viajantes
+  a 1 MHz têm milhões de amostras por canal. Converter (TC/TP, `k`) vem
+  depois de reduzir: multiplicar por positivo não troca o mínimo. E os
+  picos e zeros do ímã (uma passada pela série cheia) só são achados quando
+  o ímã gruda neles (`imas=` na janela, `janela._atracoes`).
+- **O que AINDA é O(amostras) por gesto, e por quê**: as envoltórias (RMS,
+  60 Hz, DC, componentes, contas) e os picos/zeros pedidos são contas sobre
+  a janela inteira — guardá-las do registro todo seria 8 bytes por amostra
+  por sinal (96 MB num registro de 12 × 1 M). Abrir é O(registro) uma vez:
+  diagnóstico bruto × filtrado, presença, energia do catálogo.
 - **O gráfico é um PAINEL, e a lista de painéis é da TELA.** Um painel é
   `{id, tipo, nome, sinais, medida}` (ver `plot/paineis.py`): a tela manda a
   lista inteira no corpo do pedido e o servidor desenha o que veio, na ordem em
@@ -1592,7 +1606,10 @@ para cruzar com outro registro:
 - **SEL-TWFL** fecha o `.dat` com 64 bytes `0x1A` (fim-de-arquivo do DOS). Sobra
   de bytes no fim não é erro.
 - **SEL-487E** tem 5760 canais digitais: a matriz de estados fica com dezenas de
-  MB. Se virar problema, desempacotar sob demanda.
+  MB. Se virar problema, desempacotar sob demanda. **Desempacotar é um BYTE
+  por bit** (`np.unpackbits`, `bitorder="little"`): o deslocamento com
+  `arange` em int64 fazia cada bit virar 8 bytes, duas vezes — 368 MB de pico
+  para abrir um SEL-411L de 3 MB (12/11/2026; hoje 53 MB).
 - Nomes de subestação com acento vêm em **cp1252**, não UTF-8.
 - **Siemens SIPROTEC** escreve o NÚMERO DO CANAL no campo `ccbm` (`1`, `2`, `3`
   para IA, IB, IC). O `ccbm` da norma é o equipamento vigiado e é o mesmo nas

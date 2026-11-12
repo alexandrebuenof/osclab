@@ -140,3 +140,17 @@ def test_sem_pico_nem_zero_pedidos_a_janela_nao_os_acha(tmp_path):
             assert sb["picos"] == [] and sb["zeros"] == []
             assert sc["picos"] == sa["picos"] and sc["zeros"] == []
             assert sa["serie"] == sb["serie"] == sc["serie"]
+
+
+def test_desempacotar_um_byte_por_bit_da_os_mesmos_bits():
+    """`comtrade._desempacotar_digitais` com `unpackbits` dá os mesmos 0/1 do
+    deslocamento antigo (que gastava 8 bytes por bit, duas vezes)."""
+    from osclab.formats import comtrade
+
+    gerador = np.random.default_rng(5)
+    for n_status in (1, 15, 16, 17, 250):
+        palavras = gerador.integers(0, 2**16, size=(321, (n_status + 15) // 16)).astype("<u2")
+        antigo = ((palavras[:, :, None] >> np.arange(16)) & 1).reshape(321, -1)[:, :n_status].T
+        novo = comtrade._desempacotar_digitais(palavras, n_status)
+        assert novo.dtype == np.int8 and novo.shape == (n_status, 321)
+        np.testing.assert_array_equal(novo, antigo.astype(np.int8))
