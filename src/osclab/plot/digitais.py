@@ -34,6 +34,23 @@ um trip gordo demais.
 
 O mínimo vai junto para a tela saber onde houve **transição dentro da coluna** e
 não desenhar um degrau que não existe.
+
+## O digital que PICOTA (12/11/2026)
+
+Um SEL-411L grava a supervisão da reatância do quadrilateral de terra
+(`ENX2AG`, `ENX2BG`, `ENX2CG`), e ela liga e desliga mais de 400 vezes num
+registro de 3 s — o tempo todo depois da abertura. Na tela padrão isso é
+uma faixa listrada que não conta nada sobre o evento e tira o olho do trip.
+
+O critério é de COMPORTAMENTO, nunca de nome nem de fabricante: mais de
+`PICOTA_MUDANCAS` transições E ainda mudando no último quarto do registro
+(`PICOTA_FIM`). Medido nos registros reais de teste (sete fabricantes): 98 %
+dos digitais que mudam mudam até 6 vezes; o sinal de proteção de verdade que
+mais mudou foi o bloqueio por harmônico do 87 numa energização (51
+transições, até o fim de um registro de 1 s). As supervisões que picotam vão
+de 415 a 486. Daí 200: quatro vezes o bloqueio de harmônico, metade da
+supervisão. O picotando não some: fica no «+ sinal», num bloco próprio, com
+o número de mudanças ao lado.
 """
 
 from __future__ import annotations
@@ -62,6 +79,52 @@ class Resumo:
     #: O relé grava este canal, mas a placa dele não tem esta entrada/saída
     #: (`Record.digitais_sem_placa`). O que muda ali não é sinal de nada.
     sem_placa: bool = False
+    #: Quantas vezes o canal mudou de estado no registro inteiro.
+    mudancas: int = 0
+    #: Muda o tempo todo, até o fim do registro (ver `picota`). Fica fora da
+    #: tela padrão e vai para o bloco «picotando» do «+ sinal».
+    picota: bool = False
+
+
+#: Acima de quantas transições um digital pode estar picotando. Ver o
+#: cabeçalho do módulo para a medição que deu este número.
+PICOTA_MUDANCAS = 200
+#: E a última transição tem que cair depois desta fração da duração: quem
+#: picotou só durante a falta e parou faz parte da história dela.
+PICOTA_FIM = 0.75
+
+
+def picota(mudancas: int, ultima: float | None, inicio: float, fim: float) -> bool:
+    """O digital muda demais E continua mudando até o fim do registro?
+
+    `ultima` é o instante da última transição; `inicio` e `fim`, os do
+    registro. As duas condições juntas: muitas mudanças que pararam no meio
+    são um evento, e poucas até o fim também.
+    """
+    if mudancas <= PICOTA_MUDANCAS or ultima is None or fim <= inicio:
+        return False
+    return ultima >= inicio + PICOTA_FIM * (fim - inicio)
+
+
+def _transicoes(dados: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Por canal: quantas transições, a amostra da primeira e a da última.
+
+    Tudo de uma vez sobre a matriz, sem percorrer amostra. Canal parado tem
+    contagem 0 e as duas amostras -1.
+    """
+    linhas = dados.shape[0] if dados.ndim == 2 else 0
+    if linhas == 0 or dados.shape[1] < 2:
+        vazio = np.zeros(linhas, dtype=np.int64)
+        return vazio, vazio - 1, vazio - 1
+    muda = dados[:, 1:] != dados[:, :-1]
+    contagem = muda.sum(axis=1).astype(np.int64)
+    # `+1`: `muda[k]` compara `k` com `k+1`, e a mudança acontece em `k+1`.
+    primeira = np.argmax(muda, axis=1) + 1
+    ultima = muda.shape[1] - np.argmax(muda[:, ::-1], axis=1)
+    parado = contagem == 0
+    primeira[parado] = -1
+    ultima[parado] = -1
+    return contagem, primeira, ultima
 
 
 def resumos(registro: Record) -> tuple[Resumo, ...]:
@@ -75,19 +138,31 @@ def resumos(registro: Record) -> tuple[Resumo, ...]:
     tempo = registro.time
     saida: list[Resumo] = []
     sem_placa = getattr(registro, "digitais_sem_placa", frozenset())
+    contagem, primeiras, ultimas = _transicoes(dados)
+    inicio = float(tempo[0]) if tempo.size else 0.0
+    fim = float(tempo[-1]) if tempo.size else 0.0
 
     for canal in registro.status_channels:
-        linha = dados[canal.index] if canal.index < dados.shape[0] else np.empty(0)
-        amostra = _primeira_mudanca(linha)
+        k = canal.index
+        tem = k < contagem.size
+        mudancas = int(contagem[k]) if tem else 0
+        amostra = int(primeiras[k]) if mudancas else None
+        ultima = int(ultimas[k]) if mudancas else None
+        fora_da_placa = canal.name in sem_placa
+        instante_ultima = (float(tempo[ultima]) if ultima is not None
+                           and ultima < tempo.size else None)
         saida.append(Resumo(
-            indice=canal.index,
+            indice=k,
             nome=canal.name,
             mudou=amostra is not None,
             amostra=amostra,
             instante=float(tempo[amostra]) if amostra is not None
             and amostra < tempo.size else None,
-            inicial=int(linha[0]) if linha.size else 0,
-            sem_placa=canal.name in sem_placa,
+            inicial=int(dados[k, 0]) if tem and dados.shape[1] else 0,
+            sem_placa=fora_da_placa,
+            mudancas=mudancas,
+            picota=not fora_da_placa and picota(mudancas, instante_ultima,
+                                                inicio, fim),
         ))
 
     # `not r.mudou` primeiro: `False` ordena antes de `True`, então quem mudou
@@ -96,15 +171,6 @@ def resumos(registro: Record) -> tuple[Resumo, ...]:
                                               r.instante if r.instante is not None
                                               else float("inf"),
                                               r.indice)))
-
-
-def _primeira_mudanca(linha: np.ndarray) -> int | None:
-    """Índice da amostra em que o canal mudou pela primeira vez, ou `None`."""
-    if linha.size < 2:
-        return None
-    diferentes = np.flatnonzero(np.diff(linha.astype(np.int16)) != 0)
-    # `+1`: `diff[k]` compara `k` com `k+1`, e a mudança acontece em `k+1`.
-    return int(diferentes[0]) + 1 if diferentes.size else None
 
 
 def _fatias(n: int, colunas: int) -> np.ndarray:
@@ -176,6 +242,11 @@ def escolhidos_por_padrao(registro: Record, limite: int | None = None) -> list[i
     (`Resumo.sem_placa`): o 487E grava IN317–IN324 sem placa para eles, e um
     contador de amostras pisca nesses bits. Não é sinal — fica de fora, e a
     busca os mostra marcados.
+
+    A segunda são os que PICOTAM (`Resumo.picota`, 12/11/2026): mudam
+    centenas de vezes até o fim do registro. Vão para o bloco «picotando» do
+    «+ sinal», com o número de mudanças ao lado.
     """
-    escolhidos = [r.indice for r in resumos(registro) if r.mudou and not r.sem_placa]
+    escolhidos = [r.indice for r in resumos(registro)
+                  if r.mudou and not r.sem_placa and not r.picota]
     return escolhidos if limite is None else escolhidos[:limite]

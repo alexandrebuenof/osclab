@@ -1,5 +1,17 @@
 # Onde o trabalho está
 
+**12/11/2026 — digital que PICOTA fora do gráfico padrão (ramo do agente, para revisão):**
+mais de 200 transições E ainda mudando no último quarto do registro → não entra no
+gráfico digital padrão; aparece no «+ sinal», num bloco «picotando», com «· N mudanças»
+ao lado, e marcar o põe na tela como qualquer outro. Nada no cabeçalho do painel (só o
+hover do «+ sinal» conta quantos). Conta vetorizada em `plot/digitais.py`
+(`picota`, `_transicoes`, `Resumo.mudancas/picota`), pacote com `mudancas`, `picota` e
+`digitais_picotando`, `CONTRATO` 30 → 31. Testes `tests/test_picotando.py` e
+`tests/test_picotando_navegador.py`. No ABV_UPC1 saem só os três `ENX2*G`.
+**Para ele decidir:** os `LD_DPF*`/`LG_DPF*` do mesmo registro (32 a 42 transições, até o
+fim) ficam ABAIXO do bloqueio por harmônico do 87 numa energização (51, até o fim) — não
+há N que pegue os primeiros sem esconder o segundo. Ficaram no gráfico.
+
 **12/11/2026 — «? métodos» com as equações desenhadas (variante 06), num ramo para revisão:**
 a janela do painel localizador virou lado a lado — métodos à esquerda com a cor e o km,
 o escolhido à direita com a frase, a equação principal DESENHADA ao lado do esquema da

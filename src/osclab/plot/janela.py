@@ -43,7 +43,7 @@ from osclab.plot.conversao import LADOS
 
 #: Versão do formato do pacote da janela. Sobe quando a tela passa a depender
 #: de um campo novo. Ver o comentário em `montar`.
-CONTRATO = 30
+CONTRATO = 31
 
 
 def montar(registro: Record, *, de: float | None = None, ate: float | None = None,
@@ -294,10 +294,15 @@ def montar(registro: Record, *, de: float | None = None, ate: float | None = Non
         # na tela é assunto de cada painel.
         "digitais_disponiveis": [{"indice": r.indice, "nome": r.nome,
                                   "mudou": r.mudou, "instante": r.instante,
-                                  "sem_placa": r.sem_placa}
+                                  "sem_placa": r.sem_placa,
+                                  # Os que picotam vão num bloco à parte da
+                                  # busca, com a contagem ao lado.
+                                  "mudancas": r.mudancas, "picota": r.picota}
                                  for r in todos_digitais],
-        "digitais_mudaram": sum(1 for r in todos_digitais if r.mudou and not r.sem_placa),
+        "digitais_mudaram": sum(1 for r in todos_digitais
+                                if r.mudou and not r.sem_placa and not r.picota),
         "digitais_sem_placa": sum(1 for r in todos_digitais if r.sem_placa),
+        "digitais_picotando": sum(1 for r in todos_digitais if r.picota),
         # Os IEDs desta aba. Com um registro só, vazio: a tela não escreve
         # letra nenhuma. Com mais de um, quem preenche é `plot/varios.py`.
         "ieds": [],
