@@ -7149,6 +7149,10 @@ canvas.calc-previa[hidden] { display: none; }
   border-radius: 2px; cursor: pointer; letter-spacing: .02em;
 }
 .rf-botao-refinar:hover { background: var(--destaque); color: var(--superficie); }
+/* «alinhado à mão»: o painel usa o deslocamento escolhido no refino. */
+.rf-selo-mao { margin-left: 6px; font: 600 11px/18px var(--sans); color: var(--refino-b);
+  border: 1px solid var(--refino-b); border-radius: 999px; padding: 0 7px; white-space: nowrap;
+  cursor: help; }
 .rf-casa { position: fixed; inset: 0; z-index: 2147482000; background: rgba(12, 26, 46, .38);
   display: flex; align-items: center; justify-content: center; }
 .rf-quadro { width: min(1500px, 94vw); height: 90vh; border: 1px solid var(--borda); display: block;

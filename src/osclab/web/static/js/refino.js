@@ -19,7 +19,10 @@
  * de A (Shift, um ciclo); Esc fecha o menu, desarma a marcação, tira os
  * cursores e, sem nada disso, fecha a janela.
  *
- * O deslocamento escolhido aqui é CONFERÊNCIA: não muda o painel.
+ * O deslocamento MANUAL escolhido aqui vale para o painel localizador
+ * (decidido em 11/11/2026): cada mudança dele vai à oscilografia por
+ * `postMessage` («refino-alinhamento»), e voltar ao automático desfaz. Quem
+ * guarda o número é a tela da oscilografia, não o registro.
  */
 (() => {
   "use strict";
@@ -44,8 +47,23 @@
     de: null, ate: null, t1: null, t2: null, ativo: 1,
     alinhar: "auto", manual: {}, armado: null, digitados: { A: {}, B: {} },
   };
+  // Reabrindo com o painel já alinhado à mão, a janela abre no manual com ele.
+  if (typeof ctx.manual === "number" && isFinite(ctx.manual)) {
+    estado.alinhar = "manual";
+    estado.manual = { d: ctx.manual };
+  }
   let pacote = null;
   let emVoo = false, deNovo = null;
+  //: O último deslocamento que o painel recebeu (undefined: nenhum ainda).
+  let avisado = typeof ctx.manual === "number" ? ctx.manual : null;
+  /** O painel localizador passa a usar o manual; `null` devolve o automático. */
+  function avisarPainel() {
+    const al = pacote.alinhamento;
+    const d = al.modo === "manual" && al.manual.d != null ? al.d : null;
+    if (d === avisado || (d != null && avisado != null && Math.abs(d - avisado) < 1e-12)) return;
+    avisado = d;
+    window.parent.postMessage({ tipo: "refino-alinhamento", b: shaB, d }, location.origin);
+  }
   let mouseT = null;
   let arrastoPx = 0;                    // o pan, enquanto a mão arrasta
   const arrastoTer = { A: 0, B: 0 };    // um terminal, enquanto a mão o arrasta
@@ -97,6 +115,7 @@
       // B anda INTEIRO: as fases dele, corrente e tensão, deslizam juntas
       if (dAntes != null && !semAnimar && Math.abs(pacote.alinhamento.d - dAntes) > 1e-9) animar(pacote.alinhamento.d - dAntes);
       semAnimar = false;
+      avisarPainel();
     } catch (e) {
       $("rf-chaves").replaceChildren(criar("span", "rf-aviso", `o servidor não respondeu (${e.message}) — reinicie o OscLab`));
     }

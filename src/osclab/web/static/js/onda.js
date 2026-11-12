@@ -11470,6 +11470,8 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
 
   //: O pacote da localização que alimenta os painéis, e o pedido em voo.
   let pacoteLoc = null;
+  //: O deslocamento MANUAL escolhido no «refinar», `{b, d}` (s), ou null.
+  let refinoManual = null;
   let lendoLoc = false;
   let deNovoLoc = false;
   //: O que, mudando, exige refazer a legenda e o rodapé (e não só repintar).
@@ -11493,6 +11495,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
           // A linha é a MESMA escolhida na tela «localizar falta»: o número
           // não pode mudar de uma tela para a outra.
           fonte: estadoLoc.fonte, manual: estadoLoc.manual, linha_base: estadoLoc.linha_base,
+          refino: refinoManual,
           estimador: filtroEscolhido !== FILTROS[0][0] ? filtroEscolhido : null,
           colunas: colunasLoc(largura), colunas_ondas: colunasLoc(largura / 2),
           painel: true, rele_manual: meu.rele_manual ?? null,
@@ -11508,7 +11511,8 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     // O selo do cabeçalho e a fonte em uso também mudam o cabeçalho.
     const assinatura = JSON.stringify([pacoteLoc.aviso, pacoteLoc.metodos, p.metodos, p.rele,
                                        p.resultado, p.linha_km, pacoteLoc.fonte,
-                                       (pacoteLoc.parametros || {}).selo, pacoteLoc.n_ieds]);
+                                       (pacoteLoc.parametros || {}).selo, pacoteLoc.n_ieds,
+                                       pacoteLoc.alinhado_a_mao]);
     if (assinatura !== assinaturaLoc) {
       assinaturaLoc = assinatura;
       desenharTudo();
@@ -12371,8 +12375,10 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   // Página própria (`/refino/<a>?com=<b>`) num quadro por cima da
   // oscilografia: as teclas globais daqui (1, 2, setas, Esc) têm outro sentido
   // lá dentro. O contexto — a linha em uso, a MESMA do painel — vai pela
-  // sessão do navegador. O deslocamento escolhido lá é CONFERÊNCIA: não muda
-  // o painel. Ver `plot/refino.py` e `faultloc/refino.py`.
+  // sessão do navegador. O deslocamento MANUAL escolhido lá VALE para o
+  // painel (11/11/2026): chega por mensagem, mora aqui (`refinoManual`, da
+  // TELA, como o arranjo) e vai no corpo de cada pedido da localização; o
+  // automático o desfaz. Ver `plot/refino.py` e `faultloc/refino.py`.
   let quadroRefino = null;
   function fecharRefino() {
     if (!quadroRefino) return;
@@ -12383,7 +12389,10 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const b = (outrosRegistros[0] || {}).sha;
     if (!b || !pacoteLoc) return;
     try {
-      sessionStorage.setItem(`osclab:refino:${sha}:${b}`, JSON.stringify({ linha: pacoteLoc.linha || null }));
+      sessionStorage.setItem(`osclab:refino:${sha}:${b}`, JSON.stringify({
+        linha: pacoteLoc.linha || null,
+        manual: refinoManual && refinoManual.b === b ? refinoManual.d : null,
+      }));
     } catch (_e) { /* sem sessão: o refino abre sem a linha, e diz isso */ }
     fecharRefino();
     const fundo = criar("div", "rf-casa");
@@ -12397,7 +12406,13 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     quadroRefino = fundo;
   }
   window.addEventListener("message", (e) => {
-    if (e.origin === location.origin && e.data && e.data.tipo === "refino-fechar") fecharRefino();
+    if (e.origin !== location.origin || !e.data) return;
+    if (e.data.tipo === "refino-fechar") fecharRefino();
+    else if (e.data.tipo === "refino-alinhamento") {
+      const d = e.data.d;
+      refinoManual = (typeof d === "number" && isFinite(d)) ? { b: e.data.b, d } : null;
+      recalcularLoc();
+    }
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && quadroRefino) { e.stopImmediatePropagation(); fecharRefino(); }
@@ -12410,6 +12425,13 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     b.addEventListener("pointerdown", (e) => e.stopPropagation());
     b.addEventListener("click", (e) => { e.stopPropagation(); abrirRefino(); });
     return b;
+  }
+  /** «alinhado à mão»: o painel usa o deslocamento escolhido no refino. */
+  function seloAlinhadoAMao(m) {
+    const s = criar("span", "rf-selo-mao", "alinhado à mão");
+    s.title = `B deslocado de ${m.txt.d} ms, escolhido no «refinar» (o automático dá ${m.txt.auto} ms). `
+            + "Vale para a seq. negativa deste painel; volte ao automático no «refinar» para desfazer.";
+    return s;
   }
 
   function blocoLocalizador(painel, ultimo) {
@@ -12500,6 +12522,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         // conferir o alinhamento mais ajuda (variante 11, 11/11/2026)
         if (m === "seqneg" && (pacoteLoc.n_ieds || 0) >= 2 && outrosRegistros[0]) {
           li.append(botaoRefinar());
+          if (pacoteLoc.alinhado_a_mao) li.append(seloAlinhadoAMao(pacoteLoc.alinhado_a_mao));
         }
         legenda.append(li);
       }
@@ -17510,6 +17533,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         body: JSON.stringify({
           registros: outrosRegistros, alinhar: alinharPor, t: cursores[0],
           fonte: estadoLoc.fonte, manual: estadoLoc.manual, linha_base: estadoLoc.linha_base,
+          refino: refinoManual,
           estimador: filtroEscolhido !== FILTROS[0][0] ? filtroEscolhido : null,
           colunas: colunasLoc(larga), colunas_ondas: colunasLoc(larga / 2 - 20),
         }),

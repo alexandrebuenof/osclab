@@ -570,8 +570,13 @@ osclab/
   com ela); no manual o ARRASTO move o registro INTEIRO de um terminal
   («mover: A | B»), ±1 amostra, «marcar início», e o cursor se pega pela
   etiqueta. Toda conta é de `faultloc/refino.py` (sobre `seqneg.localizar` e
-  `ldl`), a tela de `plot/refino.py`. **O deslocamento escolhido ali é
-  CONFERÊNCIA: não muda o painel** (decisão pendente do Alexandre).
+  `ldl`), a tela de `plot/refino.py`. **O deslocamento MANUAL escolhido ali
+  VALE para o painel** (decidido em 11/11/2026): a curva e o número da seq.
+  negativa passam a usá-lo, e o painel diz «alinhado à mão» (o valor no
+  hover). É da TELA, como o arranjo: vai no corpo do pedido (`refino`),
+  não se grava ao lado do registro, e voltar ao automático no refino desfaz.
+  O mesmo `d` na grade de B nos dois (`refino.deslocamento_do_painel`), e
+  há teste de que o km do painel é o da janela.
 - **A calculadora é uma GAVETA, e a conta mora no Python** *(variante 10,
   11/11/2026)*. Visor (expressão, valor nos cursores, prévia) + teclado em
   grade; abas «calculadora | sugestões | minhas contas»; o botão

@@ -20,8 +20,12 @@ esse alinhamento e o número:
   caminho de um terminal que não grava tensão;
 * a curva do km no tempo com o `d` em uso, e a mediana dela no platô.
 
-**O deslocamento escolhido aqui NÃO vale para o painel**: o refino é
-conferência (decisão pendente do Alexandre, 11/11/2026).
+**O deslocamento escolhido aqui VALE para o painel** (decidido pelo
+Alexandre em 11/11/2026): o manual — arrastado, marcado ou o «usar» da
+correlação — passa a ser o `d` do painel localizador, que o diz com o selo
+«alinhado à mão». É da TELA, como o arranjo dos painéis: vai no corpo de cada
+pedido (`deslocamento_do_painel`) e não se grava ao lado do registro. Voltar
+ao automático no refino desfaz.
 
 Tudo em PRIMÁRIO e em fasor EFICAZ, como em `ldl.py`.
 """
@@ -239,6 +243,26 @@ def alinhar(a: Lado, b: Lado, modo: str, manual: dict | None) -> dict:
     return {"auto": auto, "confere": confere, "manual": {"d": d_manual, "marcas": marcas},
             "modo": "manual" if modo == "manual" else "auto", "d": usado,
             "passo_a": a.passo, "passo_b": b.passo, "ciclo": um}
+
+
+def deslocamento_do_painel(reg_b: Record, d_auto: float, pedido) -> dict:
+    """O `d` do painel localizador: o da aba, ou o MANUAL escolhido no refino.
+
+    `pedido` é o número (s) que a tela mandou — `None` quando o refino está no
+    automático. O manual cai na grade de B (`no_grid`), como no refino: o
+    painel e a janela usam o MESMO `d`, e o km dos dois é o mesmo. Um pedido
+    que não é número finito é ignorado (vale o automático), e o painel não
+    diz «alinhado à mão».
+    """
+    try:
+        dm = float(pedido) if pedido is not None else None
+    except (TypeError, ValueError):
+        dm = None
+    if dm is None or not math.isfinite(dm):
+        return {"d": d_auto, "manual": False, "auto": d_auto}
+    t = reg_b.time
+    passo = float(np.median(np.diff(t))) if t.size > 1 else 1e-3
+    return {"d": no_grid(dm, passo), "manual": True, "auto": d_auto}
 
 
 # ---------------------------------------------------------------------------

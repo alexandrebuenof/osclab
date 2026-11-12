@@ -354,3 +354,70 @@ def test_a_paleta_do_refino_e_a_do_css_e_passa_no_validador():
             assert not reprovacoes, (tema, reprovacoes)
         cores = paleta.REFINO[tema]["cores"]
         assert {k: do_css[k] for k in cores} == cores
+
+
+# ---------------------------------------------------------------------------
+# O manual do refino vale no painel localizador (decidido em 11/11/2026)
+# ---------------------------------------------------------------------------
+
+def test_o_deslocamento_do_painel_e_o_automatico_sem_pedido_e_o_manual_na_grade(par_bom):
+    _, b = par_bom
+    reg_b = b.registro
+    assert rf.deslocamento_do_painel(reg_b, -0.02, None) == {
+        "d": -0.02, "manual": False, "auto": -0.02}
+    for lixo in ("abc", float("nan"), float("inf"), [1]):
+        assert rf.deslocamento_do_painel(reg_b, -0.02, lixo)["manual"] is False
+    e = rf.deslocamento_do_painel(reg_b, -0.02, -0.0943)
+    assert e["manual"] and e["auto"] == -0.02
+    assert e["d"] == pytest.approx(rf.no_grid(-0.0943, b.passo))
+    # a mesma grade que o refino usa para o mesmo número
+    assert e["d"] == pytest.approx(rf.alinhar(*par_bom, "manual", {"d": -0.0943})["d"])
+
+
+def test_o_km_do_painel_com_o_manual_e_o_km_da_janela(par_tardio):
+    """O mesmo `d` nos dois: a mediana da seq. negativa no painel é a do
+    refino, e o automático errado deixa de valer no painel também."""
+    from osclab.faultloc import ldl
+
+    a, b = par_tardio
+    al = rf.alinhar(a, b, "auto", None)
+    pedido = al["confere"]["d"] + 0.3 * b.passo     # fora da grade, de propósito
+    janela = rf.alinhar(a, b, "manual", {"d": pedido})
+    painel = rf.deslocamento_do_painel(b.registro, al["d"], pedido)
+    assert painel["d"] == janela["d"]
+    km_janela = rf.curva_km(a, b, janela["d"], LINHA, "A", None)["mediana"]
+    pacote = ldl.montar(a.registro, b.registro, painel["d"], LINHA, None)
+    km_painel = pacote["metodos"]["seqneg"]["km"]
+    assert km_painel == pytest.approx(km_janela, abs=1e-6)
+    assert km_painel == pytest.approx(rede.seqneg_ideal(CENARIO), abs=0.5)
+    # e no instante: o cursor do painel lê o mesmo km que o cursor da janela
+    t = _meio_do_plato(a, b, janela["d"])
+    cursor = ldl.montar(a.registro, b.registro, painel["d"], LINHA, t)["cursor"]
+    lido = rf.leitura(a, b, janela["d"], t, LINHA, "A", None)
+    assert cursor["km"]["seqneg"] == pytest.approx(lido["km"]["km"], abs=1e-6)
+
+
+def test_a_rota_do_painel_usa_o_manual_do_refino_e_diz(tmp_path, monkeypatch, cliente,
+                                                        par_tardio):
+    monkeypatch.setattr(paths, "LIBRARY_DIR", tmp_path / "acervo")
+    a, b = par_tardio
+    origem = tmp_path / "origem"
+    origem.mkdir()
+    r = acervo.guardar(_comtrade(origem, "LADO_A", a.registro)
+                       + _comtrade(origem, "LADO_B", b.registro))
+    assert len(r.aceitos) == 2, r.problemas
+    sha_a, sha_b = (x.sha for x in sorted(r.aceitos, key=lambda x: x.nome))
+    d = rf.alinhar(a, b, "auto", None)["confere"]["d"]
+    corpo = {"registros": [{"sha": sha_b}], "fonte": "manual",
+             "manual": {"km": KM, "forma": "rx", "r": LINHA["r"], "x": LINHA["x"]}}
+    sem = cliente.post(f"/api/onda/{sha_a}/localizar", json=corpo).get_json()
+    assert sem["alinhado_a_mao"] is None
+    com = cliente.post(f"/api/onda/{sha_a}/localizar",
+                       json=dict(corpo, refino={"b": sha_b, "d": d})).get_json()
+    m = com["alinhado_a_mao"]
+    assert m and m["d"] == pytest.approx(d) and m["txt"]["d"]
+    assert com["metodos"]["seqneg"]["km"] == pytest.approx(rede.seqneg_ideal(CENARIO), abs=0.5)
+    # o manual de OUTRO B não vale para este
+    outro = cliente.post(f"/api/onda/{sha_a}/localizar",
+                         json=dict(corpo, refino={"b": "outro", "d": d})).get_json()
+    assert outro["alinhado_a_mao"] is None

@@ -85,6 +85,7 @@ from osclab.basedados import tres_terminais as tres_terminais_mod
 from osclab.dsp import fasor as fasor_mod
 from osclab.faultloc import ldl as ldl_mod
 from osclab.faultloc import parametros as parametros_mod
+from osclab.faultloc import refino as refino_conta
 from osclab.faultloc import rele as rele_mod
 from osclab.faultloc import seqneg as seqneg_mod
 from osclab.formats import ajustes as ajustes_mod
@@ -609,11 +610,24 @@ def create_app() -> Flask:
 
         nome_a = _nome_do_terminal(sha, registro, acervo.apelido(sha))
         terminais = [{"letra": "A", "nome": nome_a, "registro": registro, "sha": sha, "d": 0.0}]
+        # O deslocamento MANUAL escolhido no «refinar» (decidido em 11/11/2026):
+        # vale para este painel enquanto a tela o mandar, e só para o B dele.
+        pedido_refino = corpo.get("refino") if isinstance(corpo.get("refino"), dict) else {}
+        alinhado_a_mao = None
         for letra, (outro, apelido, sha_outro) in zip("B", outros, strict=False):
             desl = alinhamento_mod.deslocamento(registro, outro, modo)
+            d = desl["d"]
+            if pedido_refino.get("b") == sha_outro:
+                escolha = refino_conta.deslocamento_do_painel(outro, d, pedido_refino.get("d"))
+                if escolha["manual"]:
+                    d = escolha["d"]
+                    alinhado_a_mao = {
+                        "d": d, "auto": escolha["auto"],
+                        "txt": {"d": refino_mod.txt(d * 1000.0, 2),
+                                "auto": refino_mod.txt(escolha["auto"] * 1000.0, 2)}}
             terminais.append({"letra": letra,
                               "nome": _nome_do_terminal(sha_outro, outro, apelido),
-                              "registro": outro, "sha": sha_outro, "d": desl["d"],
+                              "registro": outro, "sha": sha_outro, "d": d,
                               "alinhamento": desl})
 
         def ajustes_de(term) -> dict:
@@ -725,6 +739,7 @@ def create_app() -> Flask:
         pacote.update(fontes=fontes, fonte=usada, pedida=pedida, z0_de=z0_de,
                       linha=linha, nomes={x["letra"]: x["nome"] for x in terminais},
                       alinhamento=b["alinhamento"] if b else None,
+                      alinhado_a_mao=alinhado_a_mao,
                       # O aviso da derivação (TAP) ou dos trechos sem TAP
                       # confirmado: a tela o mostra enquanto essa linha vale.
                       aviso_linha=(fontes.get(usada) or {}).get("aviso", "") if usada else "")
