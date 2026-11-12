@@ -85,7 +85,7 @@
   //: navegador recarrega o `.js` sozinho: quem troca de versão sem reiniciar
   //: fica com tela nova e servidor velho, e o resultado é uma tela que mostra
   //: coisas que não fazem sentido sem dar erro nenhum. Já custou três rodadas.
-  const CONTRATO = 28;
+  const CONTRATO = 29;
 
   //: A margem de cima abriga a etiqueta numerada dos cursores, que fica FORA da
   //: área de desenho: por dentro ela tapa o pico da onda — e o pico é
@@ -12269,47 +12269,11 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     jan.showModal();
   }
 
-  /** «? métodos»: como cada método calcula, quando vale, o número dele neste
-   *  registro e, no fim, de onde sai o resultado e o trecho a patrulhar. Os
-   *  textos são do servidor (`ldl.COMO_CALCULA`, `DETALHE`, `QUANDO_USAR`,
-   *  `sobre_o_resultado`). */
+  /** «? métodos»: a janela das equações desenhadas (variante 06, 12/11/2026)
+   *  mora em `metodos-loc.js`; o pacote — equações em árvore, símbolos e a
+   *  conta «neste registro» — vem pronto de `faultloc/equacoes.py`. */
   function abrirAjudaMetodosLoc() {
-    const p = pacoteLoc || {};
-    const jan = criar("dialog", "busca ajuda-metodos-loc");
-    const fechar = criar("button", "fechar", "×");
-    fechar.type = "button";
-    fechar.title = "fechar";
-    fechar.addEventListener("click", () => jan.close());
-    const cabeca = criar("div", "cabeca");
-    cabeca.append(criar("h3", null, "Como cada método calcula"), fechar);
-    const corpo = criar("div", "corpo-ajuda");
-    const linhas = (pares) => pares.forEach(([n, v], i) => {
-      if (!v) return;
-      const l = criar("div", "linha-da-logica" + (i % 2 ? "" : " par"));
-      l.append(criar("span", "nome", n), criar("span", "valor", v));
-      corpo.append(l);
-    });
-    for (const mt of ORDEM_LOC) {
-      const info = (p.metodos || {})[mt];
-      if (!info) continue;
-      const c = criar("div", "cabeca-de-bloco");
-      const marca = criar("span", "marca-do-metodo");
-      marca.style.background = CORES_LOC[mt];
-      c.append(marca, criar("span", "titulo-do-bloco", info.nome || mt), criar("span", "regua"),
-               criar("span", "quantas-linhas", mt === "seqneg" ? "dois terminais" : "um terminal"));
-      corpo.append(c);
-      linhas([["como calcula", info.como], ["detalhe", info.detalhe], ["quando vale", info.quando],
-              ["neste registro", info.km != null ? `${numLoc(info.km, 2)} km` : (info.motivo || "sem número")]]);
-    }
-    const c = criar("div", "cabeca-de-bloco");
-    c.append(criar("span", "titulo-do-bloco", "O resultado e o trecho a patrulhar"), criar("span", "regua"));
-    corpo.append(c);
-    linhas(p.sobre_o_resultado || []);
-    jan.append(cabeca, corpo);
-    jan.addEventListener("close", () => jan.remove());
-    document.body.append(jan);
-    fecharAoClicarFora(jan);
-    jan.showModal();
+    window.OscMetodosLoc.abrir(pacoteLoc || {}, { CORES_LOC, ORDEM_LOC, fecharAoClicarFora });
   }
 
   /** O comprimento total da linha em uso, ao lado dos botões do cabeçalho.

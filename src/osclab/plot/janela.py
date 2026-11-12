@@ -43,7 +43,7 @@ from osclab.plot.conversao import LADOS
 
 #: Versão do formato do pacote da janela. Sobe quando a tela passa a depender
 #: de um campo novo. Ver o comentário em `montar`.
-CONTRATO = 28
+CONTRATO = 29
 
 
 def montar(registro: Record, *, de: float | None = None, ate: float | None = None,

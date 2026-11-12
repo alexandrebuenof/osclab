@@ -607,6 +607,12 @@ osclab/
   em uso; Ω ⇄ Ω/km e primário ⇄ secundário são VISTA, e toda conta é de
   `faultloc/parametros.py`. Sem painel desses na tela, o «+ adicionar
   gráfico» cria um — tirar o tipo do menu deixaria a localização sem caminho.
+  **«? métodos» é a variante 06** *(12/11/2026)*: métodos à esquerda (cor e
+  km), o escolhido à direita com as equações DESENHADAS (STIX Two Text no
+  pacote), o esquema S — m — R e «neste registro» como conta
+  (`d = m · L = …`); árvore, símbolos e números de `faultloc/equacoes.py`,
+  pintura de `metodos-loc.js`. Nenhuma fração dentro de fração (o laço é
+  `Im{Z_laço} / X1L`, com `Z_laço` numa auxiliar).
 - **«refinar» confere a seq. negativa de dois terminais** *(variante 11,
   11/11/2026)*. Botão ao lado da legenda «Seq. neg. 2T» do painel
   localizador, só com DUAS oscilografias na aba; abre `/refino/<a>?com=<b>`
