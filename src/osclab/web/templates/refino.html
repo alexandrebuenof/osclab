@@ -11,8 +11,9 @@
     terminais (variante 11 da maquete, 11/11/2026). A oscilografia a abre num
     quadro por cima de si; os números são de `plot/refino.py`, em cima de
     `faultloc/refino.py`. O deslocamento MANUAL escolhido aqui vale para o
-    painel localizador (selo «alinhado à mão»); o automático o desfaz. #}
-<body class="refino" data-a="{{ a.sha }}" data-b="{{ b.sha }}">
+    painel localizador (selo «alinhado à mão») e fica GRAVADO ao lado do
+    registro (`data-manual`, o gravado do par); o automático o apaga. #}
+<body class="refino" data-a="{{ a.sha }}" data-b="{{ b.sha }}" data-manual="{{ manual }}">
   <header class="rf-topo">
     <div class="rf-titulo">
       <h1>Refinar · sequência negativa</h1>

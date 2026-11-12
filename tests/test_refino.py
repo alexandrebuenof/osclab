@@ -421,3 +421,99 @@ def test_a_rota_do_painel_usa_o_manual_do_refino_e_diz(tmp_path, monkeypatch, cl
     outro = cliente.post(f"/api/onda/{sha_a}/localizar",
                          json=dict(corpo, refino={"b": "outro", "d": d})).get_json()
     assert outro["alinhado_a_mao"] is None
+
+
+# ---------------------------------------------------------------------------
+# O manual GRAVADO ao lado do registro (decidido em 11/11/2026)
+# ---------------------------------------------------------------------------
+
+def _par_no_acervo(tmp_path, monkeypatch, a, b):
+    """Os dois terminais num acervo TEMPORÁRIO (nunca o de verdade)."""
+    monkeypatch.setattr(paths, "LIBRARY_DIR", tmp_path / "acervo")
+    origem = tmp_path / "origem"
+    origem.mkdir()
+    r = acervo.guardar(_comtrade(origem, "LADO_A", a) + _comtrade(origem, "LADO_B", b))
+    assert len(r.aceitos) == 2, r.problemas
+    return tuple(x.sha for x in sorted(r.aceitos, key=lambda x: x.nome))
+
+
+def test_o_manual_se_grava_le_e_apaga_e_o_par_e_um_so(tmp_path, monkeypatch, par_tardio):
+    a, b = par_tardio
+    sha_a, sha_b = _par_no_acervo(tmp_path, monkeypatch, a.registro, b.registro)
+    assert acervo.refino_gravado(sha_a, sha_b) is None
+    assert acervo.gravar_refino(sha_a, sha_b, -0.0125) == -0.0125
+    assert (paths.LIBRARY_DIR / sha_a / acervo.REFINO).is_file()
+    assert acervo.refino_gravado(sha_a, sha_b) == -0.0125
+    # o par visto do outro lado: o mesmo número, com o sinal trocado
+    assert acervo.refino_gravado(sha_b, sha_a) == 0.0125
+    # gravar pelo outro lado SUBSTITUI (uma cópia só do par)
+    acervo.gravar_refino(sha_b, sha_a, 0.02)
+    assert not (paths.LIBRARY_DIR / sha_a / acervo.REFINO).exists()
+    assert acervo.refino_gravado(sha_a, sha_b) == -0.02
+    # apagar por qualquer lado apaga o par
+    assert acervo.gravar_refino(sha_a, sha_b, None) is None
+    assert acervo.refino_gravado(sha_a, sha_b) is None
+    assert acervo.refino_gravado(sha_b, sha_a) is None
+    assert not (paths.LIBRARY_DIR / sha_b / acervo.REFINO).exists()
+    # lixo não se grava, e B desconhecido não é par
+    with pytest.raises(ValueError):
+        acervo.gravar_refino(sha_a, sha_b, float("nan"))
+    with pytest.raises(acervo.FormatError):
+        acervo.gravar_refino(sha_a, "outro", 0.01)
+    assert acervo.refino_gravado(sha_a, "outro") is None
+
+
+def test_o_gravado_vale_no_painel_ao_reabrir_e_so_para_o_seu_B(tmp_path, monkeypatch,
+                                                               par_tardio):
+    from osclab.web.server import create_app
+
+    a, b = par_tardio
+    sha_a, sha_b = _par_no_acervo(tmp_path, monkeypatch, a.registro, b.registro)
+    d = rf.alinhar(a, b, "auto", None)["confere"]["d"]
+    corpo = {"registros": [{"sha": sha_b}], "fonte": "manual",
+             "manual": {"km": KM, "forma": "rx", "r": LINHA["r"], "x": LINHA["x"]}}
+
+    def novo_cliente():
+        app = create_app()
+        app.config.update(TESTING=True)
+        return app.test_client()
+
+    cliente = novo_cliente()
+    sem = cliente.post(f"/api/onda/{sha_a}/localizar", json=corpo).get_json()
+    assert sem["alinhado_a_mao"] is None
+    ok = cliente.post(f"/api/onda/{sha_a}/refino-alinhamento", json={"b": sha_b, "d": d})
+    assert ok.status_code == 200 and ok.get_json()["d"] == pytest.approx(d)
+    assert cliente.post(f"/api/onda/{sha_a}/refino-alinhamento",
+                        json={"b": sha_b, "d": "x"}).status_code == 400
+    assert cliente.post(f"/api/onda/{sha_a}/refino-alinhamento",
+                        json={"b": "outro", "d": d}).status_code == 404
+    com = cliente.post(f"/api/onda/{sha_a}/localizar", json=corpo).get_json()
+    m = com["alinhado_a_mao"]
+    assert m and m["gravado"] is True and m["d"] == pytest.approx(d)
+    km = com["metodos"]["seqneg"]["km"]
+    assert km == pytest.approx(rede.seqneg_ideal(CENARIO), abs=0.5)
+
+    # «reabrir»: programa novo, registros relidos do disco, a tela sem nada
+    acervo._abertos.clear()
+    cliente = novo_cliente()
+    de_novo = cliente.post(f"/api/onda/{sha_a}/localizar", json=corpo).get_json()
+    assert de_novo["alinhado_a_mao"]["d"] == pytest.approx(d)
+    assert de_novo["metodos"]["seqneg"]["km"] == pytest.approx(km, abs=1e-9)
+    # e a janela «refinar» abre já no gravado
+    pagina = cliente.get(f"/refino/{sha_a}?com={sha_b}").get_data(as_text=True)
+    assert f'data-manual="{d!r}"' in pagina
+
+    # o par visto de B: o mesmo alinhamento (−d), o mesmo km
+    corpo_b = dict(corpo, registros=[{"sha": sha_a}])
+    de_b = cliente.post(f"/api/onda/{sha_b}/localizar", json=corpo_b).get_json()
+    assert de_b["alinhado_a_mao"]["d"] == pytest.approx(-d, abs=1e-9)
+    pagina_b = cliente.get(f"/refino/{sha_b}?com={sha_a}").get_data(as_text=True)
+    assert f'data-manual="{-d!r}"' in pagina_b
+
+    # voltar ao automático apaga: o painel volta ao automático
+    assert cliente.post(f"/api/onda/{sha_a}/refino-alinhamento",
+                        json={"b": sha_b, "d": None}).get_json()["d"] is None
+    fim = cliente.post(f"/api/onda/{sha_a}/localizar", json=corpo).get_json()
+    assert fim["alinhado_a_mao"] is None
+    pagina = cliente.get(f"/refino/{sha_a}?com={sha_b}").get_data(as_text=True)
+    assert 'data-manual=""' in pagina

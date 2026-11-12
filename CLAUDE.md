@@ -573,8 +573,16 @@ osclab/
   `ldl`), a tela de `plot/refino.py`. **O deslocamento MANUAL escolhido ali
   VALE para o painel** (decidido em 11/11/2026): a curva e o número da seq.
   negativa passam a usá-lo, e o painel diz «alinhado à mão» (o valor no
-  hover). É da TELA, como o arranjo: vai no corpo do pedido (`refino`),
-  não se grava ao lado do registro, e voltar ao automático no refino desfaz.
+  hover). **E fica GRAVADO ao lado do registro** *(11/11/2026)*, como a
+  correção de fase: `refino.json` na pasta de A, `{sha de B: {"d": s}}`, com
+  `d` no sentido de `alinhamento.deslocamento` (t de A cai em t + d em B).
+  O PAR tem uma cópia só: aberto pelo lado de B lê-se `−d`, e gravar por um
+  lado apaga a do outro (`acervo.refino_gravado` / `gravar_refino`). Reabrir
+  o registro dá o mesmo km; o Ctrl+Z NÃO desfaz (é dado gravado); voltar ao
+  automático no refino APAGA. O refino grava (`/refino-alinhamento`) e só
+  então avisa a aba, que pede a localização de novo; o servidor lê do disco
+  (um `refino` no corpo ainda vence, mas a tela não o manda), e a janela
+  abre no gravado (`data-manual`).
   O mesmo `d` na grade de B nos dois (`refino.deslocamento_do_painel`), e
   há teste de que o km do painel é o da janela.
 - **A calculadora é uma GAVETA, e a conta mora no Python** *(variante 10,

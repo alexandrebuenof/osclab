@@ -20,9 +20,11 @@
  * cursores e, sem nada disso, fecha a janela.
  *
  * O deslocamento MANUAL escolhido aqui vale para o painel localizador
- * (decidido em 11/11/2026): cada mudança dele vai à oscilografia por
- * `postMessage` («refino-alinhamento»), e voltar ao automático desfaz. Quem
- * guarda o número é a tela da oscilografia, não o registro.
+ * (decidido em 11/11/2026) e fica GRAVADO ao lado do registro: cada mudança
+ * dele vai ao servidor (`/api/onda/<a>/refino-alinhamento`), e só depois de
+ * gravada a oscilografia é avisada por `postMessage` («refino-alinhamento»)
+ * para pedir a localização de novo. Voltar ao automático APAGA o gravado.
+ * A janela abre no que estiver gravado (`data-manual`).
  */
 (() => {
   "use strict";
@@ -47,21 +49,38 @@
     de: null, ate: null, t1: null, t2: null, ativo: 1,
     alinhar: "auto", manual: {}, armado: null, digitados: { A: {}, B: {} },
   };
-  // Reabrindo com o painel já alinhado à mão, a janela abre no manual com ele.
-  if (typeof ctx.manual === "number" && isFinite(ctx.manual)) {
+  // O alinhamento manual GRAVADO do par: a janela abre no manual com ele.
+  const gravado = document.body.dataset.manual ? parseFloat(document.body.dataset.manual) : NaN;
+  if (isFinite(gravado)) {
     estado.alinhar = "manual";
-    estado.manual = { d: ctx.manual };
+    estado.manual = { d: gravado };
   }
   let pacote = null;
   let emVoo = false, deNovo = null;
-  //: O último deslocamento que o painel recebeu (undefined: nenhum ainda).
-  let avisado = typeof ctx.manual === "number" ? ctx.manual : null;
-  /** O painel localizador passa a usar o manual; `null` devolve o automático. */
-  function avisarPainel() {
+  //: O último deslocamento gravado (null: nenhum, vale o automático;
+  //: undefined: a primeira resposta ainda não veio).
+  let avisado;
+  /** Grava o manual ao lado do registro (`null` apaga) e avisa o painel. */
+  async function avisarPainel() {
     const al = pacote.alinhamento;
     const d = al.modo === "manual" && al.manual.d != null ? al.d : null;
+    // A primeira resposta é o que JÁ está gravado (na grade deste B): abrir
+    // a janela não grava nada.
+    if (avisado === undefined) { avisado = isFinite(gravado) ? d : null; if (d === avisado) return; }
     if (d === avisado || (d != null && avisado != null && Math.abs(d - avisado) < 1e-12)) return;
+    const antes = avisado;
     avisado = d;
+    try {
+      const r = await fetch(`/api/onda/${shaA}/refino-alinhamento`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ b: shaB, d }),
+      });
+      if (!r.ok) throw new Error((await r.json()).erro || "falhou");
+    } catch (e) {
+      avisado = antes;
+      $("rf-chaves").append(criar("span", "rf-aviso", `o alinhamento não foi gravado (${e.message})`));
+      return;
+    }
     window.parent.postMessage({ tipo: "refino-alinhamento", b: shaB, d }, location.origin);
   }
   let mouseT = null;
