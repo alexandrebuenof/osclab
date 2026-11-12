@@ -161,29 +161,36 @@ def montar(pacote: dict, cursor1: dict | None, cursor2: dict | None,
 #: incremental olha um ciclo atrás) e dois depois mostram a abertura
 #: assentando — menos que isso corta o que se foi ver; mais, e numa falta
 #: curta o zoom deixa de ser zoom.
-FOLGA_DO_ZOOM = 2.0
+FOLGA_DO_ZOOM = 4.0
+#: E a folga cresce com a falta: um quarto da duração dela, se passar dos
+#: quatro ciclos. «Uma folguinha do hachurado» de cada lado (12/11/2026) —
+#: a janela justa da falta ao disjuntor ficou apertada demais para ele.
+FOLGA_RELATIVA = 0.25
+#: Sem fim conhecido (nem abertura, nem platô), quantos ciclos depois do
+#: início se mostram.
+SEM_FIM_EM_CICLOS = 10.0
 
 #: Por que não há zoom, dito na tela (no `title` do desenho e na linha de
 #: baixo dele, nunca por cima).
 SEM_FALTA = "sem início de falta reconhecido no registro: não há região da falta para ampliar"
-SEM_PLATO = ("a falta não tem platô (nenhum trecho em que a estimativa assenta): "
-             "não há região da falta para ampliar")
 
 
 def janela_da_falta(eventos: dict | None, t0: float, t1: float, ciclo: float,
                     intervalo: float = 0.0, aviso: str = "") -> dict:
     """A janela que o DUPLO CLIQUE no localizador mostra: `{de, ate, motivo}`.
 
-    Do início da falta menos `FOLGA_DO_ZOOM` ciclos até o FIM do trecho em que
-    a curva mede (`eventos.assentado`: a abertura ou o fim da falta, o que vier
-    antes) mais a mesma folga. Começa no INÍCIO e não no platô de propósito: o
+    Do início da falta até o FIM do trecho em que a curva mede
+    (`eventos.assentado`: a abertura ou o fim da falta, o que vier antes),
+    com folga dos dois lados: `FOLGA_DO_ZOOM` ciclos ou `FOLGA_RELATIVA` da
+    duração, o que for maior — um pouco do hachurado aparece de cada lado.
+    Começa no INÍCIO e não no platô de propósito: o
     platô é de onde sai a mediana e leva folga dos dois lados; quem amplia
     «para ver de perto a região da falta» quer ver a falta ENTRAR — o degrau,
     a DC, o ciclo que as curvas levam para assentar — e o disjuntor abrir.
 
-    Sem platô não há zoom (`de`/`ate` = `None`, e o `motivo` diz por quê): é a
-    mesma condição para haver número de localização, e ampliar uma falta que a
-    conta não reconheceu mostraria uma região que ninguém confirmou.
+    Sem platô também amplia (decidido em 12/11/2026): o fim é a abertura, e
+    sem ela `SEM_FIM_EM_CICLOS` depois do início. Só sem início de falta não
+    há zoom (`de`/`ate` = `None`, e o `motivo` diz por quê).
 
     Colada numa borda do registro, a janela é CORTADA na borda — não desliza
     para dentro: deslizar acrescentaria do outro lado um trecho que não é da
@@ -194,14 +201,17 @@ def janela_da_falta(eventos: dict | None, t0: float, t1: float, ciclo: float,
     if not eventos or eventos.get("inicio") is None:
         return {**nada, "motivo": aviso or SEM_FALTA}
     plato = eventos.get("plato")
-    if not plato:
-        return {**nada, "motivo": SEM_PLATO}
     inicio = float(eventos["inicio"])
     assentado = eventos.get("assentado")
-    fim = float(assentado[1]) if assentado else float(plato[1])
-    folga = FOLGA_DO_ZOOM * ciclo
+    if assentado:
+        fim = float(assentado[1])
+    elif plato:
+        fim = float(plato[1])
+    else:
+        fim = inicio + SEM_FIM_EM_CICLOS * ciclo
+    folga = max(FOLGA_DO_ZOOM * ciclo, FOLGA_RELATIVA * (fim - inicio))
     de, ate = max(inicio - folga, t0), min(fim + folga, t1)
     if not (math.isfinite(de) and math.isfinite(ate)) or ate <= de:
-        return {**nada, "motivo": SEM_PLATO}
+        return {**nada, "motivo": SEM_FALTA}
     de, ate = navegacao.limitar(t0, t1, de, ate, intervalo)
     return {"de": de, "ate": ate, "motivo": ""}

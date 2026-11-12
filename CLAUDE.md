@@ -639,9 +639,11 @@ osclab/
   sai disso é `plot/navegacao.py` — inclusive o piso de amostras e as bordas.
   **Clique duplo no painel localizador amplia a REGIÃO DA FALTA em todos os
   gráficos** *(12/11/2026)*: a janela é a da aba, e QUAL é a da falta sai de
-  `plot/localizador.janela_da_falta` (início da falta − 2 ciclos até o fim do
-  `assentado` + 2 ciclos; cortada na borda, sem deslizar; sem platô, sem zoom,
-  e o `title`/linha de baixo do desenho diz por quê), em `painel.zoom_falta`.
+  `plot/localizador.janela_da_falta` (do início da falta ao fim do `assentado`,
+  com uma folga do hachurado dos dois lados — 4 ciclos ou ¼ da falta, o que for
+  maior; cortada na borda, sem deslizar; sem platô amplia assim mesmo, até a
+  abertura; só sem início de falta não há zoom, e o `title`/linha de baixo do
+  desenho diz por quê), em `painel.zoom_falta`.
   De novo, com a tela ainda nela, volta à janela de antes. Como a roda, não
   entra no Ctrl+Z; os dois cliques não põem cursor e a seleção volta à de antes.
 - **A escala vertical se ajusta à janela visível**, por grupo. Ampliar a
