@@ -284,6 +284,21 @@ osclab/
   quando o usuário só queria descer a página. Fora da moldura não há
   `preventDefault`, e o navegador faz o que sempre fez. Vale para as ondas e
   para as tiras digitais (`noDesenho`).
+- **A roda amplia na proporção do `deltaY`, e no piso não anda de lado**
+  *(11/11/2026)*. 100 px valem 0,8 (`fatorDaRoda`); era 0,8 por EVENTO, e
+  roda de alta resolução manda vários eventos pequenos por entalhe — um
+  toque leve batia no piso, que num `.CEV` de 8 amostras/ciclo é um ciclo
+  só. E `navegacao.ampliar` aplica o piso em torno do MOUSE: aplicado em
+  torno do centro, cada entalhe a mais no piso deslizava a janela de lado.
+  Foi o que fazia a roda no localizador «parecer quebrada».
+- **Estado de desenho não se escreve POR CIMA do desenho** *(11/11/2026)*.
+  «Ponha o cursor…», «falta o terminal remoto», «sem linha» iam no canvas,
+  sobre a grade e os rótulos, e o rodapé repetia. Hoje vão numa linha logo
+  abaixo do corpo do painel (`avisoDoDesenho`), ou só no rodapé — uma vez.
+- **Todo gráfico tem a engrenagem**, mesmo com pouco dentro, e a caixa dela
+  é larga e baixa (até 520 px; muitos grupos só de botões em duas colunas),
+  fixa na janela e presa ao botão. Botão `medida` em qualquer lugar tem o
+  desenho do programa (`:where(.medida)`), nunca o do navegador.
 - **Todo sinal tem um alvo de clique que não se move.** O traço é o gesto
   natural e é o que erra: num gráfico com oito curvas sobrepostas na pré-falta,
   ou numa tela de quarenta tiras de 15 px, acertar a certa com o mouse é mira.

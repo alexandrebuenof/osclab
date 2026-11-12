@@ -8005,20 +8005,40 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const ancora = criar("span", "ancora-de-menu");
     ancora.id = ancoraId;
     botao.addEventListener("click", () => {
+      // `menu-de-ajustes`: largo e baixo, e não alto e estreito. Com 230 px
+      // a explicação de cada ajuste do plano alfa quebrava em cinco linhas e
+      // a caixa passava da borda de baixo da tela (11/11/2026). Fixa na
+      // janela, ancorada na engrenagem: sem lugar embaixo, abre para cima;
+      // sem lugar nenhum, rola por dentro.
       menuSuspenso(ancoraId, "ajustes do gráfico", (caixa) => {
+        caixa.classList.add("menu-de-ajustes");
+        const grupos = [];
+        let grupo = null;
         for (const b of montar()) {
           // Uma string no meio da lista é TÍTULO DE GRUPO, e não um botão:
           // com meia dúzia de ajustes na mesma caixa, o olho precisa de um
           // lugar onde parar. Escolha dele, 19/10/2026.
+          if (typeof b === "string" || !grupo) {
+            grupo = criar("div", "grupo-de-ajuste");
+            grupos.push(grupo);
+            caixa.append(grupo);
+          }
           if (typeof b === "string") {
-            caixa.append(criar("div", "titulo-de-grupo", b));
+            grupo.append(criar("div", "titulo-de-grupo", b));
             continue;
           }
           const linha = criar("div", "linha-de-ajuste");
           linha.append(b);
-          caixa.append(linha);
+          grupo.append(linha);
         }
-      });
+        // Muitos grupos só de botões (o plano de impedância) viram DUAS
+        // colunas: a lista de cima a baixo ficava com 230 × 460 px. Com
+        // explicação escrita (o alfa), uma coluna larga — em duas, a frase
+        // voltaria a quebrar a cada três palavras.
+        if (grupos.length >= 4 && !caixa.querySelector(".grupo-de-ajuste p")) {
+          caixa.classList.add("em-colunas");
+        }
+      }, { fixo: true, doBotao: true });
     });
     return [botao, ancora];
   }
@@ -8793,6 +8813,32 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     if (antiga) antiga.replaceWith(tabelaFasorial(painel));
   }
 
+  /** O aviso de estado de um desenho («ponha o cursor 1…»), FORA dele.
+   *
+   * Escrito no canvas, ele caía em cima da grade, dos anéis e dos rótulos —
+   * no plano alfa, «falta o terminal remoto» sobre o «1» e o «1/6» — e o
+   * rodapé ainda repetia a mesma coisa. Regra (11/11/2026): nenhum texto por
+   * cima do desenho, e o estado se diz UMA vez, numa linha logo abaixo do
+   * corpo do painel. `null` apaga. Quem pinta chama a cada pintura: o aviso
+   * segue o cursor sem refazer o bloco. */
+  function avisoDoDesenho(canvas, texto) {
+    const secao = canvas && canvas.closest("section.grafico");
+    if (!secao) return;
+    let linha = secao.querySelector(":scope > .aviso-do-desenho");
+    if (!texto) {
+      if (linha) linha.hidden = true;
+      return;
+    }
+    if (!linha) {
+      linha = criar("p", "rodape-do-painel aviso-do-desenho");
+      let corpo = canvas;
+      while (corpo.parentElement && corpo.parentElement !== secao) corpo = corpo.parentElement;
+      corpo.after(linha);
+    }
+    linha.textContent = texto;
+    linha.hidden = false;
+  }
+
   function pintarTriangulo(canvas, painel) {
     const lado = 2 * (RAIO_FASORIAL + FOLGA_FASORIAL);
     const dpr = window.devicePixelRatio || 1;
@@ -8807,22 +8853,16 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const raio = lado / 2 - FOLGA_FASORIAL;
     if (raio <= 10) return;
 
-    const dizer = (texto, dy) => {
-      ctx.save();
-      ctx.fillStyle = token("--suave");
-      ctx.font = "11px var(--mono), monospace";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(texto, cx, cy + dy);
-      ctx.restore();
-    };
+    // O estado vai para a linha de baixo (`avisoDoDesenho`), nunca por cima
+    // da rosa. Sem vínculo, nada: o rodapé do painel já diz.
+    const dizer = (texto) => avisoDoDesenho(canvas, texto);
+    dizer(null);
     pintarRosaDosVentos(ctx, cx, cy, raio, null);
-    if (!painel.vinculo) { dizer("escolha o vínculo deste triângulo", 0); return; }
+    if (!painel.vinculo) return;
     const fasores = fasoresDoPainel(painel);
     if (!fasores.length) {
       const meu = painelPorId(painel.id) || {};
-      dizer(`ponha o cursor ${meu.cursor === 2 ? 2 : 1} num gráfico`, -8);
-      dizer("(tecla 1 ou 2 sobre a onda)", 8);
+      dizer(`Ponha o cursor ${meu.cursor === 2 ? 2 : 1} num gráfico (tecla 1 ou 2 sobre a onda).`);
       return;
     }
 
@@ -8839,7 +8879,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const correntes = porFase(fasores.slice(3, 6));
     const FASES = ["A", "B", "C"];
     if (FASES.some((f) => !tensoes.has(f))) {
-      dizer("faltam tensões deste vínculo", 0);
+      dizer("Faltam tensões deste vínculo.");
       return;
     }
 
@@ -10311,17 +10351,11 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     // O cursor que conta é o DESTE painel (o botão «cursor 1/2»), como lá.
     const doPainel = meu.cursor === 2 ? 2 : 1;
     if (cursores[doPainel - 1] === null || cursores[doPainel - 1] === undefined) {
-      ctx.save();
-      ctx.fillStyle = suave;
-      ctx.font = "11px var(--mono), monospace";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "top";
-      ctx.fillText(`ponha o cursor ${doPainel} (tecla ${doPainel} sobre a onda)`,
-                   esqDoQuadro + 6, m.topo + 4);
-      ctx.fillText("para ver a trajetória", esqDoQuadro + 6, m.topo + 18);
-      ctx.restore();
+      avisoDoDesenho(canvas, `Ponha o cursor ${doPainel} (tecla ${doPainel} sobre a onda) `
+                             + "para ver a trajetória.");
       return;
     }
+    avisoDoDesenho(canvas, null);
 
     // --- a trajetória ----------------------------------------------------
     // Presa à área do gráfico: a carga e a fuga depois da abertura são
@@ -10490,7 +10524,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       if (!atual) return;
       const r = q.rMin + (p.x - q.esq) / q.k;
       const x = q.xMin + (q.base - p.y) / q.k;
-      const f = evento.deltaY < 0 ? 0.8 : 1.25;
+      const f = fatorDaRoda(evento);
       atual.caixaZ = { rMin: r - (r - q.rMin) * f, rMax: r + (q.rMax - r) * f,
                        xMin: x - (x - q.xMin) * f, xMax: x + (q.xMax - x) * f };
       repintarEste();
@@ -11046,16 +11080,9 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     }
     bloco._alvos = alvos;
 
-    if (tc === null && (painel.sinais || []).length) {
-      ctx.save();
-      ctx.fillStyle = token("--suave");
-      ctx.font = "11px var(--mono), monospace";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "top";
-      ctx.fillText(`ponha o cursor ${k + 1} (tecla ${k + 1} sobre a onda)`, 6, 4);
-      ctx.fillText("para a bolinha andar", 6, 18);
-      ctx.restore();
-    }
+    avisoDoDesenho(bloco._canvas, tc === null && (painel.sinais || []).length
+      ? `Ponha o cursor ${k + 1} (tecla ${k + 1} sobre a onda) para a bolinha andar.`
+      : null);
     escreverPeDoComplexo(bloco, escalas);
   }
 
@@ -12557,6 +12584,13 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const doCabecalho = [chave, parametros, ajuda, comprimentoLoc()];
     const selo = seloDivLoc();
     if (selo) doCabecalho.push(selo);
+    // A engrenagem existe em TODO gráfico, pela razão do de harmônicos:
+    // procurá-la num e não achar é pior que achá-la com pouco dentro.
+    doCabecalho.push(...engrenagemDoPainel(painel, () => [
+      criar("p", "nada-a-ajustar",
+            "Este gráfico ainda não tem ajuste de vista próprio. A linha da "
+            + "conta está em «parâmetros», e km ⇄ % no cabeçalho."),
+    ]));
     el.append(cabecalhoDoPainel(painel, doCabecalho));
 
     const legenda = criar("ul", "legenda");
@@ -12675,16 +12709,15 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     if (!p || !p.regua) {
       ctx.strokeStyle = corLinha;
       ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
-      ctx.fillStyle = corSuave;
-      ctx.textAlign = "center";
-      ctx.fillText(!pacoteLoc ? "calculando a localização…"
-                   : "sem o comprimento da linha nem o número do relé, não há eixo de km",
-                   (x0 + x1) / 2, (y0 + y1) / 2);
+      // Nada escrito sobre a grade: «sem linha» já está no cabeçalho e «sem
+      // trecho a patrulhar» no rodapé. Só a espera vai para a linha de baixo.
+      avisoDoDesenho(canvas, !pacoteLoc ? "Calculando a localização…" : null);
       pintarEtiquetas(ctx, emX, x0, x1, y0);
       pintarRodapeDoTempo(ctx, emX, x0, x1, y1, ultimo);
       if (b._ladoLoc) b._ladoLoc.replaceChildren();
       return;
     }
+    avisoDoDesenho(canvas, null);
     const pct = meu.unidade_loc === "%" && !!p.linha_km;
     const lo = p.regua.min, hi = p.regua.max;
     const Y = (km) => y1 - ((km - lo) / (hi - lo || 1)) * (y1 - y0);
@@ -13033,17 +13066,8 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const f0 = dados.frequencia_hz || 60;
     const alvos = [];
 
-    if (painel.falta) {
-      ctx.save();
-      ctx.fillStyle = token("--atencao");
-      ctx.font = "600 12px var(--sans), sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText("falta o terminal remoto", cx, cy - 26);
-      ctx.fillStyle = token("--suave");
-      ctx.font = "11.5px var(--sans), sans-serif";
-      ctx.fillText("o registro só tem uma trinca de corrente", cx, cy - 10);
-      ctx.restore();
-    }
+    // Sem o terminal remoto, nada escrito sobre os anéis: o rodapé do
+    // painel já diz, uma vez só.
 
     // --- as trajetórias, até o cursor ---------------------------------------
     for (const s of (painel.sinais || [])) {
@@ -13089,15 +13113,8 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     }
     bloco._alvos = alvos;
 
-    if (tc === null && !painel.falta) {
-      ctx.save();
-      ctx.fillStyle = token("--suave");
-      ctx.font = "11px var(--mono), monospace";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "top";
-      ctx.fillText(`ponha o cursor ${k + 1} (tecla ${k + 1} sobre a onda)`, 4, 16);
-      ctx.restore();
-    }
+    avisoDoDesenho(bloco._canvas, tc === null && !painel.falta
+      ? `Ponha o cursor ${k + 1} (tecla ${k + 1} sobre a onda).` : null);
     escreverTabelaDoAlfa(bloco, cabeca, tc);
   }
 
@@ -13261,8 +13278,16 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     ajustes.title = "Os ajustes do 87T: lidos do arquivo, deduzidos ou digitados.";
     ajustes.addEventListener("click", () => abrirAjustesDoDiferencial(painel));
 
+    // A engrenagem, como em todo gráfico (pedido dele, 11/11/2026). Os
+    // AJUSTES do 87T continuam no botão «ajustes», à vista: mudam o número,
+    // e pela regra da casa o que muda o número é do cabeçalho.
     el.append(cabecalhoDoPainel(painel, [
       botaoCursor, par, ...ancoras, mais, ancoraSinais, ajustes, ancoraAjustes,
+      ...engrenagemDoPainel(painel, () => [
+        criar("p", "nada-a-ajustar",
+              "Este gráfico ainda não tem ajuste de vista próprio. Os ajustes "
+              + "do 87T estão no botão «ajustes»."),
+      ]),
     ]));
 
     const corpo = criar("div", "grafico-corpo diferencial");
@@ -13716,16 +13741,8 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     }
     bloco._alvos = alvos;
 
-    if (tc === null) {
-      ctx.save();
-      ctx.fillStyle = token("--suave");
-      ctx.font = "11px var(--mono), monospace";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "top";
-      ctx.fillText(`ponha o cursor ${k + 1} (tecla ${k + 1} sobre a onda)`,
-                   x0 + 4, m.topo + 32);
-      ctx.restore();
-    }
+    avisoDoDesenho(bloco._canvas, tc === null
+      ? `Ponha o cursor ${k + 1} (tecla ${k + 1} sobre a onda).` : null);
     escreverTabelaDoDiferencial(bloco, cabeca, tc);
   }
 
@@ -13832,18 +13849,12 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       // Sem cursor não há instante, e sem instante não há fasor. Dizer isso
       // no meio do círculo é melhor que um círculo vazio, que se lê como
       // defeito.
-      ctx.save();
-      ctx.fillStyle = token("--suave");
-      ctx.font = "11px var(--mono), monospace";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(`ponha o cursor ${meu.cursor === 2 ? 2 : 1} num gráfico`,
-                   cx, cy - 8);
-      ctx.fillText("(tecla 1 ou 2 sobre a onda)", cx, cy + 8);
-      ctx.restore();
+      avisoDoDesenho(canvas, `Ponha o cursor ${meu.cursor === 2 ? 2 : 1} num gráfico `
+                             + "(tecla 1 ou 2 sobre a onda).");
       pintarRosaDosVentos(ctx, cx, cy, raio, null);
       return;
     }
+    avisoDoDesenho(canvas, null);
     const limites = reguasDoPainel(fasores);
 
     const aneis = pintarRosaDosVentos(ctx, cx, cy, raio,
@@ -15020,20 +15031,45 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     // era CORTADA pela borda de baixo do painel (22/10/2026). Sem lugar
     // embaixo, ela abre para cima; sem lugar nenhum, rola por dentro.
     if (opcoes.fixo || ancora.closest(".topo.registro .acoes")) {
-      const base = (ancora.parentElement || ancora).getBoundingClientRect();
-      caixa.style.position = "fixed";
-      caixa.style.maxHeight = `${window.innerHeight - 16}px`;
-      caixa.style.overflowY = "auto";
-      const altura = caixa.offsetHeight;
-      const embaixo = window.innerHeight - base.bottom - 14;
-      caixa.style.top = altura <= embaixo || base.top < altura + 14
-        ? `${Math.max(8, Math.min(base.bottom + 6, window.innerHeight - altura - 8))}px`
-        : `${base.top - altura - 6}px`;
-      const largura = caixa.offsetWidth;
-      caixa.style.left = `${Math.max(8, Math.min(base.left,
-                                     window.innerWidth - largura - 8))}px`;
-      // Rolar a página com ele aberto deixaria o menu solto no ar.
-      window.addEventListener("scroll", fechar, { once: true, passive: true });
+      // `doBotao`: ancorado no PRÓPRIO botão, e não no pai da âncora — a
+      // engrenagem mora solta na fileira do cabeçalho, e o pai dela é a
+      // fileira inteira: o menu nasceria na ponta esquerda do painel.
+      const posicionar = () => {
+        const base = (opcoes.doBotao && gatilho ? gatilho
+                      : (ancora.parentElement || ancora)).getBoundingClientRect();
+        caixa.style.position = "fixed";
+        caixa.style.maxHeight = `${window.innerHeight - 16}px`;
+        caixa.style.overflowY = "auto";
+        const altura = caixa.offsetHeight;
+        const embaixo = window.innerHeight - base.bottom - 14;
+        caixa.style.top = altura <= embaixo || base.top < altura + 14
+          ? `${Math.max(8, Math.min(base.bottom + 6, window.innerHeight - altura - 8))}px`
+          : `${base.top - altura - 6}px`;
+        const largura = caixa.offsetWidth;
+        caixa.style.left = `${Math.max(8, Math.min(base.left,
+                                       window.innerWidth - largura - 8))}px`;
+      };
+      posicionar();
+      if (opcoes.doBotao && gatilho) {
+        // Preso ao botão, ele ACOMPANHA a rolagem em vez de fechar: mexer
+        // num ajuste da engrenagem redesenha os painéis, o redesenho rola a
+        // página alguns pixels, e fechar ali desfazia o `reabrirEngrenagem`
+        // no mesmo gesto. Some quando o botão sai da página ou da tela.
+        const seguir = () => {
+          if (pronto) { window.removeEventListener("scroll", seguir); return; }
+          const r = gatilho.getBoundingClientRect();
+          if (!gatilho.isConnected || r.bottom < 0 || r.top > window.innerHeight) {
+            window.removeEventListener("scroll", seguir);
+            fechar();
+            return;
+          }
+          posicionar();
+        };
+        window.addEventListener("scroll", seguir, { passive: true });
+      } else {
+        // Rolar a página com ele aberto deixaria o menu solto no ar.
+        window.addEventListener("scroll", fechar, { once: true, passive: true });
+      }
     }
     // A setinha vira para cima enquanto o menu está aberto: diz que o próximo
     // clique FECHA. Quem gira é o CSS, pelo `aria-expanded` — o mesmo
@@ -17131,6 +17167,21 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     return tipo === "analogico" || tipo === "digital" || tipo === "localizador";
   }
 
+  /** Quanto UM evento de roda amplia: proporcional ao `deltaY`.
+   *
+   * Era 0,8 por evento, fosse qual fosse o tamanho dele. Uma roda comum manda
+   * 100 por entalhe e saía certo; mas roda de alta resolução, touchpad e o
+   * «rolar suave» mandam vários eventos pequenos por gesto (−4, −15…), e
+   * cada um contava como um entalhe inteiro: um toque leve ampliava seis
+   * vezes e batia no piso — e no painel localizador, que vive de `.CEV` de 8
+   * amostras por ciclo, o piso é um ciclo só. Agora 100 px valem 0,8, como
+   * antes, e o resto é proporcional (linha = 33 px, página = 600 px). */
+  function fatorDaRoda(evento) {
+    const escala = evento.deltaMode === 1 ? 33 : evento.deltaMode === 2 ? 600 : 1;
+    const px = Math.max(-300, Math.min(300, (evento.deltaY || 0) * escala));
+    return Math.pow(0.8, -px / 100);
+  }
+
   area.addEventListener("wheel", (evento) => {
     const a = areaDoEvento(evento);
     // Fora da moldura do desenho a roda não é nossa: ela rola a página. Sem
@@ -17143,7 +17194,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     if (!noDesenho(a) || arrastando || !temEixoDeTempo(a.canvas)) return;
     evento.preventDefault();
 
-    zoomAcumulado *= evento.deltaY < 0 ? 0.8 : 1.25;
+    zoomAcumulado *= fatorDaRoda(evento);
     zoomFoco = instanteEm(a);
 
     clearTimeout(zoomPendente);

@@ -127,7 +127,14 @@ def ampliar(t0: float, t1: float, de: float, ate: float, fator: float,
     foco = min(max(float(foco), de), ate)
 
     parte = (foco - de) / largura         # onde o cursor está, de 0 a 1
-    nova = largura * fator
+    # O piso e o teto entram AQUI, antes de posicionar a janela, e não só no
+    # `limitar` do fim: lá a largura é corrigida em torno do CENTRO, e no piso
+    # cada entalhe a mais encolhia em volta do mouse e reabria em volta do
+    # meio — a janela andava de lado um pedaço a cada giro, sem ampliar nada.
+    # Medido num `.CEV` de 8 amostras/ciclo (piso = um ciclo): 1 ms por
+    # entalhe, sempre para o mesmo lado.
+    total = t1 - t0
+    nova = min(max(largura * fator, janela_minima(total, intervalo)), total)
     novo_de = foco - parte * nova
     return limitar(t0, t1, novo_de, novo_de + nova, intervalo)
 

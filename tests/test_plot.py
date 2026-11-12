@@ -533,6 +533,24 @@ def test_ampliar_demais_para_no_piso_de_amostras(tmp_path):
     assert (ate - de) == pytest.approx(navegacao.MINIMO_AMOSTRAS * passo, rel=1e-6)
 
 
+def test_ampliar_no_piso_nao_anda_de_lado(tmp_path):
+    """No piso, girar mais a roda não faz nada — antes a janela escorregava
+    um pedaço por entalhe, porque o piso era reaplicado em torno do CENTRO e
+    não do ponto sob o mouse."""
+    r = _registro(tmp_path, n=2048, taxa=960.0)
+    t0, t1 = navegacao.extensao(r)
+    passo = navegacao.passo(r)
+    foco = t0 + (t1 - t0) * 0.4
+    de, ate = t0, t1
+    for _ in range(40):
+        de, ate = navegacao.ampliar(t0, t1, de, ate, 0.8, foco, passo)
+    parado = (de, ate)
+    for _ in range(10):
+        de, ate = navegacao.ampliar(t0, t1, de, ate, 0.8, foco, passo)
+    assert (de, ate) == pytest.approx(parado, abs=1e-12)
+    assert de <= foco <= ate
+
+
 def test_arrastar_nao_muda_a_largura_da_janela(tmp_path):
     r = _registro(tmp_path, n=1024, taxa=960.0)
     t0, t1 = navegacao.extensao(r)
