@@ -102,6 +102,8 @@
       modo: estado.alinhar, manual: estado.manual, s: estado.s,
       de: estado.de, ate: estado.ate, gesto: gesto || null, t1: estado.t1, t2: estado.t2,
       linha: ctx.linha || null, digitados: estado.digitados,
+      // o «alinhar por» da aba: o automático daqui é o do painel
+      alinhar: ctx.alinhar || null,
       colunas: Math.round(larg * (window.devicePixelRatio || 1)),
     };
   }

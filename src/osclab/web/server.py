@@ -62,6 +62,7 @@ from __future__ import annotations
 
 import functools
 import io
+import math
 import zipfile
 from pathlib import Path
 
@@ -301,7 +302,7 @@ def create_app() -> Flask:
                     registro, outros, alinhar=_alinhar(), montar=janela.montar,
                     apelido_a=acervo.apelido(sha), sha_a=sha,
                     de=de, ate=ate,
-                    colunas=int(_numero(request.args.get("colunas")) or 900),
+                    colunas=_colunas(request.args.get("colunas"), 900),
                     lado=request.args.get("lado", "arquivo"),
                     filtro=request.args.get("filtro") in ("1", "sim", "true"),
                     layout=arranjo, contas=_contas(),
@@ -310,7 +311,7 @@ def create_app() -> Flask:
                 registro,
                 de=de,
                 ate=ate,
-                colunas=int(_numero(request.args.get("colunas")) or 900),
+                colunas=_colunas(request.args.get("colunas"), 900),
                 lado=request.args.get("lado", "arquivo"),
                 filtro=request.args.get("filtro") in ("1", "sim", "true"),
                 layout=arranjo,
@@ -332,7 +333,7 @@ def create_app() -> Flask:
         # coluna de pixel, não a amostra. Quem lê é o servidor, na amostra.
         pedidos = [
             (_numero(request.args.get(f"t{k}")),
-             int(_numero(request.args.get(f"passo{k}")) or 0),
+             _inteiro(request.args.get(f"passo{k}"), 0, -10**7, 10**7),
              _numero(request.args.get(f"ciclos{k}")) or 0.0)
             for k in (1, 2)
         ]
@@ -378,8 +379,8 @@ def create_app() -> Flask:
             registro = acervo.ler(sha)
         except FormatError as exc:
             return jsonify(erro=str(exc)), 404
-        corpo = request.get_json(silent=True) or {}
-        cru = dict(corpo.get("conta") or {})
+        corpo = _corpo()
+        cru = dict(corpo["conta"]) if isinstance(corpo.get("conta"), dict) else {}
         cru["id"] = cru.get("id") or "x9999"
         cru["nome"] = cru.get("nome") or "nova"
         if not str(cru.get("expressao") or "").strip():
@@ -397,7 +398,7 @@ def create_app() -> Flask:
         with fasor_mod.usando(corpo.get("estimador")):
             resposta = calculadora_mod.previa(
                 registro, lida[0], antes + [lida[0]], lado,
-                int(_numero(str(corpo.get("colunas") or "")) or 320))
+                _colunas(str(corpo.get("colunas") or ""), 320))
             resposta["valores"] = calculadora_mod.valores(
                 registro, antes + [lida[0]], lado, instantes)[-1]
         return jsonify(resposta)
@@ -409,7 +410,7 @@ def create_app() -> Flask:
             registro = acervo.ler(sha)
         except FormatError as exc:
             return jsonify(erro=str(exc)), 404
-        corpo = request.get_json(silent=True) or {}
+        corpo = _corpo()
         instantes = [_numero(str(corpo.get(k))) if corpo.get(k) is not None else None
                      for k in ("t1", "t2")]
         with fasor_mod.usando(corpo.get("estimador")):
@@ -439,7 +440,7 @@ def create_app() -> Flask:
     @app.post("/api/onda/<sha>/calculadora/modelos")
     def calculadora_guardar_modelo(sha: str):
         """«guardar como modelo»: a conta generalizada, FORA do registro."""
-        corpo = request.get_json(silent=True) or {}
+        corpo = _corpo()
         m = {k: corpo.get(k) for k in ("id", "nome", "categoria", "dominio", "expressao",
                                         "parametros", "descricao")}
         if not m["nome"] or not m["expressao"]:
@@ -462,7 +463,7 @@ def create_app() -> Flask:
             registro = acervo.ler(sha)
         except FormatError as exc:
             return jsonify(erro=str(exc)), 404
-        corpo = request.get_json(silent=True) or {}
+        corpo = _corpo()
         return jsonify(calculadora_mod.generalizar(str(corpo.get("expressao") or ""), registro))
 
     @app.post("/api/acervo/<sha>/nome")
@@ -474,7 +475,7 @@ def create_app() -> Flask:
         `.cfg`. O nome novo é uma camada por cima, e quem quiser o arquivo com
         ele exporta. Ver `library/acervo.py`.
         """
-        pedido = request.get_json(silent=True) or {}
+        pedido = _corpo()
         try:
             nome = acervo.gravar_apelido(sha, pedido.get("nome", ""))
         except FormatError as exc:
@@ -525,7 +526,7 @@ def create_app() -> Flask:
         corrigiu para sempre. Ver `library/acervo.py`.
         """
         try:
-            escolhas = acervo.gravar_vinculos(sha, request.get_json(silent=True) or {})
+            escolhas = acervo.gravar_vinculos(sha, _corpo())
         except FormatError as exc:
             return jsonify(erro=str(exc)), 404
         return jsonify(vinculos={str(k): v for k, v in escolhas.items()})
@@ -539,7 +540,7 @@ def create_app() -> Flask:
         Ver `formats/relacoes.py`.
         """
         try:
-            acervo.gravar_relacoes(sha, request.get_json(silent=True) or {})
+            acervo.gravar_relacoes(sha, _corpo())
             registro = acervo.ler(sha)
         except FormatError as exc:
             return jsonify(erro=str(exc)), 404
@@ -556,7 +557,7 @@ def create_app() -> Flask:
         """
         try:
             escolhas = acervo.gravar_trincas(sha,
-                                             request.get_json(silent=True) or {})
+                                             _corpo())
         except FormatError as exc:
             return jsonify(erro=str(exc)), 404
         return jsonify(trincas=escolhas)
@@ -572,7 +573,7 @@ def create_app() -> Flask:
         """
         try:
             atuais = acervo.gravar_vinculo_de_potencia(
-                sha, request.get_json(silent=True) or {})
+                sha, _corpo())
         except FormatError as exc:
             return jsonify(erro=str(exc)), 404
         return jsonify(vinculos_de_potencia=atuais)
@@ -599,7 +600,7 @@ def create_app() -> Flask:
         `sha` × `b`, ao lado do registro (`acervo.gravar_refino`). É dado
         gravado, como a correção de fase: o Ctrl+Z não o desfaz, e quem o
         apaga é voltar ao automático no «refinar»."""
-        corpo = request.get_json(silent=True) or {}
+        corpo = _corpo()
         d = corpo.get("d")
         if d is not None and (isinstance(d, bool) or not isinstance(d, (int, float))):
             return jsonify(erro="o deslocamento tem que ser um número (s)"), 400
@@ -616,7 +617,7 @@ def create_app() -> Flask:
         """Os números da janela «refinar» (`plot/refino.py`, em cima de
         `faultloc/refino.py`). O corpo traz o IED B (`b`), o alinhamento, a
         vista, os cursores, a linha do painel e o que se digitou."""
-        corpo = request.get_json(silent=True) or {}
+        corpo = _corpo()
         sha_b = str(corpo.get("b") or "")
         try:
             reg_a, reg_b = acervo.ler(sha), acervo.ler(sha_b)
@@ -640,7 +641,7 @@ def create_app() -> Flask:
             registro = acervo.ler(sha)
         except FormatError as exc:
             return jsonify(erro=str(exc)), 404
-        corpo = request.get_json(silent=True) or {}
+        corpo = _corpo()
         t = _numero(str(corpo.get("t"))) if corpo.get("t") is not None else None
         outros = _outros_registros(sha)
         modo = _alinhar()
@@ -693,6 +694,8 @@ def create_app() -> Flask:
         pedida_base = corpo.get("linha_base") or {}
         if isinstance(pedida_base, str):
             pedida_base = {"nome": pedida_base}
+        elif not isinstance(pedida_base, dict):
+            pedida_base = {}
         escolhida = str(pedida_base.get("nome") or "").strip()
 
         def fonte_da_entrada(pedido: dict, escolha: bool) -> dict:
@@ -846,7 +849,7 @@ def create_app() -> Flask:
         base = base_mod.ativa()
         if base is None or not base.existe:
             return jsonify(erro="Não há base de dados ativa."), 400
-        corpo = request.get_json(silent=True) or {}
+        corpo = _corpo()
 
         def opcional(chave: str) -> float | None:
             try:
@@ -883,7 +886,7 @@ def create_app() -> Flask:
         base = base_mod.ativa()
         if base is None or not base.existe:
             return jsonify(erro="Não há base de dados ativa."), 400
-        corpo = request.get_json(silent=True) or {}
+        corpo = _corpo()
         nome, acao = str(corpo.get("nome") or ""), corpo.get("acao")
         try:
             if acao == "papeis":
@@ -912,7 +915,7 @@ def create_app() -> Flask:
     @app.delete("/api/acervo/<sha>")
     def remover_do_acervo(sha: str):
         if not acervo.remover(sha):
-            return jsonify(erro="Este registro nao esta' no acervo."), 404
+            return jsonify(erro="Este registro não está no acervo."), 404
         return jsonify(removido=sha)
 
     # -----------------------------------------------------------------------
@@ -953,7 +956,7 @@ def create_app() -> Flask:
         gráfico), a resposta diz `disponivel: false` e a tela cai no navegador
         desenhado na página, que faz o mesmo trabalho.
         """
-        corpo = request.get_json(silent=True) or {}
+        corpo = _corpo()
         return jsonify(navegar_mod.nativo(
             corpo.get("inicial") or "",
             "Escolha a pasta onde o OscLab vai criar a base",
@@ -961,7 +964,7 @@ def create_app() -> Flask:
 
     @app.post("/api/base/criar")
     def criar_a_base():
-        corpo = request.get_json(silent=True) or {}
+        corpo = _corpo()
         try:
             base_mod.criar(corpo.get("nome") or "", corpo.get("onde") or None)
         except base_mod.ErroDaBase as erro:
@@ -970,7 +973,7 @@ def create_app() -> Flask:
 
     @app.post("/api/base/escolher")
     def escolher_a_base():
-        corpo = request.get_json(silent=True) or {}
+        corpo = _corpo()
         try:
             base_mod.escolher(corpo.get("pasta") or "")
         except base_mod.ErroDaBase as erro:
@@ -979,7 +982,7 @@ def create_app() -> Flask:
 
     @app.post("/api/base/gaveta")
     def ligar_a_gaveta():
-        corpo = request.get_json(silent=True) or {}
+        corpo = _corpo()
         try:
             base_mod.habilitar(corpo.get("gaveta") or "",
                                bool(corpo.get("ligada")))
@@ -1002,7 +1005,7 @@ def create_app() -> Flask:
         base = base_mod.ativa()
         if base is None or not base.existe:
             return jsonify(erro="Não há base de dados ativa."), 400
-        corpo = request.get_json(silent=True) or {}
+        corpo = _corpo()
         campos = {c: corpo.get(c) for c in digitais_mod.EDITAVEIS if c in corpo}
         # Quem escreveu pela tela é a fonte, a menos que a tela diga outra:
         # uma dedução corrigida à mão deixa de ser dedução. APAGAR também é
@@ -1029,7 +1032,7 @@ def create_app() -> Flask:
         base = base_mod.ativa()
         if base is None or not base.existe:
             return jsonify(erro="Não há base de dados ativa."), 400
-        corpo = request.get_json(silent=True) or {}
+        corpo = _corpo()
         apagou = digitais_mod.remover(base, corpo.get("fabricante") or "",
                                       corpo.get("modelo") or "", corpo.get("sinal") or "",
                                       corpo.get("instalacao") or "")
@@ -1059,7 +1062,7 @@ def create_app() -> Flask:
             # com três bytes invisíveis grudados e a coluna não casa.
             texto = enviado.read().decode("utf-8-sig", errors="replace")
         else:
-            texto = (request.get_json(silent=True) or {}).get("texto") or ""
+            texto = _corpo().get("texto") or ""
         if not texto.strip():
             return jsonify(erro="Nada para importar."), 400
         return jsonify(digitais_mod.importar(base, texto))
@@ -1116,7 +1119,7 @@ def create_app() -> Flask:
         # aba estiver aberta e as manda aqui, no corpo, com as escolhas (fuso,
         # relé, ordem da data). A conta do tempo é toda daqui
         # (`plot/eventos.pacote`); a tela só junta e ordena.
-        corpo = request.get_json(silent=True) or {}
+        corpo = _corpo()
         importados = corpo.get("importados") if isinstance(corpo, dict) else None
         importados = [x for x in (importados or []) if isinstance(x, dict)]
         listas = []
@@ -1157,9 +1160,12 @@ def create_app() -> Flask:
         if isinstance(resposta, tuple):
             return resposta
         pacotes = resposta.get_json().get("listas", [])
-        corpo = request.get_json(silent=True) or {}
-        largura = float(corpo.get("largura") or 600)
-        escondidos = [str(x) for x in (corpo.get("escondidos") or [])]
+        corpo = _corpo()
+        # `largura` é número da tela; outro tipo virava `float("abc")` e 500
+        # (caça de bugs B03). Presa entre 10 e o teto de colunas.
+        largura = float(_inteiro(corpo.get("largura"), 600, 10, COLUNAS_NO_MAXIMO))
+        escondidos = corpo.get("escondidos")
+        escondidos = [str(x) for x in escondidos] if isinstance(escondidos, list) else []
         return jsonify(geral=eventos_plot.distribuicao(pacotes, largura, escondidos))
 
     @app.get("/api/dicionario/<sha>")
@@ -1268,6 +1274,17 @@ def _layout() -> list | None:
     if not isinstance(corpo, dict):
         return None
     return paineis.de_json(corpo.get("paineis"))
+
+
+def _corpo() -> dict:
+    """O corpo JSON do pedido, SEMPRE um dicionário.
+
+    Corpo ausente, que não é JSON, ou que é JSON mas não é objeto (`[1, 2]`,
+    `"x"`) vira `{}`. Sem isso o `.get` da rota levantava `AttributeError` e o
+    pedido feito à mão virava erro 500 (caça de bugs B08, 11/11/2026).
+    """
+    corpo = request.get_json(silent=True)
+    return corpo if isinstance(corpo, dict) else {}
 
 
 def _outros_registros(sha: str) -> list:
@@ -1401,7 +1418,30 @@ def _numero(texto: str | None) -> float | None:
         valor = float(texto)
     except ValueError:
         return None
-    return valor if valor == valor else None      # NaN vira None
+    # NaN e infinito viram None: `int(inf)` levantava OverflowError, e um
+    # `?colunas=inf` digitado à mão virava erro 500 (caça de bugs B02).
+    return valor if math.isfinite(valor) else None
+
+
+#: O teto de colunas de pixel que um pedido pode pedir. Uma tela 8K com
+#: `devicePixelRatio` 2 não passa disto; `?colunas=1e12` fazia o numpy tentar
+#: alocar terabytes (caça de bugs B02).
+COLUNAS_NO_MAXIMO = 16_000
+
+
+def _inteiro(texto, padrao: int, minimo: int, maximo: int) -> int:
+    """Um inteiro da URL ou do corpo, preso em `[minimo, maximo]`; sem
+    número (ausente, texto, NaN, infinito), o `padrao`."""
+    valor = _numero(None if texto is None else str(texto))
+    if valor is None:
+        return padrao
+    return int(min(max(valor, minimo), maximo))
+
+
+def _colunas(texto, padrao: int) -> int:
+    """As colunas de pixel de um pedido: `padrao` sem número (ou zero),
+    presas entre 1 e `COLUNAS_NO_MAXIMO`."""
+    return _inteiro(texto, padrao, 0, COLUNAS_NO_MAXIMO) or padrao
 
 
 def serve(port: int = 8770, host: str = "127.0.0.1") -> None:

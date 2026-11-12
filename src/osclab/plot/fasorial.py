@@ -263,7 +263,8 @@ def _conferida(base: float, registro: Record, canal, lado: str, fator: float,
     pico = _pico_do_canal(registro, canal, lado)
     if pico is None or base <= 0:
         return base, origem
-    dentro = lambda x: x > 0 and FAIXA_COERENTE[0] <= pico / x <= FAIXA_COERENTE[1]
+    def dentro(x):
+        return x > 0 and FAIXA_COERENTE[0] <= pico / x <= FAIXA_COERENTE[1]
     if dentro(base):
         return base, origem
     if fator != 1.0 and dentro(base / fator):

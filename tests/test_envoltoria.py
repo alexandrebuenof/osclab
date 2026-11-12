@@ -314,6 +314,7 @@ def test_nan_na_frente_nao_envenena_o_registro_inteiro():
     cinco colunas do sinal, vazias.
     """
     import numpy as np
+
     from osclab.dsp import envoltoria
 
     por_ciclo = 32
@@ -335,6 +336,7 @@ def test_nan_na_frente_nao_envenena_o_registro_inteiro():
 def test_buraco_no_meio_so_apaga_as_janelas_que_o_contem():
     """Depois de passar o buraco, a conta volta ao normal."""
     import numpy as np
+
     from osclab.dsp import envoltoria
 
     por_ciclo = 32
@@ -356,6 +358,7 @@ def test_sinal_sem_furo_nao_muda_de_resultado():
     """A guarda não pode cobrar nada de quem não tem NaN — que é o caso de
     todo canal do arquivo."""
     import numpy as np
+
     from osclab.dsp import envoltoria
 
     por_ciclo = 20

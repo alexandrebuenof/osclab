@@ -54,6 +54,7 @@ acervo vazio: a pessoa só descobriria o problema no meio da análise.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -625,13 +626,13 @@ def guardar(enviados: Sequence[tuple[str, bytes]]) -> Resultado:
                 conteudos.setdefault(nome, arquivo.read_bytes())
 
     ignorados = sorted({
-        Path(n).suffix.lower() or "(sem extensao)"
+        Path(n).suffix.lower() or "(sem extensão)"
         for n in conteudos
         if Path(n).suffix.lower() not in EXTENSOES
     })
     if ignorados:
         resultado.problemas.append(
-            f"Ignorei arquivos {', '.join(ignorados)} — nao sao formato "
+            f"Ignorei arquivos {', '.join(ignorados)} — não são formato "
             f"de oscilografia que eu leia."
         )
 
@@ -643,16 +644,23 @@ def guardar(enviados: Sequence[tuple[str, bytes]]) -> Resultado:
         arquivos = {n: conteudos[n] for n in uteis.values()}
 
         principal = next((uteis[e] for e in PRINCIPAIS if e in uteis), None)
+        # O nome como o ARQUIVO o escreve (o grupo é chaveado em minúsculas:
+        # `REGISTRO.CFG` e `registro.dat` são o mesmo par).
+        nome = Path(principal or next(iter(uteis.values()))).stem
         se_falta = None
         if principal is None:
-            se_falta = (f"'{base}': guardei o .dat e estou esperando o .cfg. "
-                        f"Sem ele nao da' para saber o que cada numero significa "
-                        f"— mande o .cfg e o par se forma sozinho.")
+            # Diz o que FOI guardado: um `.hdr` sozinho não é um `.dat`
+            # (caça de bugs B07, 11/11/2026).
+            guardados = " e o ".join(sorted(uteis))
+            faltam = "o .cfg" if ".dat" in uteis else "o .cfg e o .dat"
+            se_falta = (f"'{nome}': guardei o {guardados} e estou esperando {faltam}. "
+                        f"Sem o .cfg não dá para saber o que cada número significa "
+                        f"— mande o que falta e o registro se forma sozinho.")
         else:
             par = PRECISA_DE_PAR.get(Path(principal).suffix.lower())
             if par is not None and par not in uteis:
-                se_falta = (f"'{base}': guardei o .cfg e estou esperando o .dat, "
-                            f"que e' onde estao as amostras. Mande o .dat e o "
+                se_falta = (f"'{nome}': guardei o .cfg e estou esperando o .dat, "
+                            f"que é onde estão as amostras. Mande o .dat e o "
                             f"par se forma sozinho.")
 
         if se_falta is not None:
@@ -676,7 +684,7 @@ def guardar(enviados: Sequence[tuple[str, bytes]]) -> Resultado:
             registro = registry.read(pasta / principal)
         except (FormatError, OSError) as exc:
             shutil.rmtree(pasta, ignore_errors=True)
-            resultado.problemas.append(f"'{base}': {exc}")
+            resultado.problemas.append(f"'{nome}': {exc}")
             continue
 
         item = _resumir(sha, Path(principal).stem, list(arquivos), registro)
@@ -694,13 +702,11 @@ def guardar(enviados: Sequence[tuple[str, bytes]]) -> Resultado:
 def _gravar_resumo(pasta: Path, item: Item) -> None:
     """O `meta.json` de um registro. Falhar aqui nao pode derrubar nada: ele e'
     cache, e sem ele a lista so' fica mais lenta."""
-    try:
+    with contextlib.suppress(OSError):
         (pasta / "meta.json").write_text(
             json.dumps(item.como_dicionario(), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-    except OSError:
-        pass
 
 
 def _refazer_resumo(sha: str, item: Item) -> Item:
@@ -822,7 +828,7 @@ def ler(sha: str) -> Record:
     """
     caminho = caminho_principal(sha)
     if caminho is None:
-        raise FormatError("Este registro nao esta' no acervo.")
+        raise FormatError("Este registro não está no acervo.")
     pasta = caminho.parent
     chave = (str(pasta), sha)
     carimbo = _carimbo(pasta)
@@ -893,7 +899,7 @@ def gravar_vinculos(sha: str, escolhas: dict) -> dict[int, str]:
     diferentes e a tela precisa poder dizer as duas.
     """
     if obter(sha) is None:
-        raise FormatError("Este registro nao esta' no acervo.")
+        raise FormatError("Este registro não está no acervo.")
     atuais = vinculos(sha)
     for chave, valor in (escolhas or {}).items():
         try:
@@ -919,19 +925,19 @@ def gravar_vinculos(sha: str, escolhas: dict) -> dict[int, str]:
 
 
 # ---------------------------------------------------------------------------
-# O alinhamento escolhido a mao no «refinar» (decidido em 11/11/2026)
+# O alinhamento escolhido à mão no «refinar» (decidido em 11/11/2026)
 # ---------------------------------------------------------------------------
 #
 # O deslocamento MANUAL entre dois terminais muda o km da seq. negativa que
-# vai para o laudo. Como a correcao de fase, ele e' GRAVADO ao lado do
-# registro: reabrir o par tem que dar o mesmo km. Nao entra no Ctrl+Z (e'
-# dado gravado); desfaz-se voltando ao automatico no «refinar».
+# vai para o laudo. Como a correção de fase, ele é GRAVADO ao lado do
+# registro: reabrir o par tem que dar o mesmo km. Não entra no Ctrl+Z (é
+# dado gravado); desfaz-se voltando ao automático no «refinar».
 #
 # Mora na pasta do registro A, num `refino.json` `{sha de B: {"d": s}}`, com
 # `d` no sentido de `alinhamento.deslocamento`: o instante `t` de A cai em
-# `t + d` em B. O PAR e' um so': abrir B com A ao lado le' o mesmo numero com
+# `t + d` em B. O PAR é um só: abrir B com A ao lado lê o mesmo número com
 # o sinal trocado (`-d`), e gravar por um lado apaga o que o outro lado
-# tivesse -- duas copias do mesmo dado e' como elas divergem.
+# tivesse — duas cópias do mesmo dado é como elas divergem.
 
 REFINO = "refino.json"
 
@@ -967,7 +973,7 @@ def _escrever_refino(sha: str, dados: dict) -> None:
 def refino_gravado(sha: str, outro: str) -> float | None:
     """O `d` (s) gravado para o par `sha` (a aba) e `outro` (o B), ou `None`.
 
-    Procura primeiro na pasta de `sha`; senao, na de `outro`, com o sinal
+    Procura primeiro na pasta de `sha`; senão, na de `outro`, com o sinal
     trocado (o par visto do outro lado).
     """
     if obter(sha) is None or obter(outro) is None or sha == outro:
@@ -983,13 +989,13 @@ def gravar_refino(sha: str, outro: str, d) -> float | None:
     """Grava (ou, com `d` `None`, apaga) o alinhamento manual do par.
 
     Devolve o que ficou valendo. Grava na pasta de `sha` e apaga a entrada
-    espelhada na de `outro`, para o par ter uma copia so'.
+    espelhada na de `outro`, para o par ter uma cópia só.
     """
     if obter(sha) is None or obter(outro) is None or sha == outro:
-        raise FormatError("Este registro nao esta' no acervo.")
+        raise FormatError("Este registro não está no acervo.")
     valor = _d_valido({"d": d}) if d is not None else None
     if d is not None and valor is None:
-        raise ValueError("O deslocamento tem que ser um numero finito (s).")
+        raise ValueError("O deslocamento tem que ser um número finito (s).")
     meus = _ler_refino(sha)
     if valor is None:
         meus.pop(outro, None)
@@ -1049,7 +1055,7 @@ def gravar_apelido(sha: str, nome: str) -> str:
     """
     item = obter(sha)
     if item is None:
-        raise FormatError("Este registro nao esta' no acervo.")
+        raise FormatError("Este registro não está no acervo.")
     # Uma linha so', e sem os caracteres que estragam nome de arquivo na
     # exportacao -- o apelido vira nome de arquivo la'.
     limpo = " ".join(str(nome or "").split())
@@ -1143,7 +1149,7 @@ def gravar_trincas(sha: str, escolhas: dict) -> dict[str, dict[str, int]]:
     valer. E' como se desfaz, e por isso nao ha' botao de apagar em separado.
     """
     if obter(sha) is None:
-        raise FormatError("Este registro nao esta' no acervo.")
+        raise FormatError("Este registro não está no acervo.")
     atuais = trincas(sha)
     for chave, valor in (escolhas or {}).items():
         limpo = _fases_validas(valor)
@@ -1209,7 +1215,7 @@ def gravar_vinculo_de_potencia(sha: str, pedido: dict) -> dict:
     de um par apontando para o nada.
     """
     if obter(sha) is None:
-        raise FormatError("Este registro nao esta' no acervo.")
+        raise FormatError("Este registro não está no acervo.")
     atuais = vinculos_de_potencia(sha)
     de = str((pedido or {}).get("de") or "").strip()
     if not de:
@@ -1308,7 +1314,7 @@ def gravar_relacoes(sha: str, pedido: dict) -> dict:
     que não é relação) APAGA aquela entrada, e volta a valer o arquivo.
     """
     if obter(sha) is None:
-        raise FormatError("Este registro nao esta' no acervo.")
+        raise FormatError("Este registro não está no acervo.")
     atuais = relacoes(sha)
     for chave, valor in ((pedido or {}).get("grupos") or {}).items():
         par = relacoes_mod.ler_texto(valor)

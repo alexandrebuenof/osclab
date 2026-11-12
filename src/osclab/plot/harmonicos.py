@@ -68,7 +68,7 @@ CURVA `IA DC` do gráfico analógico.
 from __future__ import annotations
 
 from osclab.dsp import fasor
-from osclab.formats import conjuntos, fases
+from osclab.formats import fases
 from osclab.formats.base import Record
 from osclab.plot import catalogo
 

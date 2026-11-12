@@ -235,6 +235,10 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   let dados = null;
   let pendente = null;
 
+  //: O aviso que a leitura dos cursores deixou no rodapé, para ela o tirar
+  //: quando voltar a funcionar — sem apagar aviso de outro dono.
+  let avisoDaLeitura = "";
+
   //: O arrasto em curso, ou null. Declarado aqui porque a roda também consulta.
   let arrastando = null;
 
@@ -2230,7 +2234,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     // o próprio texto, que é onde a mão vai.
     const nome = criar("button", "nome-painel", painel.nome);
     nome.title = "clique para renomear este gráfico";
-    nome.addEventListener("click", () => editarNome(nome, painel));
+    nome.addEventListener("click", () => editarNomeDoPainel(nome, painel));
     titulo.append(nome);
 
     if (contagem) titulo.append(criar("span", "contagem-painel", contagem));
@@ -2566,7 +2570,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   }
 
   /** Troca o título por um campo de texto, e devolve o título no fim. */
-  function editarNome(botao, painel) {
+  function editarNomeDoPainel(botao, painel) {
     const campo = document.createElement("input");
     campo.type = "text";
     campo.className = "nome-painel-campo";
@@ -3299,7 +3303,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
    * veio. Grava ao sair do campo (`change`).
    */
   function campoDaRelacao(valor, emUso, origem, rotulo, aoGravar) {
-    const campo = criar("input", "calc-num");
+    const campo = criar("input", "calc-num relacao-digitavel");
     campo.type = "text";
     campo.value = valor || "";
     // Vazio, o campo mostra apagada a relação que vale — com «dig.» quando
@@ -3877,6 +3881,12 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       return linha.motivo
         ? `${linha.motivo} — só a onda do arquivo, então.`
         : "não dá para tirar fasor deste canal.";
+    }
+    // A potência mora no bloco das componentes, mas NÃO é componente
+    // simétrica: o texto herdado dizia que era (caça de bugs B12).
+    if ([...(linha.contas || new Map()).values()].some((x) => /^(?:[A-Z]\|)?w/.test(String(x.id || "")))) {
+      return "a potência sai dos fasores de tensão e de corrente, um ciclo por "
+           + "vez: ela só existe como medida de um ciclo, não como onda.";
     }
     if (linha.bloco === "sequencia") {
       return "componente simétrica é fasor, e fasor não tem valor instantâneo: "
@@ -12504,7 +12514,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const b = (outrosRegistros[0] || {}).sha;
     if (!b || !pacoteLoc) return;
     try {
-      sessionStorage.setItem(`osclab:refino:${sha}:${b}`, JSON.stringify({ linha: pacoteLoc.linha || null }));
+      sessionStorage.setItem(`osclab:refino:${sha}:${b}`, JSON.stringify({ linha: pacoteLoc.linha || null, alinhar: alinharPor }));
     } catch (_e) { /* sem sessão: o refino abre sem a linha, e diz isso */ }
     fecharRefino();
     const fundo = criar("div", "rf-casa");
@@ -15138,16 +15148,16 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   function ligarNomeDoRegistro() {
     const titulo = document.getElementById("nome-do-registro");
     if (!titulo) return;
-    titulo.addEventListener("click", () => editarNome(titulo));
+    titulo.addEventListener("click", () => editarNomeDoRegistro(titulo));
     titulo.addEventListener("keydown", (evento) => {
       if (evento.key === "Enter" || evento.key === " ") {
         evento.preventDefault();
-        editarNome(titulo);
+        editarNomeDoRegistro(titulo);
       }
     });
   }
 
-  function editarNome(titulo) {
+  function editarNomeDoRegistro(titulo) {
     if (titulo.hidden) return;
     const antes = titulo.textContent.trim();
     const campo = document.createElement("input");
@@ -16759,8 +16769,20 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
 
     try {
       const r = await fetch(`/api/onda/${sha}/leitura?${p}`, pedidoComLayout());
+      if (!r.ok) {
+        // A leitura é UM pedido para todos os painéis: falhou, nenhuma
+        // tabelinha da tela anda. Calar isso deixava a tela inteira parada no
+        // instante velho sem aviso (caça de bugs B01, 11/11/2026).
+        let motivo = `${r.status}`;
+        try { motivo = (await r.json()).erro || motivo; } catch (_e) { /* sem corpo */ }
+        avisoDaLeitura = `Não consegui ler os cursores (${motivo}). As tabelinhas `
+          + "continuam no instante anterior.";
+        avisarNoPe(avisoDaLeitura);
+      }
       if (r.ok) {
         medida = await r.json();
+        if (avisoDaLeitura && rodape && rodape.textContent === avisoDaLeitura) avisarNoPe("");
+        avisoDaLeitura = "";
 
         // O servidor encosta o cursor na amostra mais próxima e a tela obedece
         // — MENOS no cursor que a mão está arrastando agora.
@@ -16783,7 +16805,11 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         if (estadoLoc.aberta) pedirLocalizacao();
         pedirPainelLoc();
       }
-    } catch { /* leitura é acessório: falhou, o desenho continua de pé */ }
+    } catch (erro) {
+      // A leitura é acessório: falhou, o desenho continua de pé — mas DIZ.
+      avisoDaLeitura = `Não consegui ler os cursores (${erro.message}).`;
+      avisarNoPe(avisoDaLeitura);
+    }
 
     lendo = false;
     if (pedidoDeLeitura) {

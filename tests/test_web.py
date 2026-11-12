@@ -1867,7 +1867,8 @@ def test_o_catalogo_divide_por_PROCEDENCIA_na_ordem_que_ele_pediu():
 
     # Em «lista», «Outros sinais» entra no MEIO — e uma vez só.
     lista = js[js.index("function blocosDoCatalogo("):]
-    lista = lista[:lista.index("function blocoDosOutros(")] if "function blocoDosOutros(" in lista[1:] else lista
+    if "function blocoDosOutros(" in lista[1:]:
+        lista = lista[:lista.index("function blocoDosOutros(")]
     corpo = js[js.index("function blocosDoCatalogo("):]
     corpo = corpo[:corpo.index("\n  //: Os blocos que o usuário recolheu")]
     assert corpo.index('titulo: "Senoides"') < corpo.index("blocoDosOutros(outros)")
@@ -2288,7 +2289,7 @@ def test_o_ICONE_da_base_e_a_pilha_de_discos_que_ele_escolheu():
     assert "--ic-base:" in css
     # A linha inteira: o próprio `data:` tem ponto-e-vírgula dentro
     # (`image/svg+xml;utf8`), então cortar no primeiro `;` cortaria o desenho.
-    pilha = next(l for l in css.splitlines() if l.strip().startswith("--ic-base:"))
+    pilha = next(x for x in css.splitlines() if x.strip().startswith("--ic-base:"))
     assert "ellipse" in pilha                 # o disco de cima
     assert pilha.count("<path") == 2          # as duas paredes da pilha
     assert "viewBox='0 0 48 48'" in pilha     # o mesmo quadro dos ícones do mosaico

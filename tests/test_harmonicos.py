@@ -14,9 +14,9 @@ import numpy as np
 import pytest
 
 from osclab.dsp import fasor
-from osclab.plot import harmonicos, janela, leitura, paineis
+from osclab.plot import janela, leitura, paineis
 from tests import arranjo
-from tests.test_catalogo import PICO, trifasico
+from tests.test_catalogo import trifasico
 
 
 def _onda(amplitudes: dict[int, float], por_ciclo: float = 2000.0 / 60.0,
@@ -292,6 +292,7 @@ def test_a_janela_fora_de_regime_apaga_depois_da_transicao():
     fim do registro — ver `fasor.regime_da_janela`.
     """
     import numpy as np
+
     from osclab.dsp import fasor
 
     por_ciclo = 32
@@ -324,6 +325,7 @@ def test_sem_ciclo_anterior_nao_ha_aviso():
     """No primeiro ciclo do arquivo não há com o que comparar. Avisar por falta
     de dado seria pior que calar."""
     import numpy as np
+
     from osclab.dsp import fasor
     assert fasor.regime_da_janela(np.ones(32), None) == 0.0
     assert fasor.regime_da_janela(np.zeros(32), np.zeros(32)) == 0.0
