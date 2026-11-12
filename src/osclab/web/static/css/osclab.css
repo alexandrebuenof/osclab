@@ -2718,6 +2718,9 @@ html.dif-aberta { --calc-largura: 460px; }
    escondido não é o mesmo que inexistente, e quem procura precisa ver por quê. */
 .busca .achado.sem-placa .nome { color: var(--suave); text-decoration: line-through; }
 .busca .achado .sem-placa-aviso { color: var(--atencao); font-size: 11px; cursor: help; }
+/* O digital que picota: a contagem no lugar da hora, apagada — ela explica
+   por que ele ficou fora do gráfico, não é medida do evento. */
+.busca .achado .mudancas { color: var(--suave); }
 
 /* A MESMA faixa alternada do catálogo analógico: as três janelas escolhem
    sinal do mesmo jeito e passaram a ter a mesma cara. */

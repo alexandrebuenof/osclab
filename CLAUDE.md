@@ -545,7 +545,19 @@ osclab/
   `[IOBOARDS]` do `.hdr` da SEL): um 487E-3 com placa de 8 entradas grava
   IN301–IN324 assim mesmo, com um contador de amostras em IN317–IN324. Fica
   fora da tela padrão e aparece riscado na busca, com o porquê
-  (`formats/ajustes.digitais_sem_placa`, 24/10/2026).
+  (`formats/ajustes.digitais_sem_placa`, 24/10/2026). **A segunda exceção é o
+  digital que PICOTA** *(12/11/2026)*: mais de 200 transições
+  (`digitais.PICOTA_MUDANCAS`) E ainda mudando no último quarto do registro
+  (`PICOTA_FIM`) — pelo COMPORTAMENTO, nunca pelo nome. Motivo: o `ENX2AG/BG/CG`
+  de um SEL-411L (supervisão da reatância do quadrilateral de terra) muda 415 a
+  486 vezes num registro de 3 s, o tempo todo depois da abertura. Medido nos
+  registros de teste reais (1916 digitais que mudaram, 35 registros): 98 % mudam
+  até 6 vezes; trip, 52, 79, OUT, 21, 67, 50 e 51 nunca passam de 10; o maior
+  sinal de proteção foi o bloqueio por harmônico do 87 numa energização (51,
+  até o fim de um registro de 1 s) — 200 é quatro vezes ele. Fica fora do
+  gráfico padrão e vai para o bloco «picotando» do «+ sinal», com
+  «· N mudanças» ao lado; nada no cabeçalho do painel. Sem placa vence
+  picotando (o contador do 487E fica «sem placa»).
 - **Só os digitais que MUDARAM entram na tela, ordenados pela hora da primeira
   mudança.** Um SEL-487E tem 5760 entradas binárias; foi a falta deste critério
   que segurou este marco. A ordem faz a tela contar a sequência do evento de

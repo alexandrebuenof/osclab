@@ -85,7 +85,7 @@
   //: navegador recarrega o `.js` sozinho: quem troca de versão sem reiniciar
   //: fica com tela nova e servidor velho, e o resultado é uma tela que mostra
   //: coisas que não fazem sentido sem dar erro nenhum. Já custou três rodadas.
-  const CONTRATO = 30;
+  const CONTRATO = 31;
 
   //: A margem de cima abriga a etiqueta numerada dos cursores, que fica FORA da
   //: área de desenho: por dentro ela tapa o pico da onda — e o pico é
@@ -2135,12 +2135,14 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const quantos = painel.tiras.length;
 
     const semPlaca = dados.digitais_sem_placa || 0;
+    const picotando = dados.digitais_picotando || 0;
     const parados = (dados.digitais_disponiveis || []).length
-                  - (dados.digitais_mudaram || 0) - semPlaca;
+                  - (dados.digitais_mudaram || 0) - semPlaca - picotando;
     const busca = criar("button", "medida", "+ sinal");
     busca.title = `${dados.digitais_mudaram} digitais mudaram durante o `
                 + `registro; ${parados} ficaram parados.`
                 + (semPlaca ? ` ${semPlaca} o relé grava sem ter a placa (ficam de fora).` : "")
+                + (picotando ? ` ${picotando} picotam até o fim do registro (ficam no bloco «picotando»).` : "")
                 + " Clique para procurar qualquer um pelo nome e trazê-lo para cá.";
     busca.addEventListener("click", () => abrirBusca(painel));
 
@@ -2924,13 +2926,22 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       const procura = campo.value.trim().toUpperCase();
       // A busca filtra só os que ainda NÃO estão na tela: os outros já se veem
       // no gráfico, e quem procura está procurando entre os que faltam.
-      const fora = disponiveis
+      const achados = disponiveis
         .filter((d) => !escolhidos.has(chaveDo(d)))
-        .filter((d) => combinaNome(d.nome, procura))
-        .slice(0, 300);
+        .filter((d) => combinaNome(d.nome, procura));
+      // Os que PICOTAM (mudam centenas de vezes até o fim do registro) vêm
+      // num bloco à parte, no fim: não entram na tela sozinhos, e escondido
+      // não é inexistente. Ver `plot/digitais.picota`.
+      const picotam = achados.filter((d) => d.picota);
+      const fora = achados.filter((d) => !d.picota).slice(0, 300);
+      if (picotam.length) {
+        fora.push({ divisor: `picotando (${picotam.length}) — mudam o registro inteiro` },
+                  ...picotam);
+      }
       const naTela = disponiveis.filter((d) => escolhidos.has(chaveDo(d)));
 
       const desenhar = (d) => {
+        if (d.divisor) return criar("div", "divisor picotando", d.divisor);
         const item = criar("label", d.mudou ? "achado mudou" : "achado");
         const marca = document.createElement("input");
         marca.type = "checkbox";
@@ -2952,6 +2963,14 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
                       + "tem esta entrada/saída. O relé grava o bit assim mesmo, "
                       + "e o que muda nele não é sinal de nada.";
           item.append(aviso);
+        } else if (d.picota) {
+          // A contagem é o que diz por que ele não entrou sozinho na tela.
+          item.classList.add("picota");
+          const conta = criar("span", "quando mudancas", `· ${d.mudancas} mudanças`);
+          conta.title = "Muda centenas de vezes e continua mudando até o fim do "
+                      + "registro: fica fora do gráfico padrão. Marque para pô-lo "
+                      + "na tela como qualquer outro.";
+          item.append(conta);
         } else if (d.instante !== null && d.instante !== undefined) {
           // Quem mudou ganha a hora da primeira mudança: é o que distingue
           // "este é o trip que eu procuro" de um homônimo.
