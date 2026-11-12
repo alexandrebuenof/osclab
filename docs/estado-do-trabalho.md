@@ -1,5 +1,23 @@
 # Onde o trabalho está
 
+**12/11/2026 — a roda do localizador, de novo (ramo do agente, para revisão):** «difícil
+dar zoom; quando damos, o gráfico movimenta e some». Causa medida: (1) cada pedido de
+janela refazia `digitais.resumos` do registro inteiro — 0,95 s dos 1,15 s num SEL-411L de
+3968 digitais, o dobro com as duas oscilografias da aba do localizador; (2) a tela mandava
+um pedido a cada 70 ms de roda SEM esperar o anterior, todos a partir da mesma janela: a
+resposta seguinte apagava o zoom da anterior e, fora de ordem, punha a janela para trás
+(dez entalhes com 150–400 ms de resposta: 0,51× em vez de 0,107×). Corrigido: resumo
+guardado por registro aberto (`plot/digitais.py`; 1,08 → 0,17 s por janela), um pedido de
+roda em voo por vez com os entalhes acumulados (`mandarZoom` em `onda.js`), resposta
+velha descartada (`carregar` numerado), roda sem `cancelable` não amplia. O sintético do
+mini-EMTP responde em 30 ms e nunca mostraria isto: o teste
+`tests/test_roda_localizador_navegador.py` atrasa as respostas de propósito.
+**Para ele decidir:** a régua vertical do localizador é FIXA (do registro inteiro) — no
+zoom a curva não foge, mas a 61 km numa régua de 0–100 ela vira uma linha quase reta.
+Alternativa: a régua se ajustar às curvas da janela visível (lê o detalhe do platô, mas a
+escala muda a cada entalhe). Também não conferido no Chrome de verdade: o caso da roda
+que chega rolando a página (o `cancelable`) não se reproduz no Chrome sem janela.
+
 **12/11/2026 — digital que PICOTA fora do gráfico padrão (ramo do agente, para revisão):**
 mais de 200 transições E ainda mudando no último quarto do registro → não entra no
 gráfico digital padrão; aparece no «+ sinal», num bloco «picotando», com «· N mudanças»
