@@ -28,7 +28,6 @@ Ampliar vira um pedido novo — em `localhost` isso custa milissegundos.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -184,4 +183,9 @@ def titular_eixos(painel: dict) -> None:
 def arredondar(v: np.ndarray, intervalo: float) -> list[float]:
     """Corta casas decimais que não cabem na tela, para o JSON não inchar."""
     casas = escala.casas_decimais(intervalo) + 2
-    return [None if not math.isfinite(x) else round(float(x), casas) for x in v]
+    # `tolist()` primeiro: o `round` do Python sobre `float` puro é o mesmo
+    # número de sempre, sem o custo de um escalar do numpy por amostra (era a
+    # maior conta de um pedido de janela depois que as do registro inteiro
+    # passaram a ser lembradas). `x - x` só não é zero para NaN e infinito.
+    return [round(x, casas) if x - x == 0 else None
+            for x in np.asarray(v, dtype=np.float64).tolist()]

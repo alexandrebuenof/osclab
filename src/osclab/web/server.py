@@ -293,13 +293,16 @@ def create_app() -> Flask:
         )
         arranjo = _layout()
         outros = _outros_registros(sha)
+        # O que a tela já tem igual desde o pedido anterior não viaja de novo
+        # (o catálogo, a lista de todos os digitais). Ver `janela.sem_repetir`.
+        selo = request.args.get("estaticos")
         # O ESTIMADOR do fasor (Fourier ou cosseno) vale para tudo que este
         # pedido calcula. Ver `dsp/fasor.usando`.
         with fasor_mod.usando(request.args.get("estimador")):
             if outros:
                 # Mais de um registro na aba: o A como sempre, os outros na
                 # janela deslocada de cada um. Ver `plot/varios.py`.
-                return jsonify(varios_mod.montar_janela(
+                return jsonify(janela.sem_repetir(varios_mod.montar_janela(
                     registro, outros, alinhar=_alinhar(), montar=janela.montar,
                     apelido_a=acervo.apelido(sha), sha_a=sha,
                     de=de, ate=ate,
@@ -307,8 +310,8 @@ def create_app() -> Flask:
                     lado=request.args.get("lado", "arquivo"),
                     filtro=request.args.get("filtro") in ("1", "sim", "true"),
                     layout=arranjo, contas=_contas(),
-                    ajustes=_ajustes_do_registro(sha, registro, arranjo)))
-            return jsonify(janela.montar(
+                    ajustes=_ajustes_do_registro(sha, registro, arranjo)), selo))
+            return jsonify(janela.sem_repetir(janela.montar(
                 registro,
                 de=de,
                 ate=ate,
@@ -321,7 +324,7 @@ def create_app() -> Flask:
                 # deles. Ler o `.hdr` a cada arrasto de janela seria um arquivo a
                 # mais aberto em todo gesto, para nada na maioria das telas.
                 ajustes=_ajustes_do_registro(sha, registro, arranjo),
-            ))
+            ), selo))
 
     @app.route("/api/onda/<sha>/leitura", methods=["GET", "POST"])
     def leitura_dos_cursores(sha: str):

@@ -245,7 +245,7 @@ import numpy as np
 
 from osclab.dsp import envoltoria, potencia, simetricas
 from osclab.formats import conjuntos, fases
-from osclab.formats.base import Record, lembrado
+from osclab.formats.base import Record, impressao_das_amostras, lembrado
 from osclab.plot import conversao, sinais, unidades
 
 #: Índice da componente no resultado de `simetricas.de_fasores`, e como ela se
@@ -581,16 +581,40 @@ def de_registro(registro: Record, lado: str = "arquivo",
     posição do cursor pede o catálogo, e montá-lo mede todos os canais. Sai
     uma CÓPIA da lista, para quem a recebe poder mexer nela.
     """
-    from osclab.dsp import fasor
     contas = tuple(contas_do_usuario or ())
-    return list(lembrado(
-        registro, "catalogo",
-        (lado, contas, str(registro.filtering), repr(registro.trincas_escolhidas),
-         repr(registro.vinculos_de_potencia), repr(sorted(registro.digitais_sem_placa)),
-         registro.line_frequency, fasor.estimador()),
-        (registro.analog_channels, registro.analog, registro.time,
-         registro.status_channels, registro.sample_rates),
-        lambda: tuple(_montar(registro, lado, contas))))
+    iguais, mesmos = _chave(registro, lado, contas)
+    return list(lembrado(registro, "catalogo", iguais, mesmos,
+                         lambda: tuple(_montar(registro, lado, contas))))
+
+
+def _chave(registro: Record, lado: str, contas: tuple) -> tuple[tuple, tuple]:
+    """Os `iguais` e os `mesmos` de tudo que sai do catálogo de um lado."""
+    from osclab.dsp import fasor
+    # A impressão das amostras pega quem altera as matrizes NO LUGAR (ver
+    # `base.impressao_das_amostras`).
+    return ((lado, contas, str(registro.filtering), repr(registro.trincas_escolhidas),
+             repr(registro.vinculos_de_potencia), repr(sorted(registro.digitais_sem_placa)),
+             registro.line_frequency, fasor.estimador(), impressao_das_amostras(registro)),
+            (registro.analog_channels, registro.analog, registro.time,
+             registro.status_channels, registro.sample_rates))
+
+
+def energia(registro: Record, lado: str, contas_do_usuario=()) -> dict:
+    """`energia_das_linhas` do catálogo deste lado, lembrada no registro.
+
+    É do registro INTEIRO (mede cada linha do catálogo do começo ao fim) e ia
+    em todo pedido de janela: num registro de um milhão de amostras por canal,
+    5,4 s de cada gesto (12/11/2026). A chave é a do catálogo: as mesmas
+    linhas, a mesma conta.
+    """
+    contas = tuple(contas_do_usuario or ())
+    iguais, mesmos = _chave(registro, lado, contas)
+
+    def fazer():
+        escalas = unidades.por_unidade(registro, lado)
+        return energia_das_linhas(registro, de_registro(registro, lado, contas), lado,
+                                  escalas, registro.trechos)
+    return dict(lembrado(registro, "catalogo.energia", iguais, mesmos, fazer))
 
 
 def _montar(registro: Record, lado: str, contas_do_usuario) -> list[Sinal]:

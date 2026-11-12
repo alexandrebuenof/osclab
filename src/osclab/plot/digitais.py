@@ -32,8 +32,17 @@ estreito continua marcando a coluna inteira — fica mais largo do que é, e iss
 é o certo: some se fosse fiel à largura, e um trip que sumiu da tela é pior que
 um trip gordo demais.
 
-O mínimo vai junto para a tela saber onde houve **transição dentro da coluna** e
-não desenhar um degrau que não existe.
+**A conta é sobre as TRANSIÇÕES, não sobre as amostras** (12/11/2026). As
+amostras em que cada digital muda de estado são achadas uma vez por registro
+aberto (`trocas`); a tira de uma janela sai delas por busca binária nas bordas
+das colunas — o estado no começo de cada coluna e se alguma transição cai
+dentro dela. É o mesmo máximo da coluna, sem olhar amostra nenhuma: o custo é
+das COLUNAS de pixel, não do tamanho do registro (um registro de ondas
+viajantes tem milhões de amostras por canal).
+
+E a tira vai à tela como as COLUNAS EM QUE ELA TROCA DE ESTADO
+(`inicial`, `trocas`, `colunas`), não como um 0/1 por coluna: 205 tiras de
+1300 colunas eram 2,1 MB de JSON por pedido de janela, num pacote de 2,9 MB.
 
 ## O digital que PICOTA (12/11/2026)
 
@@ -58,13 +67,11 @@ o número de mudanças ao lado.
 
 from __future__ import annotations
 
-import threading
-import weakref
 from dataclasses import dataclass
 
 import numpy as np
 
-from osclab.formats.base import Record
+from osclab.formats.base import Record, lembrado_do_registro
 
 
 @dataclass(frozen=True)
@@ -111,34 +118,58 @@ def picota(mudancas: int, ultima: float | None, inicio: float, fim: float) -> bo
     return ultima >= inicio + PICOTA_FIM * (fim - inicio)
 
 
-def _transicoes(dados: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+#: Linhas da matriz de estados por passada ao achar as transições: a
+#: comparação vizinha-a-vizinha cria uma matriz de booleanos do tamanho do
+#: pedaço, e um SEL-487E tem 5760 digitais.
+_LINHAS_POR_PASSADA = 256
+
+
+def trocas(registro: Record) -> tuple[np.ndarray, ...]:
+    """Por canal digital, as amostras em que ele mudou de estado.
+
+    `trocas(r)[k][j]` é a amostra em que o canal `k` mudou pela `j`-ésima vez
+    (a primeira amostra do estado novo). Feito UMA vez por registro aberto
+    (`base.lembrado`): é a única passada sobre a matriz de estados
+    inteira; a tira de cada janela, o resumo e o ímã saem daqui. Os arrays são
+    só de leitura.
+    """
+    return lembrado_do_registro(registro, "digitais.trocas", (),
+                                lambda: _trocas(registro.status))
+
+
+def _trocas(dados: np.ndarray) -> tuple[np.ndarray, ...]:
+    if dados.ndim != 2 or dados.shape[0] == 0:
+        return ()
+    n = dados.shape[1]
+    tipo = np.int32 if n < 2**31 else np.int64
+    if n < 2:
+        vazio = np.empty(0, dtype=tipo)
+        vazio.setflags(write=False)
+        return tuple(vazio for _ in range(dados.shape[0]))
+    saida: list[np.ndarray] = []
+    for a in range(0, dados.shape[0], _LINHAS_POR_PASSADA):
+        bloco = dados[a:a + _LINHAS_POR_PASSADA]
+        linhas, colunas = np.nonzero(bloco[:, 1:] != bloco[:, :-1])
+        # `+1`: a comparação de `k` com `k+1` acusa a mudança em `k+1`.
+        colunas = (colunas + 1).astype(tipo)
+        cortes = np.searchsorted(linhas, np.arange(1, bloco.shape[0]))
+        for parte in np.split(colunas, cortes):
+            parte.setflags(write=False)
+            saida.append(parte)
+    return tuple(saida)
+
+
+def _transicoes(registro: Record) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Por canal: quantas transições, a amostra da primeira e a da última.
 
-    Tudo de uma vez sobre a matriz, sem percorrer amostra. Canal parado tem
-    contagem 0 e as duas amostras -1.
+    Sai de `trocas`, sem percorrer amostra. Canal parado tem contagem 0 e as
+    duas amostras -1.
     """
-    linhas = dados.shape[0] if dados.ndim == 2 else 0
-    if linhas == 0 or dados.shape[1] < 2:
-        vazio = np.zeros(linhas, dtype=np.int64)
-        return vazio, vazio - 1, vazio - 1
-    muda = dados[:, 1:] != dados[:, :-1]
-    contagem = muda.sum(axis=1).astype(np.int64)
-    # `+1`: `muda[k]` compara `k` com `k+1`, e a mudança acontece em `k+1`.
-    primeira = np.argmax(muda, axis=1) + 1
-    ultima = muda.shape[1] - np.argmax(muda[:, ::-1], axis=1)
-    parado = contagem == 0
-    primeira[parado] = -1
-    ultima[parado] = -1
+    todas = trocas(registro)
+    contagem = np.array([t.size for t in todas], dtype=np.int64)
+    primeira = np.array([int(t[0]) if t.size else -1 for t in todas], dtype=np.int64)
+    ultima = np.array([int(t[-1]) if t.size else -1 for t in todas], dtype=np.int64)
     return contagem, primeira, ultima
-
-
-#: `resumos` já feitos, por registro aberto:
-#: `id → (referência fraca, impressão, resumos)`. A referência fraca solta a
-#: entrada junto com o registro — o servidor não segura registro nenhum por
-#: causa disto (ver `acervo.ler`). A impressão (`_impressao`) refaz a conta
-#: se alguém trocou a matriz, o tempo ou os canais do objeto.
-_FEITOS: dict[int, tuple[weakref.ref, tuple, tuple[Resumo, ...]]] = {}
-_TRAVA_DOS_FEITOS = threading.Lock()
 
 
 def resumos(registro: Record) -> tuple[Resumo, ...]:
@@ -158,26 +189,9 @@ def resumos(registro: Record) -> tuple[Resumo, ...]:
     registro que `acervo.ler` entrega é o mesmo objeto enquanto a pasta não
     muda, e ninguém pode alterá-lo — então guardar pelo objeto é seguro.
     """
-    chave, impressao = id(registro), _impressao(registro)
-    with _TRAVA_DOS_FEITOS:
-        achado = _FEITOS.get(chave)
-        if achado is not None and achado[0]() is registro and achado[1] == impressao:
-            return achado[2]
-    feitos = _resumos(registro)
-    try:
-        ref = weakref.ref(registro, lambda _r, k=chave: _FEITOS.pop(k, None))
-    except TypeError:            # objeto sem referência fraca: só não se guarda
-        return feitos
-    with _TRAVA_DOS_FEITOS:
-        _FEITOS[chave] = (ref, impressao, feitos)
-    return feitos
-
-
-def _impressao(registro: Record) -> tuple:
-    dados, tempo = registro.status, registro.time
-    return (id(dados), getattr(dados, "shape", None), id(tempo), getattr(tempo, "shape", None),
-            id(registro.status_channels),
-            frozenset(getattr(registro, "digitais_sem_placa", None) or ()))
+    sem_placa = frozenset(getattr(registro, "digitais_sem_placa", None) or ())
+    return lembrado_do_registro(registro, "digitais.resumos", (sem_placa,),
+                                lambda: _resumos(registro))
 
 
 def _resumos(registro: Record) -> tuple[Resumo, ...]:
@@ -185,7 +199,7 @@ def _resumos(registro: Record) -> tuple[Resumo, ...]:
     tempo = registro.time
     saida: list[Resumo] = []
     sem_placa = getattr(registro, "digitais_sem_placa", frozenset())
-    contagem, primeiras, ultimas = _transicoes(dados)
+    contagem, primeiras, ultimas = _transicoes(registro)
     inicio = float(tempo[0]) if tempo.size else 0.0
     fim = float(tempo[-1]) if tempo.size else 0.0
 
@@ -242,9 +256,10 @@ def tiras(registro: Record, i0: int, i1: int, colunas: int,
           indices: list[int]) -> list[dict]:
     """As tiras prontas para desenhar, na ordem em que `indices` vier.
 
-    Cada coluna de pixel devolve `ligado` (houve 1 ali dentro) e `mudou` (houve
-    os dois estados na mesma coluna). Ver o cabeçalho para por que o máximo, e
-    não a amostra do meio.
+    Cada tira é `{"inicial": 0|1, "trocas": [c, ...], "colunas": n}`: o estado
+    da primeira coluna e as colunas em que o estado DESENHADO troca. O estado
+    de uma coluna é o MÁXIMO dela (houve 1 ali dentro) — ver o cabeçalho.
+    `ligado(tira)` desfaz isto em um 0/1 por coluna.
     """
     dados = registro.status
     saida: list[dict] = []
@@ -252,24 +267,49 @@ def tiras(registro: Record, i0: int, i1: int, colunas: int,
         return saida
 
     nomes = {c.index: c.name for c in registro.status_channels}
+    todas = trocas(registro)
+    # As bordas das colunas, em amostra: o começo de cada uma e o fim (o
+    # começo da seguinte). Iguais para todas as tiras.
+    comeco = i0 + _fatias(i1 - i0, max(colunas, 1))
+    fim = np.append(comeco[1:], i1)
     for indice in indices:
         if not (0 <= indice < dados.shape[0]):
             continue
-        pedaco = dados[indice, i0:i1].astype(np.int16)
-        inicios = _fatias(pedaco.size, max(colunas, 1))
-        if pedaco.size <= inicios.size:
-            ligado, minimo = pedaco, pedaco
-        else:
-            ligado = np.maximum.reduceat(pedaco, inicios)
-            minimo = np.minimum.reduceat(pedaco, inicios)
-
+        t = todas[indice] if indice < len(todas) else np.empty(0, dtype=np.int64)
+        inicial = int(dados[indice, 0] != 0)
+        # O estado no começo da coluna: o inicial trocado tantas vezes quantas
+        # transições houve até ali (inclusive nela).
+        ate_comeco = np.searchsorted(t, comeco, side="right")
+        estado = (inicial + ate_comeco) % 2
+        # Transição DENTRO da coluna (depois do começo, antes do fim): ali os
+        # dois estados existem, e o máximo é 1.
+        dentro = np.searchsorted(t, fim, side="left") > ate_comeco
+        ligado = (estado == 1) | dentro
         saida.append({
             "indice": indice,
             "nome": nomes.get(indice, f"D{indice + 1}"),
-            "ligado": [int(v) for v in ligado],
-            "transicao": [bool(a != b) for a, b in zip(ligado, minimo, strict=True)],
+            **_em_trocas(ligado),
         })
     return saida
+
+
+def _em_trocas(ligado: np.ndarray) -> dict:
+    """Um 0/1 por coluna escrito como o estado inicial e as colunas de troca."""
+    if ligado.size == 0:
+        return {"inicial": 0, "trocas": [], "colunas": 0}
+    mudou = np.flatnonzero(ligado[1:] != ligado[:-1]) + 1
+    return {"inicial": int(ligado[0]), "trocas": mudou.tolist(), "colunas": int(ligado.size)}
+
+
+def ligado(tira: dict) -> list[int]:
+    """O 0/1 de cada coluna de uma tira de `tiras` — para testes e conferência."""
+    n = int(tira.get("colunas") or 0)
+    saida = np.zeros(n, dtype=np.int8)
+    estado, antes = int(tira.get("inicial") or 0), 0
+    for c in list(tira.get("trocas") or []) + [n]:
+        saida[antes:c] = estado
+        estado, antes = 1 - estado, c
+    return saida.tolist()
 
 
 def escolhidos_por_padrao(registro: Record, limite: int | None = None) -> list[int]:

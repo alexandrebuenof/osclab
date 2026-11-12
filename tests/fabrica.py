@@ -21,7 +21,6 @@ Cada variação aqui existe porque apareceu num arquivo real do parque:
 
 from __future__ import annotations
 
-import struct
 from pathlib import Path
 
 import numpy as np
@@ -73,6 +72,12 @@ def _digitais(nd: int, n: int) -> np.ndarray:
     return ((idx[None, :] >> np.arange(nd)[:, None]) & 1).astype(np.int8)
 
 
+def _degraus(nd: int, n: int) -> np.ndarray:
+    """(nd, n) de 0/1. O canal k liga na amostra `(k+1)·n/(nd+1)` e fica."""
+    liga = (np.arange(1, nd + 1) * n) // (nd + 1)
+    return (np.arange(n)[None, :] >= liga[:, None]).astype(np.int8)
+
+
 #: Os terminais de corrente de um relé, na ordem em que ele os grava. São
 #: letras porque é assim num SEL (`IAW`, `IAX`); a fábrica só precisa de um
 #: sufixo que não seja dígito — ver `nome_de_canal`.
@@ -118,6 +123,7 @@ def escrever_comtrade(
     lixo_no_fim: int = 0,
     escala_primaria: bool = False,
     taxas: list[tuple[float, int]] | None = None,
+    degraus: bool = False,
 ) -> Path:
     """Escreve um par `.cfg`/`.dat` e devolve o caminho do `.cfg`."""
     pasta = Path(pasta)
@@ -127,7 +133,11 @@ def escrever_comtrade(
 
     instantes = _instantes(n, taxa, taxas)
     analog = _senoides(na, freq, instantes)
-    digital = _digitais(nd, n)
+    # `degraus`: cada digital liga UMA vez, em instantes espalhados pelo
+    # registro (o k-ésimo em (k+1)/(nd+1) do caminho) — como os de um evento
+    # de verdade, que entram todos na tela padrão. Sem isso, a contagem binária
+    # (o padrão, que confere o desempacotamento bit a bit) picota.
+    digital = _degraus(nd, n) if degraus else _digitais(nd, n)
     crus = np.rint(analog / ESCALA).astype(np.int64)
 
     ps = "P" if escala_primaria else "S"

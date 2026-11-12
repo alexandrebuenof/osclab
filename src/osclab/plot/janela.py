@@ -13,6 +13,9 @@ divergem.
 
 from __future__ import annotations
 
+import hashlib
+import json
+
 import numpy as np
 
 from osclab.dsp import fasor
@@ -43,7 +46,7 @@ from osclab.plot.conversao import LADOS
 
 #: Versão do formato do pacote da janela. Sobe quando a tela passa a depender
 #: de um campo novo. Ver o comentário em `montar`.
-CONTRATO = 32
+CONTRATO = 33
 
 
 def montar(registro: Record, *, de: float | None = None, ate: float | None = None,
@@ -286,10 +289,10 @@ def montar(registro: Record, *, de: float | None = None, ate: float | None = Non
         # menu: `{linha: [60 Hz, harmônicos, contínua]}`, frações somando 1.
         # Linha sem onda com que medir não entra, e a tela não desenha barra.
         # Ver `catalogo.energia_das_linhas` — e repare que é MEDIDO, não
-        # herdado do veredito de `filtering`.
+        # herdado do veredito de `filtering`. Lembrada no registro
+        # (`catalogo.energia`): é do registro inteiro.
         "energia": {k: [round(f, 4) for f in v] for k, v in
-                    catalogo.energia_das_linhas(registro, disponiveis, lado,
-                                                escalas, trechos).items()},
+                    catalogo.energia(registro, lado, contas).items()},
         # Os digitais do REGISTRO — a lista inteira, para a busca. Quais estão
         # na tela é assunto de cada painel.
         "digitais_disponiveis": [{"indice": r.indice, "nome": r.nome,
@@ -308,6 +311,35 @@ def montar(registro: Record, *, de: float | None = None, ate: float | None = Non
         "ieds": [],
         "tempo_digitais": tempo_digitais,
     }
+
+
+#: Os campos do pacote que são do REGISTRO e não da janela, e são grandes: a
+#: lista de todos os digitais (3968 num SEL-411L, 430 kB de JSON) e o
+#: catálogo de sinais. Iam inteiros em todo pedido de janela — em cada entalhe
+#: da roda, em cada arrasto (12/11/2026). Ver `sem_repetir`.
+ESTATICOS = ("catalogo", "digitais_disponiveis", "energia")
+
+
+def sem_repetir(pacote: dict, selo_da_tela: str | None) -> dict:
+    """Tira do pacote o que a tela já tem, IGUAL, desde o pedido anterior.
+
+    O selo é a impressão do CONTEÚDO dos campos de `ESTATICOS` (e não de uma
+    versão do registro): o que muda qualquer um deles — o lado, o filtro, as
+    contas do usuário, uma correção de fase — muda o selo sozinho, e ninguém
+    precisa lembrar de avisar. A tela manda o selo do último pacote inteiro
+    que guardou; batendo, os campos saem e `estaticos_omitidos` diz quais,
+    para ela pôr os que guardou no lugar. Altera e devolve `pacote`.
+    """
+    campos = {k: pacote[k] for k in ESTATICOS if k in pacote}
+    texto = json.dumps(campos, sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+                       default=str)
+    selo = hashlib.sha1(texto.encode("utf-8")).hexdigest()[:20]
+    pacote["estaticos"] = selo
+    if selo_da_tela and selo_da_tela == selo:
+        for k in campos:
+            del pacote[k]
+        pacote["estaticos_omitidos"] = sorted(campos)
+    return pacote
 
 
 def _painel_digital(registro: Record, painel, i0: int, i1: int,

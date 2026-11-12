@@ -111,29 +111,65 @@ def test_um_pulso_de_duas_amostras_sobrevive_a_reducao():
     """
     linha = [0] * 50_000
     linha[31_000] = linha[31_001] = 1
-    tira = digitais.tiras(registro(linha), 0, 50_000, 200, [0])[0]
+    tira = digitais.ligado(digitais.tiras(registro(linha), 0, 50_000, 200, [0])[0])
 
-    assert sum(tira["ligado"]) >= 1
+    assert sum(tira) >= 1
     # E cai na coluna certa: 31 000 de 50 000 é 62 % do caminho.
-    coluna = tira["ligado"].index(1)
-    assert 0.60 < coluna / len(tira["ligado"]) < 0.64
+    coluna = tira.index(1)
+    assert 0.60 < coluna / len(tira) < 0.64
 
 
-def test_a_transicao_dentro_da_coluna_se_declara():
-    """A tela precisa saber onde houve os dois estados na mesma coluna para
-    não desenhar um degrau que não existe."""
+def test_a_coluna_da_transicao_ja_conta_como_ligada():
+    """A coluna em que o digital liga tem os dois estados; pelo MÁXIMO ela
+    é ligada — o trip começa nela, não na seguinte."""
     # A transição em 103 cai DENTRO da coluna que cobre 100..109. Pô-la em 100
     # exato faria a troca coincidir com a borda da coluna, e nenhuma coluna
     # teria os dois estados — o teste passaria a não testar nada.
     linha = [0] * 103 + [1] * 97
     tira = digitais.tiras(registro(linha), 0, 200, 20, [0])[0]
-    assert any(tira["transicao"])
+    assert digitais.ligado(tira) == [0] * 10 + [1] * 10
+    assert tira["inicial"] == 0 and tira["trocas"] == [10] and tira["colunas"] == 20
+
+
+def _maximo_por_coluna(linha: np.ndarray, i0: int, i1: int, colunas: int) -> list[int]:
+    """A conta de referência: o MÁXIMO de cada coluna, amostra a amostra
+    (a que `tiras` fazia até 12/11/2026)."""
+    pedaco = linha[i0:i1].astype(np.int16)
+    inicios = digitais._fatias(pedaco.size, colunas)
+    if pedaco.size <= inicios.size:
+        return [int(v) for v in pedaco]
+    return [int(v) for v in np.maximum.reduceat(pedaco, inicios)]
+
+
+def test_a_tira_pelas_transicoes_e_o_maximo_da_coluna():
+    """A tira sai das TRANSIÇÕES por busca binária, sem olhar amostra; tem
+    que dar coluna por coluna o mesmo máximo da conta amostra a amostra — em
+    qualquer janela, com qualquer número de colunas, com pulso de uma amostra
+    e com canal que começa ligado."""
+    gerador = np.random.default_rng(7)
+    n = 20_000
+    linhas = []
+    for prob in (0.0005, 0.01, 0.2, 0.0):
+        mudancas = gerador.random(n) < prob
+        linhas.append((np.cumsum(mudancas) % 2).astype(np.int8))
+    linhas.append(np.ones(n, dtype=np.int8))
+    pulso = np.zeros(n, dtype=np.int8)
+    pulso[12_345] = 1
+    linhas.append(pulso)
+    linhas[1][0] = 1  # começa ligado
+    r = registro(*[x.tolist() for x in linhas])
+    for i0, i1, colunas in ((0, n, 900), (0, n, 1), (5_000, 5_400, 1300), (100, 160, 900),
+                            (12_000, 13_000, 7), (0, n, n), (n - 3, n, 900)):
+        feitas = digitais.tiras(r, i0, i1, colunas, list(range(len(linhas))))
+        for k, tira in enumerate(feitas):
+            assert digitais.ligado(tira) == _maximo_por_coluna(linhas[k], i0, i1, colunas), \
+                (k, i0, i1, colunas)
 
 
 def test_sem_reducao_a_tira_e_a_propria_amostra():
     linha = [0, 1, 1, 0]
     tira = digitais.tiras(registro(linha), 0, 4, 900, [0])[0]
-    assert tira["ligado"] == [0, 1, 1, 0]
+    assert digitais.ligado(tira) == [0, 1, 1, 0]
 
 
 def test_o_tempo_das_colunas_acompanha_as_tiras():
@@ -142,7 +178,7 @@ def test_o_tempo_das_colunas_acompanha_as_tiras():
     r = registro([0, 1] * 500)
     tira = digitais.tiras(r, 0, 1000, 137, [0])[0]
     tempo = digitais.tempo_das_colunas(r, 0, 1000, 137)
-    assert len(tempo) == len(tira["ligado"])
+    assert len(tempo) == tira["colunas"] == len(digitais.ligado(tira))
     assert tempo == sorted(tempo)
 
 

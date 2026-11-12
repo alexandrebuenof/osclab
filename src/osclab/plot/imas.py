@@ -48,7 +48,8 @@ from __future__ import annotations
 import numpy as np
 
 from osclab.dsp import fasor
-from osclab.formats.base import Record
+from osclab.formats.base import Record, lembrado_do_registro
+from osclab.plot import digitais
 
 #: Quantas vezes o ruído de regime permanente um degrau precisa passar para
 #: contar como perturbação. Cinco é folgado de propósito: um falso "início da
@@ -96,11 +97,11 @@ def transicoes(registro: Record, indice: int) -> np.ndarray:
     dados = registro.status
     if dados.size == 0 or not (0 <= indice < dados.shape[0]):
         return np.empty(0, dtype=np.int64)
-    linha = dados[indice].astype(np.int16)
-    if linha.size < 2:
-        return np.empty(0, dtype=np.int64)
-    # `+1` porque `diff[k]` compara `k` com `k+1`: a mudança é em `k+1`.
-    return np.flatnonzero(np.diff(linha) != 0) + 1
+    # As de `digitais.trocas`, achadas uma vez por registro aberto: refazer o
+    # `diff` da linha inteira a cada pedido de janela, para cada tira, era
+    # O(amostras do registro) por gesto (12/11/2026).
+    todas = digitais.trocas(registro)
+    return todas[indice] if indice < len(todas) else np.empty(0, dtype=np.int64)
 
 
 def picos(valores: np.ndarray) -> np.ndarray:
@@ -123,12 +124,22 @@ def picos(valores: np.ndarray) -> np.ndarray:
     subida = np.diff(v)
     # O sinal da inclinação, com os trechos planos herdando o sinal anterior:
     # um topo achatado (canal saturado) é um pico só, e não vários.
+    #
+    # Herdar é PREENCHER PARA A FRENTE, de uma vez (12/11/2026). Era um laço
+    # que copiava a vizinha da esquerda `log2(n)` vezes — `log2(n)` cópias do
+    # vetor inteiro por canal e por pedido, e um topo plano MAIS LONGO que
+    # `log2(n)` amostras (o canal saturado de um registro a 1 MHz tem
+    # centenas) ficava com zeros no meio e virava dois picos, um em cada
+    # ponta. Os zeros do começo, que não têm vizinha à esquerda, herdam o fim
+    # do vetor, como o laço fazia.
     inclinacao = np.sign(subida)
-    for _ in range(int(np.log2(max(inclinacao.size, 2))) + 1):
-        zerados = inclinacao == 0
-        if not zerados.any():
-            break
-        inclinacao[zerados] = np.roll(inclinacao, 1)[zerados]
+    zerados = inclinacao == 0
+    if zerados.any():
+        quem = np.where(zerados, -1, np.arange(inclinacao.size))
+        np.maximum.accumulate(quem, out=quem)
+        cheia = inclinacao[np.maximum(quem, 0)]
+        cheia[quem < 0] = cheia[-1] if quem[-1] >= 0 else 0.0
+        inclinacao = cheia
 
     troca = np.flatnonzero(np.diff(inclinacao) != 0) + 1
     if troca.size == 0:
@@ -186,6 +197,14 @@ def passagens_por_zero(valores: np.ndarray) -> np.ndarray:
 
 
 def inicio_da_perturbacao(registro: Record) -> int | None:
+    """Ver `_inicio_da_perturbacao`. Do registro INTEIRO, e lembrado nele
+    (`base.lembrado`): ia em todo pedido de janela, uma passada por todas as
+    amostras de todos os canais."""
+    return lembrado_do_registro(registro, "imas.inicio", (),
+                                lambda: _inicio_da_perturbacao(registro))
+
+
+def _inicio_da_perturbacao(registro: Record) -> int | None:
     """A amostra em que o registro deixou de repetir o ciclo anterior.
 
     ## A conta
