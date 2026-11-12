@@ -5039,6 +5039,12 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       // tradicional. Filtrar uma potência não tem significado físico, e quem
       // avisa que não há 60 Hz ali é a barra de energia, nunca uma trava.
       if (l.procedencia === "conta") return false;
+      //: Num registro que o relé JÁ gravou filtrado (`.CEV`), o próprio canal
+      //: mora na coluna do filtrado — não há coluna de bruto. Apagar o
+      //: interruptor ali escondia a ÚNICA folha que existe: `V1MEM` e `VS1`
+      //: de um SEL-411L apareciam com onda, RMS e DC todos riscados, sem
+      //: como pôr o canal na tela (12/11/2026). Vale também para os outros.
+      if (!l.contas.has("bruto.onda") && !l.contas.has("bruto.rms")) return true;
       //: Canal de «Outros sinais» nasce com o filtro DESLIGADO (pedido dele).
       //: Ele está naquele bloco porque a onda não passou no teste de
       //: alternado — filtrar 60 Hz de um sinal que não é alternado mede uma
@@ -5140,7 +5146,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         : (l.procedencia === "conta"
             ? "Esta conta não tem 60 Hz para o filtro extrair — a barra de "
               + "energia mostra onde a energia dela está."
-            : l.bloco === "outros"
+            : l.bloco === "outros" && !aceso
             ? "Este canal não passou no teste de alternado: filtrar 60 Hz "
               + "dele mediria uma componente que não existe. Fica apagado e "
               + "preso, mostrando o canal como o relé gravou."
