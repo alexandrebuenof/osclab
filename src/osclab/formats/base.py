@@ -84,6 +84,13 @@ class AnalogChannel:
     secondary: float = 1.0         # relação do secundário
     scaling: str = "S"             # "P" ou "S": em que lado os dados estão
     skew: float = 0.0              # atraso de amostragem deste canal, em segundos
+    #: `primary`/`secondary` vieram do USUÁRIO, não do arquivo: a relação que
+    #: ele digitou para o grupo ou para o canal (ver `formats/relacoes.py`).
+    #: A tela marca «digitado» no lugar do aviso de canal sem relação.
+    relacao_digitada: bool = False
+    #: O par `(primário, secundário)` que o ARQUIVO escreveu, quando a
+    #: relação foi digitada por cima. Vazio quando não foi.
+    relacao_do_arquivo: tuple = ()
 
     @property
     def is_primary(self) -> bool:
@@ -210,6 +217,12 @@ class Record:
     #: A chave é o NOME do conjunto, não a posição — mesma razão de
     #: `trincas_escolhidas`.
     vinculos_de_potencia: dict = field(default_factory=dict)
+
+    #: As relações de TC/TP que o usuário DIGITOU para este registro, já
+    #: aplicadas nos canais: `{"grupos": {"I*W": (600, 5)}, "canais": {3:
+    #: (120, 1)}}`. A chave do grupo é o NOME do conjunto, como em
+    #: `trincas_escolhidas`. Ver `formats/relacoes.py`.
+    relacoes_digitadas: dict = field(default_factory=dict)
 
     #: Os NOMES dos digitais que o relé grava e a placa dele não tem (ver
     #: `formats/ajustes.digitais_sem_placa`). Ficam fora da tela padrão e

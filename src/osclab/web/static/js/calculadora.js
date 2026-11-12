@@ -438,15 +438,25 @@
       }
       for (const s of estado.semRelacao) {
         const f = criar("span", "calc-param relacao");
-        f.title = `«${s.nome}»: o arquivo não declara a relação de TC/TP. Vazio, entra como gravado; digitada, vale só para esta conta.`;
-        const r = criar("input", "calc-num curto"); r.placeholder = "RTC";
-        r.value = estado.relacoes[s.canal] ? virgula(estado.relacoes[s.canal]) : "";
-        r.addEventListener("change", () => {
-          const v = Number(r.value.replace(",", "."));
-          if (v > 0) estado.relacoes[s.canal] = v; else delete estado.relacoes[s.canal];
-          conferir();
+        // A relação digitada aqui é do CANAL: vai gravada no registro e vale
+        // na tela inteira (gráficos, fasorial, localização), não só nesta
+        // conta. A `estado.relacoes` é de conta antiga, de antes disso — ela
+        // continua valendo enquanto o canal não tiver relação no registro.
+        const rotulo = s.grandeza === "V" ? "RTP" : "RTC";
+        f.title = s.digitada
+          ? `«${s.nome}»: ${rotulo} digitado ${s.digitada}, gravado com o registro. Vazio volta ao arquivo.`
+          : `«${s.nome}»: o arquivo não declara a relação de TC/TP. Vazio, entra como gravado; digitada, fica gravada com o registro e vale em toda a tela.`;
+        const r = criar("input", "calc-num curto"); r.placeholder = rotulo;
+        r.value = s.digitada || (estado.relacoes[s.canal] ? virgula(estado.relacoes[s.canal]) : "");
+        r.addEventListener("change", async () => {
+          delete estado.relacoes[s.canal];
+          if (calc().gravarRelacoes) await calc().gravarRelacoes({ canais: { [s.canal]: r.value.trim() } });
+          estado.semRelacao = []; conferir();
         });
-        f.append(criar("span", "calc-alerta", "⚠"), criar("code", "calc-param-canal", s.nome), r);
+        // Digitada não leva ⚠ nem o filete do «lido»: é a marca de digitado
+        // dos parâmetros desta gaveta.
+        if (!s.digitada) f.append(criar("span", "calc-alerta", "⚠"));
+        f.append(criar("code", "calc-param-canal", s.nome), r);
         params.append(f);
       }
     }

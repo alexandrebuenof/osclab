@@ -17,6 +17,7 @@ import numpy as np
 
 from osclab.dsp import fasor
 from osclab.formats import conjuntos, fases
+from osclab.formats import relacoes as relacoes_mod
 from osclab.formats.base import Record, Trecho
 from osclab.plot import alfa as alfa_mod
 from osclab.plot import (
@@ -42,7 +43,7 @@ from osclab.plot.conversao import LADOS
 
 #: Versão do formato do pacote da janela. Sobe quando a tela passa a depender
 #: de um campo novo. Ver o comentário em `montar`.
-CONTRATO = 26
+CONTRATO = 27
 
 
 def montar(registro: Record, *, de: float | None = None, ate: float | None = None,
@@ -212,6 +213,10 @@ def montar(registro: Record, *, de: float | None = None, ate: float | None = Non
         # legitimamente, e esse zero é informação. Ver `analysis/presenca.py`.
         "sem_sinal": _sem_sinal(registro, saida),
         "paineis": saida,
+        # A relação de TC/TP de cada canal e de cada grupo, com a ORIGEM
+        # (lido do arquivo × digitado), para as telas «canais» e «grupos»
+        # mostrarem e deixarem digitar. Ver `formats/relacoes.py`.
+        "relacoes": relacoes_mod.resumo(registro),
         # Tudo que se PODE acrescentar, para a tela montar a busca sem precisar
         # de outra chamada. O nome de cada sinal nasce aqui, no Python, porque
         # é identidade: o mesmo nome tem que valer na legenda, na tabelinha e
@@ -441,6 +446,10 @@ def _painel_analogico(registro: Record, painel, por_id: dict, escalas: dict,
             "eixo": eixo,
             "lado": lado_final,
             "convertido": convertido,
+            # A conversão usou uma relação que o USUÁRIO digitou: a legenda
+            # marca «digitado» onde marcaria o canal sem relação.
+            "relacao_digitada": bool(canal is not None and convertido
+                                     and getattr(canal, "relacao_digitada", False)),
             "serie": valores,
             # Os pontos para o ímã dos cursores: os picos (crista e vale) e as
             # passagens por zero. Saem da série de RESOLUÇÃO CHEIA, antes da

@@ -91,6 +91,7 @@ from osclab.faultloc import seqneg as seqneg_mod
 from osclab.formats import ajustes as ajustes_mod
 from osclab.formats import eventos as eventos_mod
 from osclab.formats import registry
+from osclab.formats import relacoes as relacoes_mod
 from osclab.formats.base import FormatError
 from osclab.library import acervo
 from osclab.plot import alinhamento as alinhamento_mod
@@ -528,6 +529,21 @@ def create_app() -> Flask:
         except FormatError as exc:
             return jsonify(erro=str(exc)), 404
         return jsonify(vinculos={str(k): v for k, v in escolhas.items()})
+
+    @app.post("/api/onda/<sha>/relacoes")
+    def digitar_relacoes(sha: str):
+        """O usuário digita a relação de TC/TP de um grupo ou de um canal.
+
+        `{"grupos": {"I*W": "600/5"}, "canais": {"3": "120"}}`; vazio apaga.
+        Fica gravada ao lado do registro e vale em tudo que usa o registro.
+        Ver `formats/relacoes.py`.
+        """
+        try:
+            acervo.gravar_relacoes(sha, request.get_json(silent=True) or {})
+            registro = acervo.ler(sha)
+        except FormatError as exc:
+            return jsonify(erro=str(exc)), 404
+        return jsonify(relacoes=relacoes_mod.resumo(registro))
 
     @app.post("/api/onda/<sha>/trincas")
     def corrigir_trincas(sha: str):

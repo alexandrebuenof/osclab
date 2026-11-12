@@ -3148,6 +3148,11 @@ a.chave, .tema, .voltar, #exportar { text-decoration: none; }
 }
 .busca .col-fase { width: 72px; }
 .busca .col-grupo { width: 64px; }
+/* A relação de TC/TP: o campo vazio mostra, apagada, a que vale; a digitada
+   leva a cor do «digitado» (a mesma da origem nos ajustes do plano). */
+.busca .col-relacao { width: 76px; flex: none; }
+.busca .col-relacao .calc-num { width: 100%; box-sizing: border-box; }
+.busca .calc-num:not(:placeholder-shown) { color: var(--destaque); }
 .busca .col-i { flex: none; }
 .busca .cabeca-dos-canais .col-i { width: 15px; }
 
