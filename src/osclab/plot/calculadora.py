@@ -48,8 +48,11 @@ import numpy as np
 
 from osclab import paths
 from osclab.dsp import envoltoria
+from osclab.formats import fases
+from osclab.formats import relacoes as relacoes_mod
 from osclab.formats.base import Record
 from osclab.plot import contas as contas_mod
+from osclab.plot import conversao
 from osclab.plot.contas import (
     ErroDaConta,
     _elevar,
@@ -424,8 +427,11 @@ def _fasor_da_ref(ref, registro: Record, lado: str) -> np.ndarray:
     if z is None:
         return np.full(n, np.nan + 0j)
     razao = contas_mod._RELACOES_ATIVAS.get(getattr(ref, "canal", -1))
-    if razao:
-        canal = next((c for c in registro.analog_channels if c.index == ref.canal), None)
+    canal = next((c for c in registro.analog_channels
+                  if c.index == getattr(ref, "canal", -1)), None)
+    # A da conta só vale para canal SEM relação: com uma digitada no registro a
+    # série já veio convertida. Ver `contas._serie_do_sinal`.
+    if razao and (canal is None or conversao.relacao(canal) <= 0):
         natural = "primario" if canal is not None and canal.is_primary else "secundario"
         if lado == "primario" and natural == "secundario":
             z = z * razao
@@ -719,12 +725,18 @@ def previa(registro: Record, conta, contas: list, lado: str, colunas: int = 320)
         # A expressão com os nomes COMPLETOS: `[IA]` digitado vira o
         # canal por trás, para o visor dizer qual entrou na conta.
         "expandida": expandir(conta.expressao, registro),
+        # Os canais da conta que o arquivo não declara relação, e os que já
+        # têm uma DIGITADA (para o campo continuar ali, preenchido e
+        # corrigível). O que se digita aqui é gravado NO REGISTRO — vale para
+        # o canal em toda a tela, não só nesta conta. Ver `formats/relacoes`.
         "sem_relacao": [
-            {"canal": i, "nome": canais[i].name}
-            for i in contas_mod._sem_relacao(
-                registro, [contas_mod.Referencia(linha="", canal=k) for k in a.canais], ()
-            )
-            if i in canais
+            {"canal": i, "nome": canais[i].name,
+             "grandeza": fases.grandeza_da_unidade(canais[i].unit) or "",
+             "digitada": (relacoes_mod.como_texto((canais[i].primary, canais[i].secondary))
+                          if getattr(canais[i], "relacao_digitada", False) else "")}
+            for i in dict.fromkeys(a.canais)
+            if i in canais and (conversao.relacao(canais[i]) <= 0
+                                or getattr(canais[i], "relacao_digitada", False))
         ]
         if a.vale
         else [],

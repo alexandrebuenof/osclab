@@ -953,7 +953,12 @@ def _serie_do_sinal(ref, registro: Record, lado: str) -> np.ndarray:
     razao = _RELACOES_ATIVAS.get(getattr(ref, "canal", -1))
     if razao:
         canal = next((c for c in registro.analog_channels if c.index == ref.canal), None)
-        if canal is not None:
+        # A relação da CONTA (conta antiga, de antes de a relação passar a ser
+        # do canal) só vale enquanto o canal não tem relação: com uma digitada
+        # no registro, `catalogo.serie` já converteu, e aplicar esta por cima
+        # converteria duas vezes.
+        from osclab.plot import conversao
+        if canal is not None and conversao.relacao(canal) <= 0:
             natural = "primario" if canal.is_primary else "secundario"
             if lado == "primario" and natural == "secundario":
                 valores = valores * razao

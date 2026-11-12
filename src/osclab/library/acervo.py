@@ -68,6 +68,7 @@ from pathlib import Path
 
 from osclab import paths
 from osclab.formats import registry
+from osclab.formats import relacoes as relacoes_mod
 from osclab.formats.base import FormatError, Record
 
 #: O que faz parte de um registro. O resto é ignorado.
@@ -358,6 +359,8 @@ def relacoes_por_equipamento(registro: Record) -> list[dict]:
         else:
             equipamento = do_conjunto.get(indice, nome.strip())
         relacao = f"{_so_o_numero(canal.primary)} : {_so_o_numero(canal.secondary)}"
+        if getattr(canal, "relacao_digitada", False):
+            relacao += " (digitado)"
         chave = (equipamento, tipo, relacao)
         ficha = fichas.setdefault(chave, {"equipamento": equipamento, "tipo": tipo,
                                           "relacao": relacao, "canais": []})
@@ -1181,13 +1184,73 @@ def _com_vinculos(registro: Record, sha: str) -> Record:
     except OSError:
         pass
     escolhas = vinculos(sha)
-    if not escolhas:
-        return registro
-    registro.analog_channels = tuple(
-        replace(c, phase_escolhida=escolhas.get(c.index, c.phase_escolhida))
-        for c in registro.analog_channels
-    )
-    return registro
+    if escolhas:
+        registro.analog_channels = tuple(
+            replace(c, phase_escolhida=escolhas.get(c.index, c.phase_escolhida))
+            for c in registro.analog_channels
+        )
+    # A relação de TC/TP digitada vem DEPOIS da fase e da trinca: o grupo a
+    # que ela se aplica é o grupo já corrigido. Ver `formats/relacoes.py`.
+    return relacoes_mod.aplicar(registro, relacoes(sha))
+
+
+# ---------------------------------------------------------------------------
+# As relações de TC/TP digitadas pelo usuário, por grupo e por canal
+# ---------------------------------------------------------------------------
+#
+# O arquivo nem sempre diz a relação (o toroide do neutro, o relé
+# parametrizado sem ela), e às vezes diz errado. Quem sabe digita — uma vez,
+# para o registro inteiro: a relação é do CANAL, e vale em todo gráfico, no
+# fasorial, na calculadora e na localização. Gravada ao lado do registro, como
+# os vínculos, e pelo mesmo motivo.
+
+def relacoes(sha: str) -> dict:
+    """As relações digitadas neste registro, limpas. Vazio é o normal."""
+    arquivo = paths.relacoes_do_registro(sha)
+    if not arquivo.is_file():
+        return relacoes_mod.limpar({})
+    try:
+        cru = json.loads(arquivo.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return relacoes_mod.limpar({})
+    return relacoes_mod.limpar(cru)
+
+
+def gravar_relacoes(sha: str, pedido: dict) -> dict:
+    """Grava as relações digitadas. Devolve o que ficou gravado (limpo).
+
+    `{"grupos": {"I*W": "600/5"}, "canais": {"3": "120"}}`. Texto vazio (ou
+    que não é relação) APAGA aquela entrada, e volta a valer o arquivo.
+    """
+    if obter(sha) is None:
+        raise FormatError("Este registro nao esta' no acervo.")
+    atuais = relacoes(sha)
+    for chave, valor in ((pedido or {}).get("grupos") or {}).items():
+        par = relacoes_mod.ler_texto(valor)
+        if par and str(chave).strip():
+            atuais["grupos"][str(chave)] = par
+        else:
+            atuais["grupos"].pop(str(chave), None)
+    for chave, valor in ((pedido or {}).get("canais") or {}).items():
+        try:
+            indice = int(chave)
+        except (TypeError, ValueError):
+            continue
+        par = relacoes_mod.ler_texto(valor)
+        if par and indice >= 0:
+            atuais["canais"][indice] = par
+        else:
+            atuais["canais"].pop(indice, None)
+
+    arquivo = paths.relacoes_do_registro(sha)
+    gravado = relacoes_mod.para_json(atuais)
+    if gravado:
+        arquivo.parent.mkdir(parents=True, exist_ok=True)
+        arquivo.write_text(json.dumps(gravado, ensure_ascii=False, indent=2),
+                           encoding="utf-8")
+    elif arquivo.is_file():
+        arquivo.unlink()
+    return atuais
 
 
 def remover(sha: str) -> bool:

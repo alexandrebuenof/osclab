@@ -72,6 +72,15 @@ BASES_FILE: Path = DATA_DIR / "bases.json"
 #: fora do registro, para valerem em qualquer um. Dado do usuário, fora do git.
 MODELOS_DA_CALCULADORA: Path = DATA_DIR / "modelos-calculadora.json"
 
+def relacoes_do_registro(sha: str) -> Path:
+    """As relações de TC/TP que o usuário digitou para UM registro.
+
+    Ao lado do registro, como os `vinculos.json`: vale só para ele, e para
+    sempre. Ver `formats/relacoes.py`.
+    """
+    return LIBRARY_DIR / sha / "relacoes.json"
+
+
 #: Recursos servidos pela web (CSS, JS, fontes). Viajam com o pacote.
 WEB_DIR: Path = PACKAGE_DIR / "web"
 STATIC_DIR: Path = WEB_DIR / "static"

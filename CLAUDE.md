@@ -179,6 +179,23 @@ osclab/
 - **Sem relação de TC/TP declarada, não se converte** — e isso aparece: o canal
   ganha etiqueta de aviso na legenda e é nomeado no rodapé. Converter por
   palpite viraria ampère secundário lido como primário no relatório.
+- **A relação DIGITADA é do CANAL, gravada com o registro** *(11/11/2026)*.
+  Quem sabe a relação que o arquivo não diz (ou diz errado) a digita **por
+  grupo** (`G1`: vale para A, B e C, e para o resíduo medido do vão só se o
+  arquivo não declarar a dele — o neutro costuma ser toroide com outra
+  relação) ou **por canal** (vence o grupo). A escolha do usuário **vence o
+  arquivo**, como o vínculo de fase; vazio apaga e volta o arquivo. Fica em
+  `relacoes.json` ao lado do registro (`paths.relacoes_do_registro`), nunca no
+  `meta.json` e nunca em outro registro. É aplicada no `Record` logo depois do
+  leitor (`acervo._com_vinculos` → `formats/relacoes.aplicar`, depois da fase
+  e da trinca): quem lê `canal.primary/secondary` já recebe a digitada, então
+  vale em primário/secundário, tabelinha, pu do fasorial, calculadora e
+  localização sem nenhum deles saber. O canal leva `relacao_digitada` e a do
+  arquivo em `relacao_do_arquivo`; a legenda troca o aviso de «sem relação»
+  pela marca `digitado`. Digita-se no cartão do grupo («grupos»), na coluna
+  «relação» da tela «canais» e no campo ⚠ da calculadora — que agora grava no
+  registro (a `relacoes` de conta antiga só vale para canal sem relação, para
+  não converter duas vezes).
 - **O leitor entrega unidade de engenharia**, nunca o inteiro cru do conversor
   A/D. Os fatores de conversão são aplicados no leitor.
 - **Diagnóstico automático se mostra e se deixa corrigir.** O programa avisa,
@@ -1068,7 +1085,7 @@ Três consequências para quem programa isto:
 | 0.5+ | Marcar um sinal no catálogo já o manda para «já na tela», com a cor; e **a leitura do cursor passou a ser refeita quando a lista de sinais muda** — `carregar()` traz a janela e as séries, mas o pacote do cursor é outro pedido, e sem ele o sinal novo entrava sem módulo nem ângulo: só desenhava quando o usuário mexia o cursor | **feito** — `0.5.1` |
 | **0.6** | **Painel de harmônicos.** Espectro em barras no instante de um cursor, em % da fundamental de cada sinal, com o THD das barras ao lado; janela de 1 ciclo (a do relé) ou do TRECHO entre os dois cursores, cortado em ciclos inteiros; só entra onda (canal e resíduo), o teto de ordens é o Nyquist da taxa e vai escrito, e o painel só se cria no modo avançado | **feito** — `0.6.0` |
 | **0.7** | **Calculadora de sinais — domínio ONDA.** `([VAY] - [VBY]) / 1.732` vira um sinal novo, amostra por amostra, no bloco «Calculados» com as cinco colunas de um canal. Tem teclado de calculadora (operações, √2, √3, ÷√3, ÷3) e completa o nome do canal com Tab. Unidades conferidas, mas **nada é bloqueado** — a regra do projeto: A+A passa em A, V×A vira V·A, e A+V faz a conta assim mesmo, sem unidade e com ⓘ ao lado; só o que não se LÊ é erro (parêntese aberto, canal inexistente). A conversão de TC/TP vem ANTES da conta; divisão sinal÷sinal e produto entre sinais caem em «Outros» porque não são senoidais. A expressão é conferida pelo servidor enquanto se digita, para a gramática morar num lugar só. E o painel de harmônicos ganhou a mesma largura e o mesmo alinhamento do analógico | **feito** — `0.7.0` |
-| 0.7+ | **Calculadora em gaveta** (variante 10): domínio FASOR (`a`, `conj`, `mod`, `ang`, `re`, `im`, `polar`), funções de onda (`rms`, `delta`, `deriv`, `integ`, `f60`, `media`, `atrasar`, `maxjan`), nomes padronizados com grupo, `{k0}` com a origem e «usar o do relé», relação de TC digitável para canal sem relação, sugestões (modelos que dizem se cabem no registro) e «guardar como modelo». Corrigido de passagem: conta do usuário + filtro de 60 Hz dava erro 500 (`catalogo.efetivo`) | **feito** — entra na `0.8.0` |
+| 0.7+ | **Calculadora em gaveta** (variante 10): domínio FASOR (`a`, `conj`, `mod`, `ang`, `re`, `im`, `polar`), funções de onda (`rms`, `delta`, `deriv`, `integ`, `f60`, `media`, `atrasar`, `maxjan`), nomes padronizados com grupo, `{k0}` com a origem e «usar o do relé», relação de TC digitável para canal sem relação (desde 11/11/2026 gravada no registro, por grupo ou canal — ver «A relação DIGITADA»), sugestões (modelos que dizem se cabem no registro) e «guardar como modelo». Corrigido de passagem: conta do usuário + filtro de 60 Hz dava erro 500 (`catalogo.efetivo`) | **feito** — entra na `0.8.0` |
 | **0.8** | **Rodada de 11/11/2026.** Janela de **eventos do relé** (`.hdr` da Schneider sozinho; SER da SEL, `.eev` da GE e texto com hora pelo «+ arquivo», sem gravar; trilha da distribuição no tempo); **calculadora em gaveta**; **tema escuro** «Ardósia clara» e o realce da subestação; **«refinar»** a seq. negativa de dois terminais, com o alinhamento manual valendo no painel localizador; janelas flutuantes que cabem na tela | **feito** — `0.8.0` |
 | 0.5 | Bruto/filtrado, descontinuidade, alinhamento | |
 | 0.6 | Localização de faltas (um e dois terminais) | |

@@ -85,7 +85,7 @@
   //: navegador recarrega o `.js` sozinho: quem troca de versão sem reiniciar
   //: fica com tela nova e servidor velho, e o resultado é uma tela que mostra
   //: coisas que não fazem sentido sem dar erro nenhum. Já custou três rodadas.
-  const CONTRATO = 26;
+  const CONTRATO = 27;
 
   //: A margem de cima abriga a etiqueta numerada dos cursores, que fica FORA da
   //: área de desenho: por dentro ela tapa o pico da onda — e o pico é
@@ -3270,6 +3270,53 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   }
 
   /** Grava no servidor as correções de fase. Falhar aqui não pode ser mudo. */
+  /** Grava a relação de TC/TP DIGITADA — `{grupos: {chave: "600/5"}}` ou
+   * `{canais: {"3": "120"}}`; texto vazio apaga — e recarrega a janela.
+   *
+   * Quem lê e aplica é o servidor (`formats/relacoes.py`): aqui só se manda o
+   * texto como foi digitado. A relação é do CANAL, e vale em toda a tela.
+   */
+  async function gravarRelacoes(corpo) {
+    try {
+      const r = await fetch(`/api/onda/${sha}/relacoes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(corpo),
+      });
+      if (!r.ok) throw new Error(`o servidor respondeu ${r.status}`);
+      await recarregar();
+    } catch (erro) {
+      avisarNoPe("Não consegui gravar a relação de TC/TP: "
+                 + `${erro.message}. A conversão continua como estava.`);
+    }
+  }
+
+  /** O campo de digitar a relação de um grupo ou de um canal.
+   *
+   * `valor` é o que foi digitado ALI (vazio quando não foi); `emUso` e
+   * `origem` dizem o que vale hoje, e vão no `placeholder` e no `title` — o
+   * campo vazio mostra, apagado, a relação que está valendo e de onde ela
+   * veio. Grava ao sair do campo (`change`).
+   */
+  function campoDaRelacao(valor, emUso, origem, rotulo, aoGravar) {
+    const campo = criar("input", "calc-num");
+    campo.type = "text";
+    campo.value = valor || "";
+    // Vazio, o campo mostra apagada a relação que vale — com «dig.» quando
+    // ela foi digitada (no grupo), para não passar por lida do arquivo.
+    campo.placeholder = emUso ? (origem === "digitado" ? `${emUso} dig.` : emUso)
+                              : (rotulo === "RTP" ? "RTP" : "RTC");
+    campo.title = (valor ? `${rotulo} digitado: ${valor}`
+                   : (emUso ? `${rotulo} ${emUso} — ${origem}`
+                      : `${rotulo}: o arquivo não declara`))
+                + ". Digite 600/5 ou 120; vazio volta ao arquivo. Fica gravado "
+                + "com o registro e vale em toda a tela.";
+    campo.setAttribute("aria-label", rotulo);
+    campo.addEventListener("change", () => aoGravar(campo.value.trim()));
+    campo.addEventListener("keydown", (e) => { if (e.key === "Enter") campo.blur(); });
+    return campo;
+  }
+
   async function gravarVinculos(correcoes) {
     const corpo = {};
     for (const [canal, fase] of correcoes) corpo[String(canal)] = fase;
@@ -5424,6 +5471,17 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       }
       topo.append(criar("span", "empurra"));
       if (grupo.conjunto) {
+        // A relação de TC/TP do GRUPO: vale para as três fases (e para o
+        // resíduo medido do vão, quando o arquivo não declara a dele). A de
+        // um canal só se corrige em «canais». Ver `formats/relacoes.py`.
+        const rotulo = grupo.tipo === "tensões" ? "RTP" : "RTC";
+        const primeiro = Object.values(grupo.conjunto.canais || {})[0];
+        const doCanal = ((dados.relacoes || {}).canais || {})[String(primeiro)] || {};
+        const digitada = ((dados.relacoes || {}).grupos || {})[grupo.conjunto.chave] || "";
+        topo.append(criar("span", "tipo-do-grupo", rotulo),
+                    campoDaRelacao(digitada, doCanal.em_uso, doCanal.origem, rotulo,
+                                   (texto) => gravarRelacoes(
+                                     { grupos: { [grupo.conjunto.chave]: texto } })));
         const editar = criar("button", "chave editar-o-grupo", "");
         editar.type = "button";
         editar.append(criar("span", null, "✎"),
@@ -5487,6 +5545,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
 
     const janelinha = criar("dialog", "busca canais");
     const correcoes = new Map();
+    const relacoesEditadas = new Map();
 
     const fechar = criar("button", "fechar", "×");
     fechar.type = "button";
@@ -5512,6 +5571,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
                                      ["col-unidade", "unidade"],
                                      ["col-fase", "fase"],
                                      ["col-grupo", "grupo"],
+                                     ["col-relacao", "relação"],
                                      ["col-i", ""]]) {
         titulos.append(criar("span", classe, texto));
       }
@@ -5541,6 +5601,22 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
           grupo.append(lapisDoGrupoDoCanal(x, trincaDoGrupo, desenhar));
         }
         linha.append(grupo);
+
+        // A relação de TC/TP DESTE canal — a correção fina, que vence a do
+        // grupo. Vazio mostra, apagada, a que vale hoje e de onde veio (lida
+        // do arquivo ou digitada no grupo). Só corrente e tensão: é isso que
+        // passa por TC e TP.
+        const relacao = criar("span", "col-relacao");
+        if (x.grandeza_do_canal === "I" || x.grandeza_do_canal === "V") {
+          const r = ((dados.relacoes || {}).canais || {})[String(x.canal)] || {};
+          const rotulo = x.grandeza_do_canal === "V" ? "RTP" : "RTC";
+          const editada = relacoesEditadas.has(x.canal)
+            ? relacoesEditadas.get(x.canal) : (r.no_canal || "");
+          const campo = campoDaRelacao(editada, r.em_uso, r.origem, rotulo,
+                                       (texto) => relacoesEditadas.set(x.canal, texto));
+          relacao.append(campo);
+        }
+        linha.append(relacao);
 
         // O ⓘ: situação e observação, a um clique. Elas são texto corrido, e
         // texto corrido em duas colunas de uma tabela de vinte e uma linhas
@@ -5582,6 +5658,10 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     gravar.addEventListener("click", async () => {
       janelinha.close();
       if (correcoes.size) await gravarVinculos(correcoes);
+      if (relacoesEditadas.size) {
+        await gravarRelacoes({ canais: Object.fromEntries(
+          [...relacoesEditadas].map(([k, v]) => [String(k), v])) });
+      }
     });
 
     const pe = criar("div", "pe-do-catalogo");
@@ -6285,6 +6365,14 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
                       + "então o valor ficou como está — em "
                       + (sinal.lado === "primario" ? "primário." : "secundário.");
           item.append(aviso);
+        } else if (sinal.relacao_digitada) {
+          // A conversão saiu de uma relação que o USUÁRIO digitou: não é o
+          // arquivo falando, e a legenda diz isso no lugar do aviso.
+          const marca = criar("span", "lado", "digitado");
+          marca.title = "A relação de TC/TP deste canal foi DIGITADA (em "
+                      + "«canais», «grupos» ou na calculadora), não lida do "
+                      + "arquivo. Vale para este registro inteiro.";
+          item.append(marca);
         }
       }
 
@@ -16748,6 +16836,9 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     trocar(novas) { guardarParaDesfazer(); contas = novas; },
     novoId() { return `x${proximaConta++}`; },
     escolhido: () => painelEscolhido,
+    // A relação de TC/TP digitada na calculadora é do CANAL: grava no
+    // registro e recarrega a tela inteira. Ver `gravarRelacoes`.
+    gravarRelacoes: (corpo) => gravarRelacoes(corpo),
     // Os dois cursores de uma vez — usado pelo teste de navegador.
     porCursores(t1, t2) { cursores[0] = t1; porCursor(1, t2); },
     porNoPainel(idPainel, idSinal) {
