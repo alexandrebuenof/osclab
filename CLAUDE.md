@@ -341,8 +341,14 @@ osclab/
   seis toques de seta com a leitura em voo andavam dois. Hoje `carregar` põe
   o gesto numa fila (um em voo; recargas sem gesto viram uma; arrastos
   seguidos somam), o deslocamento da tela desconta só o arrasto que a
-  resposta levou (`gesto.px`, `arrastando.base`), e `lerCursores` soma os
-  passos que esperam. Teste: `tests/test_navegacao_navegador.py`.
+  resposta levou, e `lerCursores` soma os passos que esperam. **O arrasto
+  pendente é guardado em SEGUNDOS** (`arrastoS`; o pixel sai da escala de
+  cada momento, `acertarArrasto`): em pixels, uma resposta de roda no meio
+  mudava o tempo que ele valia. **O foco da roda é o instante sob o mouse NO
+  GIRO**, não o pixel convertido 70 ms depois (um arrasto nesse meio
+  deslocava o zoom). A roda vale durante o arrasto da oscilografia. Teste:
+  `tests/test_navegacao_navegador.py`, com `combinacoes.mjs` — a janela final
+  é a composição dos gestos, conferida gesto a gesto.
 - **Traço reto é riscado em PEDAÇOS de 32 vértices** (`tracarEmPedacos`,
   junta e ponta redondas: o mesmo desenho). O navegador contorna uma linha de
   1,4 px com 2600 vértices (mín./máx. de 1300 colunas) de uma vez, e o
