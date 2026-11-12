@@ -10,10 +10,9 @@ from __future__ import annotations
 
 import math
 
-import numpy as np
 import pytest
 
-from osclab.plot import catalogo, contas, janela, leitura, paineis
+from osclab.plot import catalogo, contas, janela, leitura
 from tests import arranjo
 from tests.test_catalogo import PICO, trifasico
 
@@ -253,7 +252,7 @@ def test_a_conta_senoidal_entra_no_fasorial_e_nos_harmonicos():
     r = trifasico()
     cs = contas.de_json([{"id": "x1", "nome": "Iab",
                           "expressao": "[Current IA] - [Current IB]"}])
-    for tipo, montador in (("fasorial", arranjo.fasorial),
+    for _tipo, montador in (("fasorial", arranjo.fasorial),
                            ("harmonicos", arranjo.harmonicos)):
         pacote = janela.montar(r, colunas=100,
                                layout=[montador(["x1:instantaneo"])], contas=cs)
@@ -445,3 +444,79 @@ def test_conta_que_perde_o_fasor_pelo_DOMINIO_tambem_diz_por_que():
                if s.id.startswith("x1:")]
     assert achados[0].bloco == "outros"
     assert "RMS ou contínua" in achados[0].motivo
+
+
+# --- o título do eixo (decidido em 11/11/2026) -------------------------------
+#
+# Eixo de uma unidade só, e conhecida: leva o título. Eixo ambíguo — unidades
+# misturadas, ou um sinal sem unidade no meio de grandezas conhecidas — não
+# leva título nenhum, e a unidade fica na tabelinha, linha a linha.
+
+def _painel(registro, sinais_, expressao):
+    cs = contas.de_json([{"id": "x1", "nome": "Conta", "expressao": expressao}])
+    pacote = janela.montar(registro, colunas=200, layout=[arranjo.analogico(sinais_)],
+                           contas=cs)
+    return pacote["paineis"][0]
+
+
+def _do(painel, ident):
+    return next(s for s in painel["sinais"] if s["id"] == ident)
+
+
+def test_conta_sem_unidade_SOZINHA_deixa_o_eixo_sem_titulo():
+    painel = _painel(trifasico(), ["x1:instantaneo"], "[Current IA] / [Current IB]")
+    assert _do(painel, "x1:instantaneo")["unidade"] == ""
+    assert _do(painel, "x1:instantaneo")["eixo"] == "esq"
+    assert painel["titulo_do_eixo"] == ""
+    assert painel["eixo_dir"] is None
+
+
+def test_conta_sem_unidade_vai_para_a_DIREITA_e_a_esquerda_mantem_o_titulo():
+    """A escala da corrente não se achata por causa de um número puro, e o
+    `A` do eixo da esquerda continua verdadeiro."""
+    painel = _painel(trifasico(), ["c0:instantaneo", "x1:instantaneo"],
+                     "[Current IA] / [Current IB]")
+    assert _do(painel, "x1:instantaneo")["eixo"] == "dir"
+    assert painel["titulo_do_eixo"] == "A"
+    assert painel["eixo_dir"]["titulo"] == ""
+    assert not painel["avisos"]
+
+
+def test_sem_unidade_primeiro_nao_rouba_a_esquerda_da_grandeza_conhecida():
+    painel = _painel(trifasico(), ["x1:instantaneo", "c0:instantaneo"],
+                     "[Current IA] / [Current IB]")
+    assert _do(painel, "c0:instantaneo")["eixo"] == "esq"
+    assert _do(painel, "x1:instantaneo")["eixo"] == "dir"
+    assert painel["titulo_do_eixo"] == "A"
+
+
+def test_com_dois_eixos_cheios_o_sem_unidade_NAO_e_recusado_e_tira_o_titulo_da_direita():
+    """Era o «terceiro eixo recusado». O sinal sem unidade não pede eixo: ele
+    entra na direita, que perde o título; a tensão continua dizendo `(V)` na
+    linha dela da tabelinha."""
+    painel = _painel(trifasico(), ["c0:instantaneo", "c3:instantaneo", "x1:instantaneo"],
+                     "[Current IA] + [Voltage A-G]")
+    assert not painel["avisos"]
+    assert _do(painel, "c3:instantaneo")["eixo"] == "dir"
+    assert _do(painel, "c3:instantaneo")["unidade"] == "V"
+    assert _do(painel, "x1:instantaneo")["eixo"] == "dir"
+    assert _do(painel, "x1:instantaneo")["unidade"] == ""
+    assert painel["titulo_do_eixo"] == "A"
+    assert painel["eixo_dir"]["titulo"] == ""
+
+
+def test_unidades_conhecidas_mantem_os_dois_titulos():
+    painel = _painel(trifasico(), ["c0:instantaneo", "c3:instantaneo", "x1:instantaneo"],
+                     "[Current IA] - [Current IB]")
+    assert _do(painel, "x1:instantaneo")["eixo"] == "esq"
+    assert painel["titulo_do_eixo"] == "A"
+    assert painel["eixo_dir"]["titulo"] == "V"
+
+
+def test_o_titulo_do_eixo_e_uma_unidade_so_e_conhecida():
+    from osclab.plot import serie
+    assert serie.titulo_do_eixo(["kV", "kV"]) == "kV"
+    assert serie.titulo_do_eixo(["kV", ""]) == ""
+    assert serie.titulo_do_eixo(["A", "kA"]) == ""
+    assert serie.titulo_do_eixo([""]) == ""
+    assert serie.titulo_do_eixo([]) == ""

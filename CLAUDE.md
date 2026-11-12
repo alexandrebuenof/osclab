@@ -438,7 +438,15 @@ osclab/
   unidade de cada linha da tabelinha e no próprio eixo.
 - **Todo eixo escreve a sua unidade**, na folga de cima, menor e mais apagada
   que os números — a unidade é a legenda da medida, não uma medida. Vale para
-  o eixo da esquerda e para o da direita.
+  o eixo da esquerda e para o da direita. **Eixo AMBÍGUO não leva título**
+  *(11/11/2026)*: se os sinais de um eixo não dividem UMA unidade conhecida —
+  unidades diferentes, ou um sinal sem unidade (conta que somou A com V,
+  número puro, canal sem unidade declarada) junto de grandezas conhecidas —,
+  o alto do eixo fica vazio e a unidade fica só na tabelinha, linha a linha.
+  `kV` em cima de uma régua onde também passa um número puro afirmaria que o
+  número é kV. Quem decide é o Python (`serie.titulo_do_eixo`, aplicado por
+  `serie.titular_eixos` no painel e de novo depois de juntar IEDs): o pacote
+  traz `titulo_do_eixo` e `eixo_dir.titulo`, e a tela só os escreve.
 - **A cor de um sinal pode ser escolhida, e a escolha é da TELA.** Quadrinho
   ao lado do sinal na janela do `+ sinal`, na parte do que já está no gráfico;
   clicar abre as cores em BOLINHAS — nome de cor não ajuda a escolher cor.
@@ -452,6 +460,8 @@ osclab/
   dedutível do título: `81,67` numa linha de `V1` se lê como 81 V secundários
   quando são 81 kV primários — três ordens de grandeza, sem nada na tela
   denunciando. O nome encolhe com reticências; a unidade é `flex: none`.
+  Sinal sem unidade escreve `(—)`: linha calada se leria como a unidade do
+  eixo — e ele não herda a unidade do eixo em que caiu.
 - **O nome do ARQUIVO só aparece quando o sinal É o canal do arquivo.** Com o
   gráfico em RMS o traço não é mais `Current IA`: é `IA RMS`, que é conta nossa
   com um ciclo de janela em cima. Escrever os dois nomes lado a lado ali
@@ -480,10 +490,17 @@ osclab/
   desenha é `catalogo.efetivo`, e ela é a MESMA no desenho e na leitura.
 - **Unidade diferente, eixo diferente.** Um sinal de outra unidade vai para a
   escala da DIREITA e é desenhado tracejado, porque a altura dele não se
-  compara com a dos outros traços. Um terceiro eixo não existe: o sinal é
-  recusado com aviso, em vez de ser desenhado numa escala que não está escrita
-  em lugar nenhum. A margem direita, como a esquerda, é uma só para todos os
-  gráficos.
+  compara com a dos outros traços. Um terceiro eixo não existe: o sinal de uma
+  terceira unidade CONHECIDA é recusado com aviso, em vez de ser desenhado
+  numa escala que não está escrita em lugar nenhum. A margem direita, como a
+  esquerda, é uma só para todos os gráficos. **O sinal SEM unidade não pede
+  eixo e nunca é recusado** *(11/11/2026)*: o eixo da esquerda é o da primeira
+  unidade conhecida, e o sem-unidade vai para a DIREITA (dividindo-a com a
+  segunda unidade, se houver) — para a escala da grandeza conhecida não se
+  achatar por causa de um número puro; sem unidade conhecida nenhuma, fica na
+  esquerda. O eixo onde ele entra perde o título (ver «Todo eixo escreve a
+  sua unidade»). O ⓘ do catálogo continua dizendo por que a conta saiu sem
+  unidade.
 - **Componente simétrica só existe em EFICAZ.** `I1` e `I2` exigem girar `Ib` e
   `Ic` de 120°, e girar é multiplicar por um complexo — operação que não existe
   sobre uma amostra sozinha, só sobre o fasor. `3I0` poderia ser somado no
@@ -617,7 +634,12 @@ osclab/
   Argumentos com `;` (a vírgula é decimal). As contas são da TELA (vão no
   corpo, como os painéis); só os modelos do usuário ficam em disco
   (`paths.MODELOS_DA_CALCULADORA`). Nome comprido não estraga a gaveta: há
-  teste de navegador (`tests/test_calculadora_navegador.py`).
+  teste de navegador (`tests/test_calculadora_navegador.py`). **«= criar» põe
+  a conta SÓ na lista** *(11/11/2026)*: ela aparece em «Calculados» no
+  «+ sinal» (e em «minhas contas»), nunca num gráfico sozinha — a regra
+  «Nada entra num gráfico porque o programa sabe calcular» vale também para
+  a conta que o usuário escreveu. Uma linha no visor diz onde ela está; quem
+  a põe num gráfico é o «+ sinal» ou o → de «minhas contas».
 - **«+ adicionar gráfico» fica ao lado de «+ adicionar oscilografia»**, no pé
   do bloco do registro, o mesmo botão nos dois; o gráfico novo continua
   entrando no FIM da lista. O menu de tipos tem um ícone de traço por tipo

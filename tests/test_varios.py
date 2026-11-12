@@ -254,3 +254,14 @@ def test_relogios_travados_de_fabricantes_diferentes_avisam_do_filtro_de_entrada
     b = replace(_terminal(1000.0, INICIO, -1.0, "X"), device_id="SIPROTEC 7SA87")
     p = _plano_entre(a, b, "hora")
     assert any("filtro de entrada" in linha for linha in p["rodape"])
+
+
+def test_o_titulo_do_eixo_e_refeito_depois_de_juntar_os_IEDs():
+    """O título sai dos sinais DESENHADOS no eixo; juntar o B não pode deixar
+    o título do painel só do A — nem apagá-lo quando a unidade é a mesma."""
+    misto = paineis.Painel(id="p1", tipo=paineis.ANALOGICO, nome="",
+                           sinais=("c0:instantaneo", "B|c0:instantaneo"))
+    assert _pacote([misto])["paineis"][0]["titulo_do_eixo"] == "A"
+    so_b = paineis.Painel(id="p1", tipo=paineis.ANALOGICO, nome="",
+                          sinais=("B|c0:instantaneo",))
+    assert _pacote([so_b])["paineis"][0]["titulo_do_eixo"] == "A"

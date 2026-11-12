@@ -43,7 +43,7 @@ from osclab.plot.conversao import LADOS
 
 #: Versão do formato do pacote da janela. Sobe quando a tela passa a depender
 #: de um campo novo. Ver o comentário em `montar`.
-CONTRATO = 27
+CONTRATO = 28
 
 
 def montar(registro: Record, *, de: float | None = None, ate: float | None = None,
@@ -332,11 +332,18 @@ def _painel_analogico(registro: Record, painel, por_id: dict, escalas: dict,
                       janela_de_trechos, colunas: int) -> dict:
     """Um painel de ondas: os sinais, as duas escalas e os avisos.
 
-    A unidade do painel é a do PRIMEIRO sinal que entrou nele — não há
-    unidade "do painel" decidida de fora. Quem vier depois com outra unidade
-    vai para o eixo da direita; um terceiro tipo de unidade é recusado, porque
-    a tela tem dois lados e o terceiro seria desenhado numa escala que não
-    está escrita em lugar nenhum.
+    A unidade do painel é a do PRIMEIRO sinal DE UNIDADE CONHECIDA que entrou
+    nele — não há unidade "do painel" decidida de fora. Quem vier depois com
+    outra unidade conhecida vai para o eixo da direita; uma terceira unidade
+    conhecida é recusada, porque a tela tem dois lados e o terceiro seria
+    desenhado numa escala que não está escrita em lugar nenhum.
+
+    O sinal SEM unidade (conta que somou A com V, número puro, canal que o
+    arquivo não declara) nunca é recusado e nunca abre eixo próprio: vai para
+    o eixo da DIREITA quando a esquerda já tem unidade — assim a escala da
+    grandeza conhecida não se achata por causa dele —, e para a esquerda
+    quando não há unidade conhecida nenhuma. O eixo onde ele entra perde o
+    título (`titulo_do_eixo`): a unidade fica só na tabelinha, linha a linha.
     """
     # Dois pedidos que os botões resolvem no MESMO sinal são uma curva só, e
     # desenhá-la duas vezes daria dois traços de cores diferentes exatamente em
@@ -351,20 +358,25 @@ def _painel_analogico(registro: Record, painel, por_id: dict, escalas: dict,
             desenhados.add(alvo.id)
             pedidos.append((identidade, alvo))
 
-    unidade_esq = pedidos[0][1].unidade if pedidos else ""
-    unidade_dir = next((s.unidade for _, s in pedidos if s.unidade != unidade_esq),
-                       None)
+    conhecidas = [s.unidade for _, s in pedidos if s.unidade]
+    unidade_esq = conhecidas[0] if conhecidas else ""
+    unidade_dir = next((u for u in conhecidas if u != unidade_esq), None)
 
     avisos, escolhidos = [], []
     for identidade, alvo in pedidos:
-        if alvo.unidade not in (unidade_esq, unidade_dir):
+        if not alvo.unidade:
+            eixo = "dir" if unidade_esq else "esq"
+        elif alvo.unidade == unidade_esq:
+            eixo = "esq"
+        elif alvo.unidade == unidade_dir:
+            eixo = "dir"
+        else:
             avisos.append(f"{alvo.nome} ({alvo.unidade_mostrada}) não cabe: "
                           "o gráfico já tem dois eixos.")
             continue
         valores = catalogo.serie(registro, alvo, j0, i1, janela_de_trechos,
                                  lado, escalas)[i0 - j0:]
-        escolhidos.append((identidade, alvo, valores,
-                           "dir" if alvo.unidade != unidade_esq else "esq"))
+        escolhidos.append((identidade, alvo, valores, eixo))
 
     def faixa(quais):
         if not quais:
@@ -387,10 +399,11 @@ def _painel_analogico(registro: Record, painel, por_id: dict, escalas: dict,
 
     eixo_dir = None
     if dir_:
-        _, mostrada_dir = escalas.get(unidade_dir, (1.0, unidade_dir))
+        _, mostrada_dir = (escalas.get(unidade_dir, (1.0, unidade_dir))
+                           if unidade_dir else (1.0, ""))
         eixo_dir = {
             "unidade": mostrada_dir,
-            "unidade_do_arquivo": unidade_dir,
+            "unidade_do_arquivo": unidade_dir or "",
             "minimo": dir_[1],
             "maximo": dir_[2],
             "marcacoes": escala.marcacoes(dir_[1], dir_[2], alvo=4),
@@ -410,6 +423,10 @@ def _painel_analogico(registro: Record, painel, por_id: dict, escalas: dict,
                                        eixo_dir["maximo"] - eixo_dir["minimo"])
             k_dir += 1
             unidade_mostrada = eixo_dir["unidade"]
+        # O sinal sem unidade não herda a do eixo em que caiu: `(kV)` na linha
+        # dele afirmaria uma grandeza que a conta não tem.
+        if not alvo.unidade:
+            unidade_mostrada = ""
 
         canal = canais.get(alvo.canal) if alvo.canal >= 0 else None
         fase, _origem = fases.da_canal(canal) if canal is not None else ("", "")
@@ -443,6 +460,7 @@ def _painel_analogico(registro: Record, painel, por_id: dict, escalas: dict,
             "indice": canal.index if canal is not None else None,
             "fase": fase,
             "unidade": unidade_mostrada,
+            "unidade_do_arquivo": alvo.unidade,
             "eixo": eixo,
             "lado": lado_final,
             "convertido": convertido,
@@ -460,7 +478,7 @@ def _painel_analogico(registro: Record, painel, por_id: dict, escalas: dict,
                                 colunas),
         })
 
-    return {
+    saida = {
         "id": painel.id,
         "tipo": paineis.ANALOGICO,
         # Enquanto o usuário não renomeou, o nome sai da unidade — e por isso
@@ -482,6 +500,8 @@ def _painel_analogico(registro: Record, painel, por_id: dict, escalas: dict,
         "rodape": _rodape(registro, pedidos),
         "sinais": sinais_json,
     }
+    serie.titular_eixos(saida)
+    return saida
 
 
 def _medida_aplicavel(painel, por_id: dict) -> bool:
