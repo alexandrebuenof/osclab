@@ -348,7 +348,11 @@ def test_a_linha_de_tres_terminais_entra_pelo_caminho_A_B_com_o_aviso(tmp_path, 
 # ---------------------------------------------------------------------------
 
 CICLO = 1 / 60
-FOLGA = localizador.FOLGA_DO_ZOOM * CICLO
+
+
+def _folga(inicio, fim):
+    return max(localizador.FOLGA_DO_ZOOM * CICLO,
+               localizador.FOLGA_RELATIVA * (fim - inicio))
 
 
 def _eventos(inicio, plato, assentado):
@@ -357,14 +361,21 @@ def _eventos(inicio, plato, assentado):
 
 
 def test_a_regiao_da_falta_vai_do_inicio_ao_fim_do_assentado_com_folga():
-    """Falta no meio do registro: do início − 2 ciclos ao fim do trecho em que
-    a curva mede + 2 ciclos. Começa no INÍCIO, não no platô: quem amplia quer
+    """Falta no meio do registro: do início ao fim do trecho em que a curva
+    mede, com folga dos dois lados (um pouco do hachurado). Começa no INÍCIO, não no platô: quem amplia quer
     ver a falta entrar."""
     ev = _eventos(0.100, [0.1333, 0.1800], [0.1167, 0.1925])
     z = localizador.janela_da_falta(ev, 0.0, 0.5, CICLO, 1 / 2000)
     assert z["motivo"] == ""
-    assert z["de"] == pytest.approx(0.100 - FOLGA)
-    assert z["ate"] == pytest.approx(0.1925 + FOLGA)
+    assert z["de"] == pytest.approx(0.100 - _folga(0.100, 0.1925))
+    assert z["ate"] == pytest.approx(0.1925 + _folga(0.100, 0.1925))
+
+
+def test_falta_longa_ganha_folga_proporcional():
+    ev = _eventos(0.500, [0.6, 1.3], [0.52, 1.5])
+    z = localizador.janela_da_falta(ev, 0.0, 3.0, CICLO, 1 / 2000)
+    assert z["de"] == pytest.approx(0.500 - 0.25)
+    assert z["ate"] == pytest.approx(1.5 + 0.25)
 
 
 def test_falta_colada_no_inicio_ou_no_fim_corta_na_borda_sem_deslizar():
@@ -373,17 +384,24 @@ def test_falta_colada_no_inicio_ou_no_fim_corta_na_borda_sem_deslizar():
     z = localizador.janela_da_falta(_eventos(0.010, [0.043, 0.08], [0.027, 0.09]),
                                     0.0, 0.5, CICLO, 1 / 2000)
     assert z["de"] == pytest.approx(0.0)
-    assert z["ate"] == pytest.approx(0.09 + FOLGA)
+    assert z["ate"] == pytest.approx(0.09 + _folga(0.010, 0.09))
     z = localizador.janela_da_falta(_eventos(0.400, [0.433, 0.49], [0.417, 0.5]),
                                     0.0, 0.5, CICLO, 1 / 2000)
-    assert z["de"] == pytest.approx(0.400 - FOLGA)
+    assert z["de"] == pytest.approx(0.400 - _folga(0.400, 0.5))
     assert z["ate"] == pytest.approx(0.5)
 
 
-def test_sem_plato_ou_sem_falta_nao_ha_zoom_e_diz_por_que():
+def test_sem_plato_amplia_mesmo_assim():
+    """Decidido em 12/11/2026: sem platô, do início à abertura; sem abertura,
+    `SEM_FIM_EM_CICLOS` depois do início."""
     z = localizador.janela_da_falta(_eventos(0.1, None, [0.117, 0.13]), 0.0, 0.5, CICLO)
-    assert z["de"] is None and z["ate"] is None
-    assert "platô" in z["motivo"]
+    assert z["motivo"] == "" and z["de"] < 0.1 and z["ate"] > 0.13
+    z = localizador.janela_da_falta(_eventos(0.1, None, None), 0.0, 0.5, CICLO)
+    fim = 0.1 + localizador.SEM_FIM_EM_CICLOS * CICLO
+    assert z["ate"] == pytest.approx(fim + _folga(0.1, fim))
+
+
+def test_sem_falta_nao_ha_zoom_e_diz_por_que():
     z = localizador.janela_da_falta(None, 0.0, 0.5, CICLO)
     assert z["de"] is None and "início de falta" in z["motivo"]
     # o aviso da conta, quando houver, é o motivo
@@ -397,6 +415,7 @@ def test_a_regiao_da_falta_de_uma_falta_simulada_contem_o_inicio_e_o_plato(pacot
     inteiro, e é menor que o registro — é zoom de verdade."""
     ev = pacote["eventos"]
     z = localizador.janela_da_falta(ev, 0.0, 10.0, CICLO, 1 / 2000)
-    assert z["de"] == pytest.approx(max(ev["inicio"] - FOLGA, 0.0))
+    fim = ev["assentado"][1]
+    assert z["de"] == pytest.approx(max(ev["inicio"] - _folga(ev["inicio"], fim), 0.0))
     assert z["de"] < ev["plato"][0] and z["ate"] > ev["plato"][1]
     assert z["ate"] - z["de"] < 10.0

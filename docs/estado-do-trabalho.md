@@ -14,10 +14,9 @@ ao registro inteiro; não entra no Ctrl+Z (como a roda). Os dois cliques do dupl
 põem cursor (clique nunca pôs) e a seleção volta à de antes deles. Testes em
 `tests/test_localizador.py` e `tests/test_zoom_falta_navegador.py`
 (`tests/navegador/zoom-falta.mjs`).
-**Para ele decidir:** (1) a folga de 2 ciclos de cada lado (`FOLGA_DO_ZOOM`); (2) começar
-no início da falta e não no platô (o platô sozinho esconderia a falta entrando); (3) o
-segundo duplo clique volta à janela de ANTES e não ao registro inteiro; (4) sem platô
-não há zoom, mesmo havendo início de falta reconhecido.
+**Decidido por ele (12/11/2026):** folga maior, «uma folguinha do hachurado» — 4 ciclos
+ou ¼ da duração da falta, o que for maior (`FOLGA_DO_ZOOM`, `FOLGA_RELATIVA`); e sem
+platô amplia assim mesmo (até a abertura, ou `SEM_FIM_EM_CICLOS` depois do início).
 
 **12/11/2026 — a roda do localizador, de novo (ramo do agente, para revisão):** «difícil
 dar zoom; quando damos, o gráfico movimenta e some». Causa medida: (1) cada pedido de
