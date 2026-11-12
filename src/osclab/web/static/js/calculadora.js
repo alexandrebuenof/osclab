@@ -100,7 +100,8 @@
     + "ONDA, amostra a amostra: rms delta deriv integ f60 media abs raiz atrasar(x; ms) maxjan(x; ms).\n"
     + "FASOR, sobre o 60 Hz: a (1∠120°) j conj mod ang re im polar(m; graus).\n"
     + "{k0} vira campo para digitar (↺ usa o do relé).\n"
-    + "«=» cria a conta e a põe no gráfico escolhido.";
+    + "«=» cria a conta: ela entra no «+ sinal», em Calculados — nunca num gráfico sozinha.\n"
+    + "Em «minhas contas», → põe a conta no gráfico escolhido.";
 
   //: As teclas. Cada uma é [rótulo, o que insere, classe, dica]. Inserções
   //: especiais: "⌫" apaga · "C" limpa · "SINAL" abre a lista de sinais.
@@ -567,15 +568,23 @@
       if (estado.emEdicao) {
         calc().trocar(lista.map((x) => (x.id === estado.emEdicao ? { ...c, id: estado.emEdicao } : x)));
       } else {
+        // A conta nova vai SÓ para a lista: nada entra num gráfico porque o
+        // programa sabe calcular — quem a põe é o usuário, pelo «+ sinal»
+        // (Calculados) ou pelo → de «minhas contas».
         c.id = calc().novoId();
         calc().trocar([...lista, c]);
-        calc().porNoPainel(alvo(), `${c.id}:instantaneo`);
       }
+      const criada = !estado.emEdicao;
       await calc().recarregar();
       Object.assign(estado, { nome: "", expressao: "", parametros: {}, relacoes: {}, emEdicao: null,
                               ultima: null, semRelacao: [] });
       avisarContas();
       mostrarAba("calc");
+      // Uma linha no lugar do resultado, que some quando se volta a digitar.
+      if (criada) {
+        gaveta.querySelector(".calc-res")?.append(
+          criar("span", "calc-feito", `«${c.nome}» criada — está no «+ sinal», em Calculados`));
+      }
     }
 
     desenharFileira();

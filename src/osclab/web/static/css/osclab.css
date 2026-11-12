@@ -7059,6 +7059,7 @@ html.calc-aberta button:has(> .icone-calculadora) { color: var(--destaque); box-
 .calc-n { font: 600 9px var(--mono); color: var(--calc-visor-fundo); background: var(--calc-visor-apagado);
   border-radius: 2px; padding: 0 3px; margin-right: 6px; vertical-align: 3px; }
 .calc-erro { font: 12px var(--sans); color: #ff9b8f; text-align: right; overflow-wrap: anywhere; }
+.calc-feito { font: 12px var(--sans); opacity: 0.75; text-align: right; overflow-wrap: anywhere; }
 .calc-alerta { color: var(--atencao); cursor: help; font-size: 13px; flex: none; }
 .calc-visor .calc-alerta { color: #f0b429; }
 canvas.calc-previa { display: block; margin-top: 4px; cursor: help; }

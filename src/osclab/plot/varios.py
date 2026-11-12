@@ -40,7 +40,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from osclab.formats.base import Record
-from osclab.plot import alinhamento, escala, paineis
+from osclab.plot import alinhamento, escala, paineis, serie
 
 #: As letras dos IEDs, na ordem em que entram na aba.
 LETRAS = ("A", "B", "C")
@@ -147,6 +147,7 @@ def _juntar_analogico(base: dict, letra: str, pedaco: dict, tempo: list,
         base["sinais"] = novos
         base["rodape"] = [f"IED {letra}: {x}" for x in pedaco.get("rodape") or []]
         base["avisos"] = list(base.get("avisos") or []) + list(pedaco.get("avisos") or [])
+        serie.titular_eixos(base)
         return
 
     faixas = {"esq": [base["minimo"], base["maximo"]]}
@@ -163,16 +164,27 @@ def _juntar_analogico(base: dict, letra: str, pedaco: dict, tempo: list,
     avisos = list(base.get("avisos") or [])
     for s in novos:
         unidade, minimo, maximo, mostrada = dele[s["eixo"]]
-        if unidade == unidades["esq"]:
-            eixo = "esq"
-        elif unidades["dir"] in (None, unidade):
-            eixo = "dir"
-            if unidades["dir"] is None:
-                unidades["dir"] = unidade
+        # O sinal sem unidade segue a regra de `janela._painel_analogico`:
+        # nunca é recusado e vai para a direita quando a esquerda tem unidade.
+        sem_unidade = s.get("unidade_do_arquivo", unidade) == ""
+        if sem_unidade:
+            eixo = "dir" if unidades["esq"] else "esq"
+            if eixo == "dir" and "dir" not in faixas:
                 faixas["dir"] = [minimo, maximo]
-                base["eixo_dir"] = {"unidade": mostrada, "unidade_do_arquivo": unidade,
+                base["eixo_dir"] = {"unidade": "", "unidade_do_arquivo": "",
                                     "minimo": minimo, "maximo": maximo,
                                     "marcacoes": [], "casas": 0}
+        elif unidade == unidades["esq"]:
+            eixo = "esq"
+        elif unidades["dir"] in (None, "", unidade):
+            eixo = "dir"
+            if not unidades["dir"]:
+                unidades["dir"] = unidade
+                if "dir" not in faixas:
+                    faixas["dir"] = [minimo, maximo]
+                    base["eixo_dir"] = {"minimo": minimo, "maximo": maximo,
+                                        "marcacoes": [], "casas": 0}
+                base["eixo_dir"].update(unidade=mostrada, unidade_do_arquivo=unidade)
         else:
             avisos.append(f"{s['sinal']} (IED {letra}) não cabe: o gráfico já "
                           "tem dois eixos.")
@@ -193,6 +205,7 @@ def _juntar_analogico(base: dict, letra: str, pedaco: dict, tempo: list,
     base["avisos"] = avisos
     base["rodape"] = list(base.get("rodape") or []) + [
         f"IED {letra} ({apelido}): {x}" for x in pedaco.get("rodape") or []]
+    serie.titular_eixos(base)
 
 
 def _juntar_digital(base: dict, letra: str, pedaco: dict, tempo: list,

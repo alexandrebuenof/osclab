@@ -85,7 +85,7 @@
   //: navegador recarrega o `.js` sozinho: quem troca de versão sem reiniciar
   //: fica com tela nova e servidor velho, e o resultado é uma tela que mostra
   //: coisas que não fazem sentido sem dar erro nenhum. Já custou três rodadas.
-  const CONTRATO = 26;
+  const CONTRATO = 27;
 
   //: A margem de cima abriga a etiqueta numerada dos cursores, que fica FORA da
   //: área de desenho: por dentro ela tapa o pico da onda — e o pico é
@@ -6289,7 +6289,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       }
 
       if (sinal.eixo === "dir") {
-        const ladoDir = criar("span", "lado", `→ ${sinal.unidade}`);
+        const ladoDir = criar("span", "lado", `→ ${sinal.unidade || "—"}`);
         ladoDir.title = "Este sinal está na escala da DIREITA, porque a "
                       + "unidade dele não é a do gráfico — a altura dele não "
                       + "se compara com a dos outros traços.";
@@ -14541,12 +14541,15 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       // do título: `81,67` numa linha de V1 se lê como 81 V secundários quando
       // são 81 kV primários — erro de três ordens de grandeza que não tem nada
       // na tela para denunciá-lo.
-      if (sinal.unidade) {
-        const un = criar("span", "unidade-extra", `(${sinal.unidade})`);
-        un.title = sinal.eixo === "dir"
-          ? "Este sinal está na escala da DIREITA, porque a unidade dele não é "
-            + "a do gráfico."
-          : `valores em ${sinal.unidade}`;
+      // Sem unidade, «—»: linha calada se leria como a unidade do eixo.
+      {
+        const un = criar("span", "unidade-extra", `(${sinal.unidade || "—"})`);
+        un.title = !sinal.unidade
+          ? "Sinal sem unidade: o eixo em que ele está não leva título."
+          : sinal.eixo === "dir"
+            ? "Este sinal está na escala da DIREITA, porque a unidade dele não é "
+              + "a do gráfico."
+            : `valores em ${sinal.unidade}`;
         rotulo.append(un);
       }
 
@@ -15710,7 +15713,10 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     // as outras. Existe porque um gráfico pode misturar sinais e o título
     // deixou de dizer a unidade: `81,67` num eixo mudo se lê como 81 V quando
     // são 81 kV, e três ordens de grandeza não podem depender de memória.
-    escreverUnidade(ctx, painel.unidade, x0 - 8, y0 - MARGEM.topo / 2, "right");
+    // O TÍTULO vem pronto do servidor (`serie.titular_eixos`): vazio quando o
+    // eixo é ambíguo — unidades misturadas ou sinal sem unidade —, e aí a
+    // unidade fica só na tabelinha, linha a linha.
+    escreverUnidade(ctx, painel.titulo_do_eixo, x0 - 8, y0 - MARGEM.topo / 2, "right");
 
     // --- o segundo eixo, à direita ---------------------------------------
     //
@@ -15726,7 +15732,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       for (const marca of dir.marcacoes) {
         ctx.fillText(formatar(marca, dir.casas), x1 + 8, Math.round(emYdir(marca)));
       }
-      escreverUnidade(ctx, dir.unidade, x1 + 8, y0 - MARGEM.topo / 2, "left");
+      escreverUnidade(ctx, dir.titulo, x1 + 8, y0 - MARGEM.topo / 2, "left");
       ctx.textAlign = "right";
     }
 

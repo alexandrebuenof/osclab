@@ -149,6 +149,38 @@ def titulo_do_grupo(unidade: str) -> str:
     return f"{nome} ({limpa})" if nome else limpa
 
 
+def titulo_do_eixo(unidades: list[str]) -> str:
+    """O que se escreve no alto de um eixo, dadas as unidades dos sinais nele.
+
+    Uma unidade só, e conhecida: ela. Qualquer outra coisa — unidades
+    diferentes, ou um sinal sem unidade no meio de grandezas conhecidas — é
+    eixo AMBÍGUO, e eixo ambíguo não leva título: `kV` em cima de uma régua
+    onde também passa um número puro afirmaria que o número é kV. A unidade
+    fica então só na tabelinha, em cada linha (`—` para a que não tem).
+    """
+    distintas = set(unidades)
+    if len(distintas) != 1:
+        return ""
+    return next(iter(distintas)) or ""
+
+
+def titular_eixos(painel: dict) -> None:
+    """Escreve `titulo_do_eixo` no painel e `titulo` no eixo da direita.
+
+    Sai dos sinais que estão DESENHADOS em cada eixo, e por isso é refeito
+    quando outro IED acrescenta sinais ao painel (`varios._juntar_analogico`).
+    Painel vazio conserva a unidade que tinha — não há o que ser ambíguo.
+    """
+    sinais_ = painel.get("sinais") or []
+    por_eixo = {"esq": [], "dir": []}
+    for s in sinais_:
+        por_eixo[s.get("eixo", "esq")].append(s.get("unidade") or "")
+    painel["titulo_do_eixo"] = (titulo_do_eixo(por_eixo["esq"]) if por_eixo["esq"]
+                                else painel.get("unidade") or "")
+    if painel.get("eixo_dir"):
+        painel["eixo_dir"]["titulo"] = titulo_do_eixo(por_eixo["dir"])
+
+
 def arredondar(v: np.ndarray, intervalo: float) -> list[float]:
     """Corta casas decimais que não cabem na tela, para o JSON não inchar."""
     casas = escala.casas_decimais(intervalo) + 2

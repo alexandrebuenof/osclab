@@ -171,8 +171,18 @@ for (const tema of ["claro", "escuro"]) {
   confere(zap.startsWith("3,79") && zap.includes("Ω"), `${tema}: Zap AG no cursor 2 = ${zap}`);
   await foto(`${tema}-4-alimentador-zap.png`);
   await avaliar(`(async () => { __tecla('= criar').click(); await ${P(2500)}; })()`);
+  // Criada, a conta vai SÓ para a lista (decidido em 11/11/2026): o gráfico
+  // não muda, e uma linha no visor diz onde ela está.
+  confere(!(await avaliar("[...document.querySelectorAll('.legenda')].map(x => x.textContent).join(' ')")).includes("Zap AG"),
+    `${tema}: a conta criada NÃO entra no gráfico sozinha`);
+  confere((await avaliar("document.querySelector('.calc-feito')?.textContent || ''")).includes("Calculados"),
+    `${tema}: a confirmação diz que a conta está em Calculados`);
+  await avaliar(`(async () => { window.osclabCalculadora.aba('minhas'); await ${P(600)};
+    const l = [...document.querySelectorAll('.calc-conta')].find(x => x.textContent.includes('Zap AG'));
+    [...l.querySelectorAll('.calc-mini')].find(b => b.textContent === '→').click(); await ${P(2500)};
+    window.osclabCalculadora.aba('calc'); await ${P(300)}; })()`);
   confere((await avaliar("[...document.querySelectorAll('.legenda')].map(x => x.textContent).join(' ')")).includes("Zap AG"),
-    `${tema}: a conta criada entra no gráfico`);
+    `${tema}: o → de «minhas contas» põe a conta no gráfico`);
   await avaliar(`(async () => { document.querySelector('.calc-dom.onda').click(); await ${P(200)};
     await __escrever('[Current IN] - ([IA] + [IB] + [IC])'); })()`);
   confere(await avaliar("!!document.querySelector('.calc-param.relacao input')"), `${tema}: canal sem TC ganha o campo da relação`);
