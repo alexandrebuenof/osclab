@@ -98,6 +98,7 @@ from osclab.library import acervo
 from osclab.plot import alinhamento as alinhamento_mod
 from osclab.plot import calculadora as calculadora_mod
 from osclab.plot import contas as contas_mod
+from osclab.plot import diferencial as diferencial_mod
 from osclab.plot import eventos as eventos_plot
 from osclab.plot import impedancia as impedancia_mod
 from osclab.plot import janela, leitura, navegacao, paineis
@@ -626,6 +627,13 @@ def create_app() -> Flask:
         nome_a = _nome_do_terminal(sha, reg_a, acervo.apelido(sha))
         nome_b = _nome_do_terminal(sha_b, reg_b, acervo.apelido(sha_b))
         return jsonify(refino_mod.montar(reg_a, nome_a, reg_b, nome_b, corpo))
+
+    @app.post("/api/diferencial/previa")
+    def previa_do_diferencial():
+        """A característica do 87T com o que se está digitando na gaveta de
+        ajustes, ao vivo (`plot/diferencial.previa`). Não depende do registro:
+        é só a curva dos números do corpo (`valores`)."""
+        return jsonify(diferencial_mod.previa(_corpo().get("valores")))
 
     @app.post("/api/onda/<sha>/localizar")
     def localizar_falta(sha: str):

@@ -15,6 +15,25 @@ num botão dela (o teclado da página faz `preventDefault` no Esc para tirar os 
 e isso cancela o fechamento do `<dialog>`) — corrigido só aqui; as outras `<dialog>`
 que não tratam o Esc por conta própria devem ter o mesmo defeito (não conferido).
 
+## 12/11/2026 — ajustes do diferencial em GAVETA (variante 10), ramo do agente, para revisão
+
+Escolhida a variante 10 da maquete `maquete/diferencial` (porta 8778), reescrita como código
+definitivo: o botão «ajustes» do painel «Diferencial percentual» abre uma gaveta à direita
+(como a calculadora, a coluna encolhe; abrir uma fecha a outra), com o desenho do trafo e os
+campos de cada lado, a característica ao vivo e a lista do resto. Origem na moldura do campo
+(lido · deduzido · digitado · a conferir · falta), «?» com a legenda, hover com a variável do
+relé e — no digitado — o que o arquivo dizia. Fecha só pelo ×/Esc/botão. Grupo de cada lado
+só «G1» (radical no hover). Sem todos os ajustes: característica APAGADA no lugar do gráfico e
+a linha do que falta embaixo (nada por cima do desenho); um lado só: o trafo com o lado 2
+apagado. Conta em `plot/diferencial.previa` (+ rota `/api/diferencial/previa`), campos novos
+no pacote (`previa`, e por ajuste `lido`, `lado`, `curto`, `curtas`), `CONTRATO` 28 → 29.
+Testes em `tests/test_diferencial.py` e `tests/test_diferencial_navegador.py`.
+**Diferente da maquete:** a gaveta encolhe a coluna em vez de cobrir o gráfico; o quadro do
+que falta saiu de cima do desenho para a linha de baixo; «manter o lido» substitui «aceitar
+assim». **Para ele decidir:** os valores com que se desenha o trecho «?» (pickup 0,3 · S1 25 % ·
+BP1 3 · S2 50 % · BP2 6 · 87U 8, os da maquete) estão bons? E o seletor «lado 1/2» do
+cabeçalho do painel ainda lista as trincas como «G1 · radical» — tirar também?
+
 ## Resumo da manhã — 12/11/2026
 
 **No main (sem push; GitHub em 2d95590 = 0.8.0):** tudo junto, suíte inteira passando e `ruff check .` limpo.

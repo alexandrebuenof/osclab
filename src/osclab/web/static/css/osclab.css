@@ -1290,88 +1290,158 @@ a.chave, .tema, .voltar, #exportar { text-decoration: none; }
   line-height: 1.4;
   color: var(--suave);
 }
-/* No lugar do gráfico, enquanto falta ajuste: a mesma altura, para a tela
-   não pular quando o último ajuste entra. */
+/* Enquanto falta ajuste: a característica APAGADA no lugar do gráfico (do
+   mesmo tamanho, para a tela não pular quando o último ajuste entra) e, na
+   linha logo abaixo, o que falta — nunca escrito por cima do desenho. */
+.grafico-corpo.diferencial.sem-tabela { grid-template-columns: minmax(0, 1fr); }
+.grafico-corpo.diferencial.sem-tabela > .lado-diferencial { display: none; }
+.tela-diferencial canvas.previa-87.fantasma { display: block; }
 .faltam-ajustes {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 10px;
-  padding: 18px 20px;
-  border: 1px dashed var(--atencao);
-  border-radius: 6px;
-  line-height: 1.45;
-  font-size: 13px;
-  color: var(--tinta);
-}
-.faltam-ajustes p { margin: 0; max-width: 620px; }
-.faltam-ajustes .nota-do-quadro { color: var(--atencao); font-size: 12px; }
-.faltam-ajustes .medida { align-self: flex-start; }
-
-/* A caixa de ajustes do 87T: a da impedância, mais larga e com rolagem. */
-.menu-suspenso.ajustes-87 { width: 470px; overflow-y: auto; }
-.placar-87 { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 6px 6px; }
-.estado-87 {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 18px;
-  padding: 0 7px;
-  border: 1px solid var(--linha);
-  border-radius: 9px;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  white-space: nowrap;
-  color: var(--suave);
-}
-.estado-87.coletado { color: var(--bom); border-color: var(--bom); }
-.estado-87.coletado::before { content: "●"; font-size: 8px; }
-.estado-87.suspeito { color: var(--atencao); border-color: var(--atencao); }
-.estado-87.suspeito::before { content: "▲"; font-size: 8px; }
-.estado-87.falta { border-style: dashed; }
-.estado-87.falta::before { content: "○"; font-size: 8px; }
-.estado-87.digitado { color: var(--fase-a); border-color: var(--fase-a); }
-.estado-87.digitado::before { content: "✎"; }
-.estado-87.deduzido { border-style: dotted; }
-.estado-87.deduzido::before { content: "ƒ"; font-style: italic; }
-.ajuste-87 {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 120px 34px 98px;
-  gap: 6px;
-  align-items: center;
-  margin: 0 6px;
-  padding: 4px 0;
-  border-bottom: 1px solid var(--linha);
-}
-.ajuste-87 .rotulo-87 { font-size: 12.5px; }
-.ajuste-87 .variavel-87 {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--suave);
-}
-.ajuste-87 .campo-87 { width: 100%; font-family: var(--mono); font-size: 12px; }
-.ajuste-87.falta .campo-87 { border-style: dashed; }
-.ajuste-87.suspeito .campo-87 { border-color: var(--atencao); }
-.ajuste-87 .unidade-87 { font-size: 11px; color: var(--suave); }
-.ajuste-87 .estado-87 { justify-self: end; }
-.ajuste-87 .sub-87 {
-  grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: var(--suave);
-}
-.ajuste-87 .sub-87 code { font-family: var(--mono); font-size: 10.5px; }
-.ajuste-87 .motivo-87 { color: var(--atencao); }
-.ajuste-87 .sub-87 .medida { height: 20px; font-size: 10.5px; }
-.ajustes-87 .equacao-87 {
-  margin: 2px 6px 4px;
-  font-family: var(--mono);
-  font-size: 11.5px;
+  gap: 5px 6px;
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.4;
   color: var(--tinta);
 }
+.faltam-ajustes .faltam-87-texto { margin: 0 4px 0 6px; color: var(--suave); }
+.faltam-ajustes .nota-do-quadro { flex-basis: 100%; margin: 2px 0 0; color: var(--atencao); font-size: 12px; }
+.falta-87 {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px dashed var(--atencao);
+  border-radius: 11px;
+  background: none;
+  color: var(--tinta);
+  font: 11.5px var(--sans);
+  cursor: pointer;
+}
+.falta-87:hover { background: color-mix(in srgb, var(--atencao) 10%, transparent); }
+.falta-87.suspeito { border-style: solid; color: var(--atencao); }
+
+/* Um lado só: o trafo com o segundo lado apagado, no lugar do gráfico. */
+.um-lado-87 {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 140px;
+  padding: 14px 16px;
+  border: 1px solid var(--linha);
+  border-radius: 6px;
+  line-height: 1.4;
+  font-size: 12.5px;
+  color: var(--tinta);
+}
+.um-lado-87 p { margin: 4px 0 0; max-width: 560px; }
+.um-lado-87 .apagado-87 { color: var(--suave); }
+.trafo-87 { flex: none; }
+.trafo-87 .fio { stroke: var(--suave); stroke-width: 1.4; }
+.trafo-87 .enrol { fill: none; stroke: var(--tinta); stroke-width: 1.6; }
+.trafo-87 .tc { fill: var(--superficie); stroke: var(--destaque); stroke-width: 1.4; }
+.trafo-87 .ausente { stroke-dasharray: 3 3; opacity: .45; }
+
+/* --- a GAVETA de ajustes do 87T (variante 10, 12/11/2026) -----------------
+ *
+ * Presa à direita, embaixo da barra de cima, como a calculadora — e a coluna
+ * dos gráficos encolhe do mesmo jeito (ver `.calc-gaveta`), para o painel
+ * continuar à vista enquanto se digita. A origem de cada número é a MOLDURA
+ * do campo: lido (cheia), deduzido (pontilhada, itálico), digitado (cheia,
+ * na cor de destaque), a conferir (cheia, âmbar), falta (tracejada, âmbar),
+ * não usado (tracejada, apagada). Ver `abrirAjustesDoDiferencial`.
+ */
+html.dif-aberta { --calc-largura: 460px; }
+.gaveta-87 {
+  position: fixed; right: 0; top: var(--calc-topo, 0px); bottom: 0; width: var(--calc-largura);
+  z-index: 50; display: flex; flex-direction: column; box-sizing: border-box;
+  padding: 12px 14px 10px; background: var(--superficie); border-left: 1px solid var(--linha);
+  overflow-x: hidden; font-family: var(--sans); color: var(--tinta);
+}
+.gaveta-87 * { box-sizing: border-box; min-width: 0; }
+.gaveta-87 .topo-87 { flex: none; padding-bottom: 6px; border-bottom: 1px solid var(--linha); }
+.gaveta-87 .cabeca { display: flex; gap: 8px; align-items: center; }
+.gaveta-87 .cabeca h3 { flex: 1; margin: 0; font-size: 14px; color: var(--tinta); }
+.gaveta-87 .cabeca .fechar { border: 0; background: none; color: var(--suave); font-size: 20px; line-height: 1;
+  padding: 0 4px; cursor: pointer; }
+.gaveta-87 .cabeca .fechar:hover { color: var(--tinta); }
+.gaveta-87 .ajuda-87 { width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1px solid var(--linha);
+  background: none; color: var(--suave); font: 600 11px var(--sans); cursor: help; flex: none; }
+.gaveta-87 .ajuda-87:hover { color: var(--tinta); border-color: var(--suave); }
+.faltam-87, .completo-87 { font: 11px var(--mono); border-radius: 9px; padding: 1px 8px; white-space: nowrap; }
+.faltam-87 { color: var(--atencao); background: color-mix(in srgb, var(--atencao) 12%, transparent); }
+.completo-87 { color: var(--bom); background: color-mix(in srgb, var(--bom) 12%, transparent); }
+.legenda-87 { margin-top: 6px; padding: 6px 8px; border-radius: 6px; background: var(--cartao);
+  border: 1px solid var(--cartao-borda); font-size: 11.5px; color: var(--suave); line-height: 1.45; }
+.legenda-87 p { margin: 0 0 6px; }
+.legenda-87 p:last-child { margin-bottom: 0; }
+.marcas-87 { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 4px 0 8px; }
+.marca-87 { display: inline-flex; align-items: center; gap: 6px; }
+.nota-87 { margin: 6px 0 0; color: var(--atencao); font-size: 11.5px; line-height: 1.4; }
+
+.gaveta-87 .corpo-87 { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 8px 2px 4px 0; }
+.gaveta-87 .pe-87 { flex: none; display: flex; justify-content: flex-end; padding-top: 6px;
+  border-top: 1px solid var(--linha); }
+
+/* o trafo: o desenho e a potência em cima, os dois lados embaixo */
+.unifilar-87 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 12px;
+  margin: 0 0 8px; padding: 8px; border: 1px solid var(--cartao-borda); border-radius: 6px;
+  background: var(--cartao); }
+.unifilar-87 .centro-87 { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center;
+  justify-content: center; gap: 4px 14px; }
+.unifilar-87 .centro-87 .mini-87 { grid-template-columns: auto 140px; }
+.unifilar-87 .centro-87 .suspeito-87 { flex-basis: 100%; }
+.lado-87 { display: flex; flex-direction: column; gap: 3px; }
+.cab-lado-87 { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+.cab-lado-87 b { font-size: 12px; }
+.grupo-87 { font: 11px var(--mono); color: var(--suave); cursor: default; }
+.mini-87 { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 6px; align-items: center; }
+.mini-87 .rotulo-87 { font-size: 11.5px; color: var(--suave); }
+
+/* a prévia ao vivo */
+.previa-87-caixa { margin: 0 0 8px; padding: 4px; border: 1px solid var(--linha); border-radius: 6px;
+  background: var(--fundo); line-height: 0; }
+.previa-87 { display: block; }
+
+/* a lista */
+.grupo-de-ajustes-87 { margin: 4px 0 8px; }
+.titulo-87 { margin: 6px 0 3px; font: 600 10.5px var(--sans); letter-spacing: .06em;
+  text-transform: uppercase; color: var(--suave); }
+.conta-87 { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--atencao); }
+.linha-87 { display: grid; grid-template-columns: minmax(0, 1fr) 176px; gap: 2px 10px; align-items: center;
+  padding: 2px 0; }
+.rotulo-87 { font-size: 12.5px; color: var(--tinta); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; cursor: default; }
+.linha-87.o-fora .rotulo-87 { color: var(--suave); }
+.equacao-87 { margin: 4px 0 0; font: 11px var(--mono); color: var(--suave); }
+.lista-87 { display: block; }
+.mais-87 { margin: 6px 0 0; }
+.mais-87 > summary { cursor: pointer; font-size: 11.5px; color: var(--suave); padding: 3px 0; }
+.mais-87 > summary:hover { color: var(--tinta); }
+
+/* o campo, e a origem na moldura */
+.campo-87 { display: inline-flex; align-items: center; gap: 5px; width: 100%; }
+.campo-87 .entrada-87 { flex: 1; height: 24px; padding: 0 7px; font: 12px var(--mono); color: var(--tinta);
+  background: var(--fundo); border: 1px solid var(--linha); border-radius: 4px; text-align: right; }
+.campo-87 select.entrada-87 { text-align: left; padding: 0 4px; }
+.campo-87 .entrada-87:focus { outline: 2px solid color-mix(in srgb, var(--destaque) 45%, transparent);
+  outline-offset: 0; }
+.campo-87 .entrada-87.invalido { border-color: var(--ruim) !important; }
+.campo-87 .unidade-87 { flex: none; width: 26px; font: 11px var(--mono); color: var(--suave); }
+.campo-87.amostra { width: auto; }
+.campo-87.amostra .entrada-87 { flex: none; display: inline-block; width: 38px; height: 20px; line-height: 18px;
+  font-size: 11px; }
+.campo-87.o-lido .entrada-87 { border: 1px solid var(--suave); }
+.campo-87.o-deduzido .entrada-87 { border: 1px dotted var(--suave); font-style: italic; }
+.campo-87.o-digitado .entrada-87 { border: 1.5px solid var(--destaque); }
+.campo-87.o-falta .entrada-87 { border: 1px dashed var(--atencao);
+  background: color-mix(in srgb, var(--atencao) 7%, var(--fundo)); }
+.campo-87.o-suspeito .entrada-87 { border: 1.5px solid var(--atencao); }
+.campo-87.o-fora .entrada-87 { border: 1px dashed var(--linha); color: var(--suave); }
+.suspeito-87 { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px;
+  margin: 2px 0 4px; font-size: 11px; color: var(--atencao); }
+.suspeito-87 .medida { height: 20px; font-size: 10.5px; }
+.suspeito-87 .motivo-87 { color: var(--atencao); }
 .tempo-do-alfa {
   margin-top: 6px;
   font-family: var(--mono);
@@ -7166,7 +7236,7 @@ body.esticando-grafico * { cursor: ns-resize !important; user-select: none; }
  * padronizado, lista cortada pela largura medida, visor que quebra e rola, e
  * nada de rolagem horizontal. Ver `calculadora.js`.
  */
-:root { --calc-largura: 400px; }
+:root { --calc-largura: 400px; --calc-topo: 0px; }
 .calc-gaveta {
   position: fixed; right: 0; top: var(--calc-topo, 0px); bottom: 0; width: var(--calc-largura);
   background: var(--superficie); border-left: 1px solid var(--linha); z-index: 50; display: none;
@@ -7174,8 +7244,8 @@ body.esticando-grafico * { cursor: ns-resize !important; user-select: none; }
   overflow-x: hidden; min-width: 0;
 }
 html.calc-aberta .calc-gaveta { display: flex; }
-html.calc-aberta body[data-sha] { --coluna-da-onda: min(1360px, calc(100% - var(--calc-largura) - 44px)); }
-html.calc-aberta body[data-sha] > :is(.topo.registro, .tira, .tira-dos-ieds, #graficos, .tela-localizar, .aviso-do-pe) {
+html:is(.calc-aberta, .dif-aberta) body[data-sha] { --coluna-da-onda: min(1360px, calc(100% - var(--calc-largura) - 44px)); }
+html:is(.calc-aberta, .dif-aberta) body[data-sha] > :is(.topo.registro, .tira, .tira-dos-ieds, #graficos, .tela-localizar, .aviso-do-pe) {
   margin-left: max(20px, calc((100% - var(--calc-largura) - 4px - 1360px) / 2)) !important;
   margin-right: auto !important;
 }
