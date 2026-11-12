@@ -201,14 +201,19 @@ def correlacao(a: Lado, b: Lado, d_centro: float) -> dict | None:
     return {"d": float(ds[k]), "r": float(rs[k])}
 
 
-def alinhar(a: Lado, b: Lado, modo: str, manual: dict | None) -> dict:
+def alinhar(a: Lado, b: Lado, modo: str, manual: dict | None,
+            criterio: str = "falta") -> dict:
     """O `d` em uso, o automático, a correlação e as marcas do manual.
+
+    `criterio` é o «alinhar por» da ABA (`alinhamento.MODOS`): o automático
+    daqui tem que ser o MESMO `d` que o painel usa, senão a janela e o painel
+    dão dois km diferentes com o refino no automático.
 
     `manual` = `{"d": s}` (um número) ou `{"ta": s, "tb": s}` (o mesmo ponto
     marcado em A e em B, cada um no tempo do próprio registro); uma marca
     sozinha é guardada e devolvida, mas não alinha nada ainda.
     """
-    auto = alinhamento.deslocamento(a.registro, b.registro, "falta")
+    auto = alinhamento.deslocamento(a.registro, b.registro, criterio)
     corr = correlacao(a, b, auto["d"])
     um = ciclo(a)
     confere = None

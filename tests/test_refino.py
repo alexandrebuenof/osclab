@@ -517,3 +517,19 @@ def test_o_gravado_vale_no_painel_ao_reabrir_e_so_para_o_seu_B(tmp_path, monkeyp
     assert fim["alinhado_a_mao"] is None
     pagina = cliente.get(f"/refino/{sha_a}?com={sha_b}").get_data(as_text=True)
     assert 'data-manual=""' in pagina
+
+
+@pytest.mark.parametrize("criterio", ["falta", "disparo", "hora"])
+def test_o_automatico_do_refino_e_o_do_alinhar_por_da_aba(par_tardio, criterio):
+    """Com o refino no automático, a janela e o painel têm que usar o MESMO
+    `d`: o painel alinha pelo «alinhar por» da aba, e o refino alinhava
+    sempre pelo início da falta — com «hora» ou «disparo» na aba, os dois km
+    saíam diferentes (revisão de 11/11/2026)."""
+    from osclab.plot import alinhamento
+
+    a, b = par_tardio
+    esperado = alinhamento.deslocamento(a.registro, b.registro, criterio)["d"]
+    assert rf.alinhar(a, b, "auto", None, criterio)["d"] == pytest.approx(esperado)
+    pacote = prf.montar(a.registro, "A", b.registro, "B",
+                                {"alinhar": criterio, "colunas": 300})
+    assert pacote["alinhamento"]["d"] == pytest.approx(esperado)

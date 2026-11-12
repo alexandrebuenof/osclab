@@ -1,4 +1,4 @@
-"""Este canal está ligado em alguma coisa, ou está lendo o próprio ruído?
+r"""Este canal está ligado em alguma coisa, ou está lendo o próprio ruído?
 
 ## Por que a pergunta existe
 

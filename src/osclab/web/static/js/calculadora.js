@@ -447,7 +447,7 @@
         f.title = s.digitada
           ? `«${s.nome}»: ${rotulo} digitado ${s.digitada}, gravado com o registro. Vazio volta ao arquivo.`
           : `«${s.nome}»: o arquivo não declara a relação de TC/TP. Vazio, entra como gravado; digitada, fica gravada com o registro e vale em toda a tela.`;
-        const r = criar("input", "calc-num curto"); r.placeholder = rotulo;
+        const r = criar("input", "calc-num relacao-digitavel"); r.placeholder = rotulo;
         r.value = s.digitada || (estado.relacoes[s.canal] ? virgula(estado.relacoes[s.canal]) : "");
         r.addEventListener("change", async () => {
           delete estado.relacoes[s.canal];

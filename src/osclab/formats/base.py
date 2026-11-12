@@ -245,8 +245,9 @@ class Record:
     #: arquivo, não coisa que deu errado.
     relatos: tuple[str, ...] = ()
     #: A classificação do evento que o RELÉ gravou, só a sigla — `AG T`,
-    #: `AB`, `3PH`. O «T» solto da SEL é TRIP, não terra. Vem do campo `EVENT` do `.CEV`; nos formatos que não a
-    #: trazem fica vazia, que é o estado normal de um COMTRADE.
+    #: `AB`, `3PH`. O «T» solto da SEL é TRIP, não terra. Vem do campo
+    #: `EVENT` do `.CEV`; nos formatos que não a trazem fica vazia, que é o
+    #: estado normal de um COMTRADE.
     #:
     #: Separada de `relatos` porque ali ela é uma FRASE, boa de ler e ruim de
     #: comparar. A tela põe esta sigla ao lado da que o OscLab concluiu, e

@@ -13,7 +13,7 @@ from dataclasses import replace
 import pytest
 
 from osclab.formats.base import Filtering
-from osclab.plot import fasorial, janela, leitura, paineis
+from osclab.plot import janela, leitura, paineis
 from tests import arranjo
 from tests.test_catalogo import PICO, trifasico
 

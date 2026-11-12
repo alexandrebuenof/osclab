@@ -86,7 +86,7 @@ def complexa_por_fase(tensoes, correntes) -> list[np.ndarray]:
     `envoltoria.calcular_fasores` devolve, e é o que permite a potência
     acompanhar o registro inteiro sem laço nenhum em Python.
     """
-    return [v * np.conj(i) / 2.0 for v, i in zip(tensoes, correntes)]
+    return [v * np.conj(i) / 2.0 for v, i in zip(tensoes, correntes, strict=True)]
 
 
 def complexa_trifasica(tensoes, correntes, base: str = "fase") -> np.ndarray:

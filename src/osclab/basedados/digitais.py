@@ -227,7 +227,7 @@ def _de_texto(texto: str) -> list[Verbete]:
     # O separador vem do arquivo, não da nossa opinião: quem exporta do Excel
     # em outra região manda vírgula, e recusar isso é recusar o arquivo da
     # pessoa por um detalhe que o programa consegue ver sozinho.
-    primeira = next((l for l in texto.splitlines() if l.strip()), "")
+    primeira = next((linha for linha in texto.splitlines() if linha.strip()), "")
     sep = ";" if primeira.count(";") >= primeira.count(",") else ","
     ordem = list(COLUNAS)
     for linha in csv.reader(io.StringIO(texto), delimiter=sep):

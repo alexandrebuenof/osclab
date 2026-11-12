@@ -5,7 +5,7 @@
 | | COMTRADE | `.CEV` (SEL) |
 |---|---|---|
 | **estado** da lógica, amostra a amostra | sim, nos canais digitais | sim |
-| **a lógica em si** — ajustes e equações | **não está no padrão** | sim, no bloco `"SETTINGS"` |
+| **a lógica em si** — ajustes, equações | **não está no padrão** | sim, em `"SETTINGS"` |
 
 No COMTRADE o padrão não prevê ajuste nenhum. O que existe é convenção de
 fabricante: o `.HDR` é texto livre, e é nele que a SEL despeja o relatório de

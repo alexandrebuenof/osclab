@@ -9,8 +9,8 @@ São onze respostas possíveis — `AG`, `BG`, `CG`, `AB`, `BC`, `CA`, `ABG`,
 |---|---|---|
 | `3I0` | envolve a terra? | não diz **quais** fases |
 | `I2` | envolve mais de uma fase? | some na falta trifásica, que é equilibrada |
-| salto de **corrente** por fase | quais fases conduziram | falta resistiva mal levanta a corrente |
-| afundamento de **tensão** por fase | quais fases afundaram | carga pesada afunda as três sem falta nenhuma |
+| salto de **corrente** por fase | quais fases conduziram | falta resistiva mal a levanta |
+| afundamento de **tensão** por fase | quais afundaram | carga pesada afunda as três sem falta |
 
 Por isso este módulo cruza as quatro e **diz em que se apoiou**. Um veredito
 sem os porquês é pior que nenhum: quem olhar não tem como saber se concorda.

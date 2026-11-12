@@ -218,7 +218,7 @@ def test_agrupa_ignorando_maiusculas():
 def test_sha_que_nao_existe(tmp_path):
     assert acervo.obter("naoexiste123") is None
     assert acervo.caminho_principal("naoexiste123") is None
-    with pytest.raises(FormatError, match="nao esta"):
+    with pytest.raises(FormatError, match="não está"):
         acervo.ler("naoexiste123")
 
 

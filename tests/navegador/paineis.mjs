@@ -12,57 +12,17 @@
 //   - o estado «falta o terminal remoto» do plano alfa é dito UMA vez;
 //   - a roda no localizador: amplia proporcional ao deltaY dentro da moldura
 //     sem rolar a página, rola a página fora dela, e no piso não anda de lado.
-import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { abrirChrome, P } from "./comum.mjs";
 
 const [BASE, TRAFO, ALIM, FOTOS, PORTA = "9954"] = process.argv.slice(2);
-const CHROMES = ["C:/Program Files/Google/Chrome/Application/chrome.exe",
-                 "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
-                 "/usr/bin/google-chrome", "/usr/bin/chromium"];
-const CHROME = CHROMES.find((c) => existsSync(c));
-if (!CHROME) { console.log("SEM CHROME"); process.exit(77); }
-mkdirSync(FOTOS, { recursive: true });
 const W = 1600, H = 1000;
-const perfil = join(tmpdir(), `osclab-paineis-cdp-${PORTA}`);
-const chrome = spawn(CHROME, ["--headless=new", "--disable-gpu", "--hide-scrollbars",
-  `--remote-debugging-port=${PORTA}`, `--user-data-dir=${perfil}`, `--window-size=${W},${H}`, "about:blank"],
-  { stdio: "ignore" });
-const espera = (ms) => new Promise((r) => setTimeout(r, ms));
-let alvo;
-for (let i = 0; i < 60 && !alvo; i++) {
-  try { alvo = (await (await fetch(`http://127.0.0.1:${PORTA}/json`)).json()).find((t) => t.type === "page"); }
-  catch { await espera(250); }
-}
-const ws = new WebSocket(alvo.webSocketDebuggerUrl);
-await new Promise((r) => ws.addEventListener("open", r));
-let seq = 0; const pend = new Map(); const erros = []; const falhas = [];
-ws.addEventListener("message", (ev) => {
-  const m = JSON.parse(ev.data);
-  if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); return; }
-  if (m.method === "Runtime.exceptionThrown") erros.push((m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text).split("\n")[0]);
-  if (m.method === "Runtime.consoleAPICalled" && m.params.type === "error") erros.push(m.params.args.map((a) => a.value ?? a.description).join(" "));
-});
-const cdp = (method, params = {}) => new Promise((r) => { const id = ++seq; pend.set(id, r); ws.send(JSON.stringify({ id, method, params })); });
-await cdp("Runtime.enable"); await cdp("Page.enable");
-await cdp("Emulation.setDeviceMetricsOverride", { width: W, height: H, deviceScaleFactor: 1, mobile: false });
-const avaliar = async (expr) => {
-  const r = await cdp("Runtime.evaluate", { expression: expr, awaitPromise: true, returnByValue: true });
-  if (r.result?.exceptionDetails) erros.push("avaliar: " + (r.result.exceptionDetails.exception?.description || "").split("\n")[0]);
-  return r.result?.result?.value;
-};
-const confere = (ok, oque) => { if (!ok) falhas.push(oque); console.log(`${ok ? "ok " : "FALHA"} ${oque}`); };
-const foto = async (nome) => {
-  const r = await cdp("Page.captureScreenshot", { format: "png" });
-  writeFileSync(join(FOTOS, nome), Buffer.from(r.result.data, "base64"));
-};
+const { cdp, avaliar, confere, foto, navegar, terminar, espera, assentar } =
+  await abrirChrome({ porta: PORTA, prefixo: "paineis", fotos: FOTOS, largura: W, altura: H });
 const roda = (x, y, dy) => cdp("Input.dispatchMouseEvent", { type: "mouseWheel", x, y, deltaX: 0, deltaY: dy });
-const P = (ms) => `new Promise(r => setTimeout(r, ${ms}))`;
 const ir = async (sha) => {
-  await cdp("Page.navigate", { url: `${BASE}/` }); await espera(800);
+  await navegar(`${BASE}/`, "document.body");
   await avaliar(`localStorage.setItem('osclab-tema', 'claro'); localStorage.setItem('osclab:catalogo:visao', 'avancado')`);
-  await cdp("Page.navigate", { url: `${BASE}/onda/${sha}` }); await espera(3500);
+  await navegar(`${BASE}/onda/${sha}`);
 };
 const AJUDANTES = `
   window.__fechar = () => document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
@@ -134,7 +94,7 @@ for (const [nome, sha] of [["trafo", TRAFO], ["alimentador", ALIM]]) {
       if (!b) return null; b.scrollIntoView({ block: 'center' }); const s = getComputedStyle(b);
       return [s.borderTopStyle, s.borderTopWidth, s.backgroundColor].join(' '); })()`);
     confere(preencher && preencher.startsWith("solid 1px"), `${nome}: «preencher …» do diferencial no desenho do programa (${preencher})`);
-    await espera(300);
+    await assentar(300);
     await foto(`${nome}-diferencial-sem-ajustes.png`);
   }
 }
@@ -144,7 +104,7 @@ await ir(ALIM);
 await avaliar(AJUDANTES);
 await avaliar("__criar('localizador de faltas')");
 await avaliar(`document.querySelector('.grafico-localizador').scrollIntoView({ block: 'center' })`);
-await espera(500);
+await assentar(500);
 const caixa = async () => JSON.parse(await avaliar(`(() => { const c = document.querySelector('.grafico-localizador canvas').getBoundingClientRect();
   return JSON.stringify({ l: c.left, t: c.top, w: c.width, sy: scrollY, j: window.__janela }); })()`));
 let c = await caixa();
@@ -153,7 +113,7 @@ const dentro = [c.l + c.w * 0.45, c.t + 80];
 await cdp("Input.dispatchMouseEvent", { type: "mouseMoved", x: dentro[0], y: dentro[1] });
 // Um gesto LEVE: oito eventos de 15 px, como manda uma roda de alta resolução.
 for (let i = 0; i < 8; i++) { await roda(dentro[0], dentro[1], -15); await espera(16); }
-await espera(900);
+await assentar(900);
 let d = await caixa();
 const fator = largura(d.j) / largura(c.j);
 confere(fator > 0.6 && fator < 0.9, `localizador: 120 px de roda ampliam ~0,77× (${fator.toFixed(3)})`);
@@ -161,28 +121,24 @@ confere(d.sy === c.sy, "localizador: a roda dentro da moldura não rola a págin
 // Fora da moldura (a margem dos rótulos): a página rola, a janela não muda.
 c = await caixa();
 await roda(c.l + 20, c.t + 80, -100);   // para CIMA: o localizador é o último, a página já está no fim
-await espera(700);
+await assentar(700);
 d = await caixa();
 confere(d.sy !== c.sy && largura(d.j) === largura(c.j), `localizador: fora da moldura a roda rola a página (${c.sy} → ${d.sy})`);
 // No piso, girar mais não anda de lado.
 await avaliar(`document.querySelector('.grafico-localizador').scrollIntoView({ block: 'center' })`);
-await espera(400);
+await assentar(400);
 c = await caixa();
 const p = [c.l + c.w * 0.3, c.t + 80];
 for (let g = 0; g < 4; g++) {
   for (let i = 0; i < 6; i++) { await roda(p[0], p[1], -100); await espera(10); }
-  await espera(500);
+  await assentar(500);
 }
 const piso = (await caixa()).j;
-for (let i = 0; i < 3; i++) { await roda(p[0], p[1], -100); await espera(400); }
-await espera(500);
+for (let i = 0; i < 3; i++) { await roda(p[0], p[1], -100); await assentar(400); }
+await assentar(500);
 const depois = (await caixa()).j;
 confere(Math.abs(depois.de - piso.de) < 1e-9 && Math.abs(depois.ate - piso.ate) < 1e-9,
   `localizador: no piso a roda não anda de lado (${piso.de.toFixed(5)} → ${depois.de.toFixed(5)})`);
 await foto("localizador-no-piso.png");
 
-confere(erros.length === 0, `sem erro no console${erros.length ? ": " + erros.slice(0, 3).join(" | ") : ""}`);
-ws.close();
-chrome.kill();
-console.log(falhas.length ? `\n${falhas.length} FALHA(S)` : "\ntudo certo");
-process.exit(falhas.length ? 1 : 0);
+terminar();

@@ -37,6 +37,7 @@ pacote final sai.
 
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 
 from osclab.formats.base import Record
@@ -44,6 +45,9 @@ from osclab.plot import alinhamento, escala, paineis, serie
 
 #: As letras dos IEDs, na ordem em que entram na aba.
 LETRAS = ("A", "B", "C")
+
+#: O « · IED A» que o nome de um painel do padrão ganha quando é de um IED só.
+_SUFIXO_DO_IED = re.compile(r"(?:\s*·\s*IED [A-Z])+$")
 MAXIMO_DE_REGISTROS = 3
 SEPARADOR = "|"
 
@@ -310,7 +314,13 @@ def montar_janela(base: Record, outros: list, *, alinhar: str, montar,
         else:
             letras = {s.get("ied") or "A" for s in p.get("sinais") or []}
         if len(letras) == 1:
-            p["nome"] = f"{p.get('nome') or ''} · IED {letras.pop()}".strip()
+            # O nome do DIGITAL volta da tela com o sufixo do pedido anterior
+            # (o do analógico o servidor refaz pela unidade): sem tirá-lo, cada
+            # recarga acrescentava mais um « · IED A» (caça de bugs B04).
+            nome = _SUFIXO_DO_IED.sub("", p.get("nome") or "")
+            p["nome"] = f"{nome} · IED {letras.pop()}".strip()
+        elif p.get("tipo") == paineis.DIGITAL:
+            p["nome"] = _SUFIXO_DO_IED.sub("", p.get("nome") or "")
     pacote["ieds"] = [_ficha("A", base, apelido_a, sha_a, None)] + ieds
     pacote["alinhar"] = alinhar
     return pacote

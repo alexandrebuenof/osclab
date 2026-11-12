@@ -539,7 +539,7 @@ def test_a_base_do_usuario_NAO_pode_entrar_no_repositorio_publico():
     é obrigatória: `base/` solto barraria `src/osclab/formats/base.py` e o
     clone não rodaria. Já custou um commit para descobrir, no `library/`."""
     texto = (paths.PROJECT_ROOT / ".gitignore").read_text(encoding="utf-8")
-    linhas = [l.strip() for l in texto.splitlines()]
+    linhas = [linha.strip() for linha in texto.splitlines()]
     assert "/base/" in linhas
     assert "/database/" in linhas    # o nome fixo da pasta da base
     assert "/base-*/" in linhas      # os apelidos que a versão anterior gerava

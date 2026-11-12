@@ -18,57 +18,16 @@
 //   - a gaveta nunca rola na horizontal; a barra de cima fica inteira;
 //   - abrir e fechar: o botão alterna; clique no gráfico não fecha; clique
 //     fora fecha só com o visor vazio.
-import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { abrirChrome, P } from "./comum.mjs";
 
 const [BASE, TRAFO, ALIM, FOTOS, PORTA = "9953"] = process.argv.slice(2);
-const CHROMES = ["C:/Program Files/Google/Chrome/Application/chrome.exe",
-                 "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
-                 "/usr/bin/google-chrome", "/usr/bin/chromium"];
-const CHROME = CHROMES.find((c) => existsSync(c));
-if (!CHROME) { console.log("SEM CHROME"); process.exit(77); }
-mkdirSync(FOTOS, { recursive: true });
-const W = 1600, H = 1000;
-const perfil = join(tmpdir(), `osclab-calc-cdp-${PORTA}`);
-const chrome = spawn(CHROME, ["--headless=new", "--disable-gpu", "--hide-scrollbars",
-  `--remote-debugging-port=${PORTA}`, `--user-data-dir=${perfil}`, `--window-size=${W},${H}`, "about:blank"],
-  { stdio: "ignore" });
-const espera = (ms) => new Promise((r) => setTimeout(r, ms));
-let alvo;
-for (let i = 0; i < 60 && !alvo; i++) {
-  try { alvo = (await (await fetch(`http://127.0.0.1:${PORTA}/json`)).json()).find((t) => t.type === "page"); }
-  catch { await espera(250); }
-}
-const ws = new WebSocket(alvo.webSocketDebuggerUrl);
-await new Promise((r) => ws.addEventListener("open", r));
-let seq = 0; const pend = new Map(); const erros = []; const falhas = [];
-ws.addEventListener("message", (ev) => {
-  const m = JSON.parse(ev.data);
-  if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); return; }
-  if (m.method === "Runtime.exceptionThrown") erros.push((m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text).split("\n")[0]);
-  if (m.method === "Runtime.consoleAPICalled" && m.params.type === "error") erros.push(m.params.args.map((a) => a.value ?? a.description).join(" "));
-});
-const cdp = (method, params = {}) => new Promise((r) => { const id = ++seq; pend.set(id, r); ws.send(JSON.stringify({ id, method, params })); });
-await cdp("Runtime.enable"); await cdp("Page.enable");
-await cdp("Emulation.setDeviceMetricsOverride", { width: W, height: H, deviceScaleFactor: 1, mobile: false });
-const avaliar = async (expr) => {
-  const r = await cdp("Runtime.evaluate", { expression: expr, awaitPromise: true, returnByValue: true });
-  if (r.result?.exceptionDetails) erros.push("avaliar: " + (r.result.exceptionDetails.exception?.description || "").split("\n")[0]);
-  return r.result?.result?.value;
-};
-const confere = (ok, oque) => { if (!ok) falhas.push(oque); console.log(`${ok ? "ok " : "FALHA"} ${oque}`); };
-const foto = async (nome) => {
-  const r = await cdp("Page.captureScreenshot", { format: "png" });
-  writeFileSync(join(FOTOS, nome), Buffer.from(r.result.data, "base64"));
-};
+const { avaliar, confere, foto, navegar, terminar, assentar: espera } =
+  await abrirChrome({ porta: PORTA, prefixo: "calc", fotos: FOTOS });
 const ir = async (sha, tema) => {
-  await cdp("Page.navigate", { url: `${BASE}/` }); await espera(1000);
+  await navegar(`${BASE}/`, "document.body");
   await avaliar(`localStorage.setItem('osclab-tema', '${tema}')`);
-  await cdp("Page.navigate", { url: `${BASE}/onda/${sha}` }); await espera(3500);
+  await navegar(`${BASE}/onda/${sha}`);
 };
-const P = (ms) => `new Promise(r => setTimeout(r, ${ms}))`;
 const AJUDANTES = `
   window.__g = () => document.querySelector('.calc-gaveta');
   window.__abrir = async () => { [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'calculadora').click(); await ${P(900)}; };
@@ -162,7 +121,7 @@ for (const tema of ["claro", "escuro"]) {
   await avaliar("window.osclab.calc.porCursores(0.06, 0.195)"); await espera(900);
   await avaliar("__abrir()");
   await avaliar(`(async () => { window.osclabCalculadora.aba('sug'); await ${P(300)};
-    [...document.querySelectorAll('.calc-modelo')].find(l => l.textContent.includes('Zap AG')).click(); await ${P(300)};
+    (await __esperar(() => [...document.querySelectorAll('.calc-modelo')].find(l => l.textContent.includes('Zap AG')))).click(); await ${P(300)};
     const f = document.querySelector('.calc-param input'); f.value = '0,68'; f.dispatchEvent(new Event('input'));
     const a = document.querySelectorAll('.calc-param input')[1]; a.value = '-4'; a.dispatchEvent(new Event('input'));
     await ${P(1500)}; })()`);
@@ -178,7 +137,7 @@ for (const tema of ["claro", "escuro"]) {
   confere((await avaliar("document.querySelector('.calc-feito')?.textContent || ''")).includes("Calculados"),
     `${tema}: a confirmação diz que a conta está em Calculados`);
   await avaliar(`(async () => { window.osclabCalculadora.aba('minhas'); await ${P(600)};
-    const l = [...document.querySelectorAll('.calc-conta')].find(x => x.textContent.includes('Zap AG'));
+    const l = await __esperar(() => [...document.querySelectorAll('.calc-conta')].find(x => x.textContent.includes('Zap AG')));
     [...l.querySelectorAll('.calc-mini')].find(b => b.textContent === '→').click(); await ${P(2500)};
     window.osclabCalculadora.aba('calc'); await ${P(300)}; })()`);
   confere((await avaliar("[...document.querySelectorAll('.legenda')].map(x => x.textContent).join(' ')")).includes("Zap AG"),
@@ -195,8 +154,4 @@ for (const tema of ["claro", "escuro"]) {
     `${tema}: com o filtro aceso a conta continua desenhada`);
   await foto(`${tema}-6-alimentador-filtro.png`);
 }
-confere(erros.length === 0, `sem erro no console${erros.length ? ": " + erros.slice(0, 3).join(" | ") : ""}`);
-ws.close();
-chrome.kill();
-console.log(falhas.length ? `\n${falhas.length} FALHA(S)` : "\ntudo certo");
-process.exit(falhas.length ? 1 : 0);
+terminar();

@@ -202,7 +202,11 @@ def montar(reg_a: Record, nome_a: str, reg_b: Record, nome_b: str, corpo: dict) 
     `de`/`ate` com o `gesto`, os cursores `t1`/`t2`, a `linha`, os
     `digitados` e as `colunas` de pixel."""
     a, b = rf.lado(reg_a, "A", nome_a), rf.lado(reg_b, "B", nome_b)
-    alin = rf.alinhar(a, b, str(corpo.get("modo") or "auto"), corpo.get("manual"))
+    # O automático é o da ABA: o «alinhar por» que o painel usa (vem no
+    # contexto que a oscilografia deixou para a janela).
+    criterio = str(corpo.get("alinhar") or "")
+    criterio = criterio if criterio in alinhamento.MODOS else alinhamento.MODOS[0]
+    alin = rf.alinhar(a, b, str(corpo.get("modo") or "auto"), corpo.get("manual"), criterio)
     d = alin["d"]
     linha = linha_do_pedido(corpo.get("linha"))
     s = "B" if corpo.get("s") == "B" else "A"

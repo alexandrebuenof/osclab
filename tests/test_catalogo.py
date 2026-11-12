@@ -351,7 +351,7 @@ def test_registro_ja_filtrado_oferece_o_eficaz_do_residuo_PELA_DFT():
                            layout=[arranjo.analogico(["q0:n:rms", "q0:0:rms"])])
     residuo = sinal(pacote["paineis"][0], "q0:n:rms")["serie"]
     zero = sinal(pacote["paineis"][0], "q0:0:rms")["serie"]
-    pares = [(a, b) for a, b in zip(residuo, zero) if a is not None]
+    pares = [(a, b) for a, b in zip(residuo, zero, strict=True) if a is not None]
     assert len(pares) > 300
     for a, b in pares:
         assert abs(a - b) <= 1e-6 * max(1.0, abs(b))
@@ -374,7 +374,7 @@ def test_IN_60Hz_RMS_e_o_3I0_amostra_por_amostra():
     painel = janela.montar(r, colunas=100_000, layout=layout)["paineis"][0]
     a = sinal(painel, "q0:n:fundamental")["serie"]
     b = sinal(painel, "q0:0:rms")["serie"]
-    pares = [(x, y) for x, y in zip(a, b) if x is not None]
+    pares = [(x, y) for x, y in zip(a, b, strict=True) if x is not None]
     assert len(pares) > 400
     for x, y in pares:
         assert abs(x - y) <= 1e-6 * max(1.0, abs(y))
@@ -1113,7 +1113,7 @@ def _em_delta(amplitudes=(PICO, PICO, PICO),
     """
     t = np.arange(n) / taxa
     fases_ = [a * np.sin(2 * np.pi * freq * t + math.radians(d))
-              for a, d in zip(amplitudes, defasagens)]
+              for a, d in zip(amplitudes, defasagens, strict=True)]
     linhas = [fases_[0] - fases_[1], fases_[1] - fases_[2],
               fases_[2] - fases_[0]]
     r = Record(source=Path("sintetico"), format_name="teste")

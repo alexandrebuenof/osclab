@@ -166,10 +166,25 @@
     }
   }
 
+  /** O «N registros no acervo» da barra de cima: o servidor o escreve ao
+   * montar a página, e depois de um envio ele ficava velho até recarregar
+   * (caça de bugs B10). A barra pode estar neste documento ou no de cima
+   * (as abas são quadros), e os dois são da mesma origem. */
+  function contarNaBarra(n) {
+    const texto = `${n.toLocaleString("pt-BR")} ${n === 1 ? "registro" : "registros"} no acervo`;
+    const docs = [document];
+    try { if (window.top && window.top.document !== document) docs.push(window.top.document); } catch (_e) { /* outra origem */ }
+    for (const doc of docs) {
+      const a = doc.getElementById("acervo-da-barra");
+      if (a) a.textContent = texto;
+    }
+  }
+
   function desenharLista(itens) {
     contagem.textContent = itens.length
       ? `${itens.length} registro${itens.length > 1 ? "s" : ""}`
       : "";
+    contarNaBarra(itens.length);
 
     if (itens.length === 0) {
       lista.replaceChildren(

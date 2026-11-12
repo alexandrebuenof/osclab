@@ -39,7 +39,7 @@ import numpy as np
 
 from osclab.dsp import fasor
 from osclab.formats import fases
-from osclab.formats.base import Record
+from osclab.formats.base import Record, Trecho
 from osclab.plot import catalogo, conversao, sinais, unidades
 from osclab.plot import harmonicos as harmonicos_mod
 from osclab.plot import paineis as paineis_mod
@@ -281,6 +281,16 @@ def _linhas(registro: Record, i: int, lado: str, escalas: dict,
             yield identidade, linha
             continue
 
+        # Potência (`wG1:P:rms`): P, Q, S ou FP de um vínculo corrente ↔
+        # tensão. Não é componente simétrica — o id não traz posição de trinca
+        # — e cair no ramo de baixo levantava `int("G1")`, derrubando a
+        # leitura de TODOS os painéis (caça de bugs B01, 11/11/2026).
+        if sinal.id[:1] == "w":
+            linha.update(_linha_de_potencia(registro, sinal, i, lado, escalas,
+                                            por_ciclo))
+            yield identidade, linha
+            continue
+
         # Componente simétrica: módulo e ângulo saem da transformação de
         # Fortescue sobre os três fasores de fase. Não há instantâneo nem RMS
         # verdadeiro aqui — ver `plot/catalogo.py`.
@@ -299,6 +309,37 @@ def _linhas(registro: Record, i: int, lado: str, escalas: dict,
             "lado": lado, "convertido": True,
         })
         yield identidade, linha
+
+
+def _linha_de_potencia(registro: Record, sinal, i: int, lado: str, escalas: dict,
+                       por_ciclo: float) -> dict:
+    """A leitura de P, Q, S ou FP no instante `i`: o valor da MESMA curva do
+    gráfico (`catalogo.serie`), naquela amostra.
+
+    A conta corre só sobre o trecho de taxa que contém `i`, a partir de
+    alguns ciclos antes dele: o fasor de `i` é o do ciclo que termina ali, e
+    nenhuma janela atravessa a fronteira de dois trechos. Potência não é
+    fasor: não há ângulo, instantâneo nem eficaz verdadeiro para mostrar.
+    """
+    vazio = {"valor": None, "casas": 1, "instantaneo": None,
+             "casas_instantaneo": 1, "fundamental": None, "angulo": None,
+             "rms": None, "dc": None, "dc_valor": None, "distorcao": None,
+             "filtrado": None, "lado": lado, "convertido": True}
+    if not (0 <= i < registro.n_samples):
+        return vazio
+    trecho = _trecho_de(registro.trechos, i)
+    inicio = trecho.inicio if trecho is not None else 0
+    j0 = max(inicio, i - int(math.ceil(4 * max(por_ciclo, 1.0))))
+    i1 = i + 1
+    recortados = [Trecho(max(t.inicio, j0) - j0, min(t.fim, i1) - j0, t.taxa_hz)
+                  for t in registro.trechos if min(t.fim, i1) > max(t.inicio, j0)]
+    valores = catalogo.serie(registro, sinal, j0, i1, recortados, lado, escalas)
+    if valores is None or valores.size == 0 or not np.isfinite(valores[-1]):
+        return vazio
+    v = _num(float(valores[-1]))
+    linha = dict(vazio)
+    linha.update(valor=v, casas=casas(v), fundamental=v, casas_fasor=casas(v))
+    return linha
 
 
 def _linha_de_conta(registro: Record, sinal, i: int, lado: str, escalas: dict,

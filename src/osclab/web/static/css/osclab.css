@@ -3150,7 +3150,8 @@ a.chave, .tema, .voltar, #exportar { text-decoration: none; }
 .busca .col-grupo { width: 64px; }
 /* A relação de TC/TP: o campo vazio mostra, apagada, a que vale; a digitada
    leva a cor do «digitado» (a mesma da origem nos ajustes do plano). */
-.busca .col-relacao { width: 76px; flex: none; }
+/* a largura do campo `.relacao-digitavel` (14ch de 12px mono + o recheio) */
+.busca .col-relacao { width: 114px; flex: none; }
 .busca .col-relacao .calc-num { width: 100%; box-sizing: border-box; }
 .busca .calc-num:not(:placeholder-shown) { color: var(--destaque); }
 .busca .col-i { flex: none; }
@@ -7134,6 +7135,10 @@ canvas.calc-previa[hidden] { display: none; }
 .calc-num { width: 66px; flex: none; font: 12px var(--mono); padding: 2px 5px; border: 1px solid var(--linha);
   border-radius: 3px; background: var(--fundo); color: var(--tinta); }
 .calc-num.curto { width: 48px; }
+/* A relação de TC/TP: cabe «13800:115» e o «dig.» do placeholder. Com 66 px o
+   RTP de um TP de 13,8 kV saía «13800:1» — número cortado é número lido
+   errado (revisão de 11/11/2026). */
+.calc-num.relacao-digitavel { width: calc(14ch + 12px); box-sizing: border-box; }
 .calc-mini { border: 0; background: none; color: var(--suave); font: 13px var(--sans); padding: 0 4px; cursor: pointer; flex: none; }
 .calc-mini:hover { color: var(--tinta); }
 

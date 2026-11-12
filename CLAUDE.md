@@ -889,7 +889,21 @@ Três consequências para quem programa isto:
   `encaixar(t, a)` para o ímã sem ver que já havia um `encaixar(texto, largura)`
   que corta nome de tira digital: declaração de função sobe e a última vence, o
   nome de toda tira virou `null` na tela, e nada deu erro. **Antes de declarar
-  uma função nova, procure o nome no arquivo.**
+  uma função nova, procure o nome no arquivo.** A terceira vez (caça de bugs
+  de 11/11/2026) foi `editarNome`: a do registro vencia a do painel, e
+  renomear um GRÁFICO gravava o apelido do REGISTRO em disco. Hoje são
+  `editarNomeDoPainel` e `editarNomeDoRegistro`, e há teste que recusa
+  `function` repetida no nível do IIFE de qualquer `.js`.
+- **Toda rota POST lê o corpo por `_corpo()`**, que devolve sempre um
+  dicionário. `request.get_json(silent=True) or {}` deixava passar `[1, 2]`
+  e `"x"`, e o `.get` seguinte virava erro 500. Número da URL passa por
+  `_numero` (NaN e infinito viram `None`) e colunas de pixel por `_colunas`
+  (teto `COLUNAS_NO_MAXIMO`): `?colunas=1e12` fazia o numpy pedir terabytes.
+- **Teste de navegador espera a REDE, não o relógio.** Os roteiros esperavam
+  tempo fixo depois de cada gesto e, sob a carga da suíte, o elemento ainda
+  não existia. `tests/navegador/comum.mjs` conta os `fetch` da página e o
+  `P(ms)` é «no mínimo `ms`, e depois a rede quieta»; o que precisa de um
+  elemento usa `__esperar`. Roteiro novo usa o `comum.mjs`.
 - **Função referenciada e não definida é invisível até o clique.** A
   refatoração perdeu `alternarSelecao` — o JavaScript não reclama na carga, só
   ao clicar, e o sintoma que chega é "não consigo mais destacar um sinal". Se
