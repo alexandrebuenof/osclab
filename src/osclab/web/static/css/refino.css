@@ -1,0 +1,86 @@
+/* A janela «refinar» da seq. negativa de dois terminais (variante 11 da
+   maquete, aprovada em 11/11/2026). As cores --refino-* moram no osclab.css,
+   validadas por tools/paleta.py (`REFINO`). Identidade f10: papel, tinta,
+   azul-aço; sem sombra, sem gradiente, sem cartão arredondado. */
+
+
+/* --- a janela -------------------------------------------------------------- */
+body.refino { margin: 0; padding: 0; background: var(--pagina-lisa); color: var(--tinta);
+  font: 13px/1.35 var(--sans); min-height: 100vh; display: flex; flex-direction: column; }
+.rf-topo { display: flex; align-items: center; gap: 18px; padding: 8px 14px; background: var(--superficie);
+  border-bottom: 1px solid var(--borda); position: sticky; top: 0; z-index: 5; }
+.rf-titulo h1 { margin: 0; font: 600 15px/1.2 var(--sans); color: var(--titulo); }
+.rf-sub { margin: 2px 0 0; color: var(--suave); font-size: 12px; }
+.rf-sub b { color: var(--tinta); font-family: var(--mono); }
+.rf-x { margin: 0 4px; }
+.rf-chaves { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; flex: 1; min-width: 0; }
+.rf-fechar { margin-left: auto; width: 30px; height: 28px; font-size: 18px; background: none;
+  border: 1px solid var(--borda); color: var(--tinta); cursor: pointer; }
+.rf-fechar:hover { border-color: var(--destaque); color: var(--destaque); }
+.rf-grupo { display: inline-flex; align-items: center; gap: 6px; }
+.rf-rotulo { color: var(--suave); font-size: 11px; }
+.rf-par { display: inline-flex; border: 1px solid var(--borda); height: 26px; }
+.rf-par button { border: 0; background: var(--superficie); color: var(--suave); padding: 0 10px; font: 12px var(--sans);
+  cursor: pointer; border-right: 1px solid var(--borda); }
+.rf-par button:last-child { border-right: 0; }
+.rf-par button.aceso { background: var(--destaque); color: var(--superficie); font-weight: 600; }
+.rf-botao { height: 26px; padding: 0 9px; font: 12px var(--sans); border: 1px solid var(--borda);
+  background: var(--superficie); color: var(--tinta); cursor: pointer; }
+.rf-botao:hover { border-color: var(--destaque); color: var(--destaque); }
+.rf-botao.aceso { background: var(--destaque); color: var(--superficie); border-color: var(--destaque); font-weight: 600; }
+.rf-botao.armado { background: var(--refino-marca); color: #fff; border-color: var(--refino-marca); }
+.rf-desl { font-size: 12px; color: var(--suave); }
+.rf-desl b { font: 600 13px var(--mono); color: var(--tinta); }
+.rf-alerta { color: var(--atencao); font-size: 14px; border: 0; background: none; cursor: pointer; padding: 0 4px; }
+.rf-aviso { color: var(--ruim); }
+/* o menu «vista ▾» */
+.rf-menu { position: relative; display: inline-flex; align-items: center; }
+.rf-menu-lista { position: absolute; top: 28px; left: 0; z-index: 20; min-width: 210px; display: flex;
+  flex-direction: column; background: var(--superficie); border: 1px solid var(--borda); padding: 3px 0; }
+.rf-menu-item { text-align: left; border: 0; background: none; color: var(--tinta); font: 12px var(--sans);
+  padding: 5px 12px; cursor: pointer; white-space: nowrap; }
+.rf-menu-item:hover:not(:disabled) { background: var(--destaque-fraco); }
+.rf-menu-item.aceso { font-weight: 600; }
+.rf-menu-item:disabled { color: var(--suave); cursor: not-allowed; }
+
+body.refino main.rf-corpo { display: flex; gap: 12px; padding: 10px 14px; flex: 1; min-height: 0;
+  max-width: none; margin: 0; box-sizing: border-box; }
+.rf-graficos { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.rf-graf { background: var(--superficie); border: 1px solid var(--borda); }
+.rf-graf-cab { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; padding: 3px 8px;
+  border-bottom: 1px solid var(--linha); font-size: 12px; }
+.rf-graf-cab .rf-t { font-weight: 600; }
+.rf-graf-cab .rf-u { color: var(--suave); font-size: 11px; }
+.rf-leg { display: inline-flex; align-items: center; gap: 4px; color: var(--tinta); font-family: var(--mono); font-size: 11px; }
+.rf-leg i { display: inline-block; width: 14px; height: 3px; }
+.rf-leg.fina i { height: 1px; opacity: .6; }
+.rf-graf canvas { display: block; width: 100%; touch-action: none; }
+.rf-graf .rf-vazio { padding: 16px 12px; color: var(--suave); font-style: italic; }
+.rf-graf.terminal-a .rf-graf-cab { border-left: 3px solid var(--refino-a); }
+.rf-graf.terminal-b .rf-graf-cab { border-left: 3px solid var(--refino-b); }
+
+/* --- os números ------------------------------------------------------------ */
+.rf-valores { width: 380px; flex: none; display: flex; flex-direction: column; gap: 10px; }
+.rf-bloco { background: var(--superficie); border: 1px solid var(--borda); }
+.rf-bloco h3 { margin: 0; padding: 4px 8px; font: 600 12px var(--sans); color: var(--titulo);
+  border-bottom: 1px solid var(--linha); display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.rf-bloco h3 small { font-weight: 400; color: var(--suave); }
+.rf-de-terminal { border: 0; background: none; color: var(--destaque); font: 11px var(--sans); cursor: pointer;
+  padding: 0; text-decoration: underline dotted; text-underline-offset: 3px; }
+.rf-de-terminal:hover { color: var(--titulo); }
+.rf-tab { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+.rf-tab th, .rf-tab td { padding: 3px 7px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rf-tab tr > :first-child { text-align: left; width: 44%; }
+.rf-tab thead th { color: var(--suave); font-weight: 400; font-size: 11px; border-bottom: 1px solid var(--linha); }
+.rf-tab tbody tr:nth-child(even) { background: var(--faixa-da-tabela); }
+.rf-tab td.n { font-family: var(--mono); }
+.rf-tab td.dig, .rf-tab td.fonte { color: var(--atencao); }
+.rf-tab td.fonte { font-style: italic; }
+.rf-tab .rf-c1 { color: var(--cursor-1); }
+.rf-tab .rf-c2 { color: var(--cursor-2); }
+/* o resultado: o formato das tabelas por terminal, só os números em negrito */
+.rf-tab-resultado td.n { font-weight: 600; }
+.rf-campo { width: 74px; height: 22px; font: 12px var(--mono); border: 1px solid var(--borda);
+  background: var(--fundo); color: var(--tinta); padding: 0 5px; }
+.rf-campo.dig { border-color: var(--atencao); }
+.rf-nota-bloco { padding: 5px 8px; color: var(--suave); font-size: 11px; }

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Refinar seq. negativa — OscLab</title>
+  {% include "_cabeca.html" %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/refino.css') }}?v={{ versao }}">
+</head>
+{#- A janela «refinar» da localização por sequência negativa de dois
+    terminais (variante 11 da maquete, 11/11/2026). A oscilografia a abre num
+    quadro por cima de si; os números são de `plot/refino.py`, em cima de
+    `faultloc/refino.py`. O deslocamento escolhido aqui é CONFERÊNCIA: não
+    muda o painel. #}
+<body class="refino" data-a="{{ a.sha }}" data-b="{{ b.sha }}">
+  <header class="rf-topo">
+    <div class="rf-titulo">
+      <h1>Refinar · sequência negativa</h1>
+      <p class="rf-sub"><b>A</b> {{ a.estacao or a.nome }} <span class="rf-x">×</span> <b>B</b> {{ b.estacao or b.nome }}</p>
+    </div>
+    <div class="rf-chaves" id="rf-chaves"></div>
+    <button type="button" class="rf-fechar" id="rf-fechar" title="Fechar (Esc sem cursor na tela)">×</button>
+  </header>
+  <main class="rf-corpo" id="rf-corpo">
+    <div class="rf-graficos" id="rf-graficos"></div>
+    <aside class="rf-valores" id="rf-valores"></aside>
+  </main>
+  <script src="{{ url_for('static', filename='js/refino.js') }}?v={{ versao }}"></script>
+</body>
+</html>

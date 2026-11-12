@@ -120,6 +120,30 @@ VISOR = {
     "claro": {"fundo": "#0e1c31", "cores": dict(_NO_VISOR)},
 }
 
+#: A janela «refinar» da seq. negativa (variante 11 da maquete, 11/11/2026):
+#: o terminal A, o B e as marcas do alinhamento manual dividem eixo com os
+#: dois cursores; as marcas também dividem eixo com as três fases (no
+#: trifásico). Dois grupos, conferidos cada um contra si.
+REFINO = {
+    "escuro": {"fundo": "#1f252c",
+               "cores": {"--refino-a": "#5f9ee6", "--refino-b": "#e07ab4",
+                         "--refino-marca": "#2fc4a0",
+                         "--cursor-1": "#ffffff", "--cursor-2": "#fbe160"}},
+    "claro": {"fundo": "#ffffff",
+              "cores": {"--refino-a": "#1d5fa8", "--refino-b": "#9c2f72",
+                        "--refino-marca": "#1b7f4e",
+                        "--cursor-1": "#111a1b", "--cursor-2": "#b34700"}},
+}
+REFINO_COM_FASES = {
+    tema: {"fundo": REFINO[tema]["fundo"],
+           "cores": {"--refino-marca": REFINO[tema]["cores"]["--refino-marca"],
+                     "--cursor-1": REFINO[tema]["cores"]["--cursor-1"],
+                     "--cursor-2": REFINO[tema]["cores"]["--cursor-2"],
+                     **{k: TEMAS[tema]["cores"][k]
+                        for k in ("--fase-a", "--fase-b", "--fase-c")}}}
+    for tema in ("escuro", "claro")
+}
+
 #: Distância perceptual mínima entre dois traços do mesmo gráfico. Abaixo
 #: disso, "a azul e a outra azul" — que é como se descreve um gráfico que não
 #: se lê.
@@ -432,6 +456,9 @@ def main() -> int:
     grupos += [(f"localizador, tema {tema}", dados) for tema, dados in LOCALIZADOR.items()]
     grupos += [(f"calculadora, tema {tema}", dados) for tema, dados in CALCULADORA.items()]
     grupos += [(f"visor da calculadora, tema {tema}", dados) for tema, dados in VISOR.items()]
+    grupos += [(f"refino, tema {tema}", dados) for tema, dados in REFINO.items()]
+    grupos += [(f"refino com as fases, tema {tema}", dados)
+               for tema, dados in REFINO_COM_FASES.items()]
     for nome, dados in grupos:
         reprovacoes, avisos = conferir(dados["cores"], dados["fundo"])
         print(f"{nome}: {len(dados['cores'])} cores, "

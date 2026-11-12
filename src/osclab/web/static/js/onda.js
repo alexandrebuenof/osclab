@@ -12366,6 +12366,52 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     return havia;
   }
 
+  // --- a janela «refinar» da seq. negativa ------------------------------------
+  //
+  // Página própria (`/refino/<a>?com=<b>`) num quadro por cima da
+  // oscilografia: as teclas globais daqui (1, 2, setas, Esc) têm outro sentido
+  // lá dentro. O contexto — a linha em uso, a MESMA do painel — vai pela
+  // sessão do navegador. O deslocamento escolhido lá é CONFERÊNCIA: não muda
+  // o painel. Ver `plot/refino.py` e `faultloc/refino.py`.
+  let quadroRefino = null;
+  function fecharRefino() {
+    if (!quadroRefino) return;
+    quadroRefino.remove();
+    quadroRefino = null;
+  }
+  function abrirRefino() {
+    const b = (outrosRegistros[0] || {}).sha;
+    if (!b || !pacoteLoc) return;
+    try {
+      sessionStorage.setItem(`osclab:refino:${sha}:${b}`, JSON.stringify({ linha: pacoteLoc.linha || null }));
+    } catch (_e) { /* sem sessão: o refino abre sem a linha, e diz isso */ }
+    fecharRefino();
+    const fundo = criar("div", "rf-casa");
+    const quadro = criar("iframe", "rf-quadro");
+    quadro.src = `/refino/${encodeURIComponent(sha)}?com=${encodeURIComponent(b)}`;
+    quadro.title = "Refinar · sequência negativa";
+    quadro.addEventListener("load", () => { try { quadro.contentWindow.focus(); } catch (_e) { /* ok */ } });
+    fundo.append(quadro);
+    fundo.addEventListener("pointerdown", (e) => { if (e.target === fundo) fecharRefino(); });
+    document.body.append(fundo);
+    quadroRefino = fundo;
+  }
+  window.addEventListener("message", (e) => {
+    if (e.origin === location.origin && e.data && e.data.tipo === "refino-fechar") fecharRefino();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && quadroRefino) { e.stopImmediatePropagation(); fecharRefino(); }
+  }, true);
+  function botaoRefinar() {
+    const b = criar("button", "rf-botao-refinar", "refinar");
+    b.type = "button";
+    b.title = "Conferir a localização pela sequência negativa: as ondas de A e de B, o alinhamento "
+            + "(automático ou manual), V2 e I2 no cursor e o km.";
+    b.addEventListener("pointerdown", (e) => e.stopPropagation());
+    b.addEventListener("click", (e) => { e.stopPropagation(); abrirRefino(); });
+    return b;
+  }
+
   function blocoLocalizador(painel, ultimo) {
     const meu = painelLocDe(painel.id);
     const p = (pacoteLoc && pacoteLoc.painel) || null;
@@ -12448,6 +12494,12 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
             meu.destaque_loc = [...atual];
             desenharTudo();
           });
+        }
+        // «refinar» ao lado da seq. negativa, só com DUAS oscilografias na
+        // aba — também quando o método não deu número: é justamente quando
+        // conferir o alinhamento mais ajuda (variante 11, 11/11/2026)
+        if (m === "seqneg" && (pacoteLoc.n_ieds || 0) >= 2 && outrosRegistros[0]) {
+          li.append(botaoRefinar());
         }
         legenda.append(li);
       }

@@ -186,6 +186,12 @@
   --loc-plato: #34618f;
   --loc-plato-fundo: rgba(52, 97, 143, .10);
   --loc-hachura: rgba(85, 103, 127, .16);
+  /* A janela «refinar» da seq. negativa: o terminal A, o B (a envoltória e a
+     onda de cada um, na mesma cor) e as marcas do alinhamento manual.
+     Validadas com os cursores e com as fases (`paleta.REFINO`). */
+  --refino-a: #1d5fa8;
+  --refino-b: #9c2f72;
+  --refino-marca: #1b7f4e;
   /* A calculadora (variante 10, 11/11/2026): a marca do DOMÍNIO — onda e
      fasor — e o VISOR, marinho nos dois temas como a barra de cima.
      Validados por `tools/paleta.py` (`CALCULADORA` e `VISOR`). */
@@ -347,6 +353,9 @@
   --loc-plato: #86a9d2;
   --loc-plato-fundo: rgba(134, 169, 210, .12);
   --loc-hachura: rgba(155, 167, 180, .16);
+  --refino-a: #5f9ee6;
+  --refino-b: #e07ab4;
+  --refino-marca: #2fc4a0;
   --calc-onda: #4fb3bf;
   --calc-fasor: #e0a060;
   /* O visor da calculadora é um bloco no tom da barra, nos dois temas. */
@@ -7130,3 +7139,17 @@ canvas.calc-previa[hidden] { display: none; }
 .calc-conta-val.erro { color: var(--ruim); }
 .calc-acoes { display: inline-flex; opacity: 0; flex: none; }
 .calc-conta:hover .calc-acoes, .calc-conta:focus-within .calc-acoes { opacity: 1; }
+
+/* O «refinar» da seq. negativa (variante 11, 11/11/2026): o botão na legenda
+   do painel localizador e o quadro por cima da oscilografia. A janela em si
+   é o refino.css. */
+.rf-botao-refinar {
+  margin-left: 8px; height: 20px; padding: 0 7px; font: 600 11px/18px var(--sans);
+  color: var(--destaque); background: var(--superficie); border: 1px solid var(--destaque);
+  border-radius: 2px; cursor: pointer; letter-spacing: .02em;
+}
+.rf-botao-refinar:hover { background: var(--destaque); color: var(--superficie); }
+.rf-casa { position: fixed; inset: 0; z-index: 2147482000; background: rgba(12, 26, 46, .38);
+  display: flex; align-items: center; justify-content: center; }
+.rf-quadro { width: min(1500px, 94vw); height: 90vh; border: 1px solid var(--borda); display: block;
+  background: var(--pagina-lisa); }

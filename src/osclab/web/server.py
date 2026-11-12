@@ -99,6 +99,7 @@ from osclab.plot import eventos as eventos_plot
 from osclab.plot import impedancia as impedancia_mod
 from osclab.plot import janela, leitura, navegacao, paineis
 from osclab.plot import localizador as localizador_mod
+from osclab.plot import refino as refino_mod
 from osclab.plot import varios as varios_mod
 
 #: Teto do envio. Um `.dat` de SEL-487E tem 4,7 MB; alguém vai arrastar a pasta
@@ -558,6 +559,34 @@ def create_app() -> Flask:
         except FormatError as exc:
             return jsonify(erro=str(exc)), 404
         return jsonify(vinculos_de_potencia=atuais)
+
+    @app.get("/refino/<sha>")
+    def refino(sha: str):
+        """A janela «refinar» da seq. negativa de dois terminais, como página
+        própria: a oscilografia a abre num quadro por cima de si (o `onda.js`
+        tem teclas globais — 1, 2, setas, Esc — que dentro dela têm outro
+        sentido). `?com=<sha>` é o IED B."""
+        item = acervo.obter(sha)
+        outro = acervo.obter(request.args.get("com") or "")
+        if item is None or outro is None:
+            return render_template("nao-achei.html", versao=version.read()), 404
+        return render_template("refino.html", versao=version.read(),
+                               a=item.como_dicionario(), b=outro.como_dicionario())
+
+    @app.post("/api/onda/<sha>/refino")
+    def refino_api(sha: str):
+        """Os números da janela «refinar» (`plot/refino.py`, em cima de
+        `faultloc/refino.py`). O corpo traz o IED B (`b`), o alinhamento, a
+        vista, os cursores, a linha do painel e o que se digitou."""
+        corpo = request.get_json(silent=True) or {}
+        sha_b = str(corpo.get("b") or "")
+        try:
+            reg_a, reg_b = acervo.ler(sha), acervo.ler(sha_b)
+        except FormatError as exc:
+            return jsonify(erro=str(exc)), 404
+        nome_a = _nome_do_terminal(sha, reg_a, acervo.apelido(sha))
+        nome_b = _nome_do_terminal(sha_b, reg_b, acervo.apelido(sha_b))
+        return jsonify(refino_mod.montar(reg_a, nome_a, reg_b, nome_b, corpo))
 
     @app.post("/api/onda/<sha>/localizar")
     def localizar_falta(sha: str):

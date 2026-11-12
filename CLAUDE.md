@@ -558,6 +558,20 @@ osclab/
   em uso; Ω ⇄ Ω/km e primário ⇄ secundário são VISTA, e toda conta é de
   `faultloc/parametros.py`. Sem painel desses na tela, o «+ adicionar
   gráfico» cria um — tirar o tipo do menu deixaria a localização sem caminho.
+- **«refinar» confere a seq. negativa de dois terminais** *(variante 11,
+  11/11/2026)*. Botão ao lado da legenda «Seq. neg. 2T» do painel
+  localizador, só com DUAS oscilografias na aba; abre `/refino/<a>?com=<b>`
+  num quadro por cima. «vista ▾» trifásico (I de A, I de B, V de A, V de B,
+  três fases) ou monofásico com a fase (A e B sobrepostos; a fase é a do
+  VÍNCULO do canal, e o título a diz); «sequência» troca cada gráfico pela
+  negativa dele; «alinhar: automático | manual» — o automático é o
+  `alinhamento.deslocamento` da aba, com a correlação de |I2| como segunda
+  opinião (⚠ quando discorda em mais de ¼ de ciclo; o clique leva ao manual
+  com ela); no manual o ARRASTO move o registro INTEIRO de um terminal
+  («mover: A | B»), ±1 amostra, «marcar início», e o cursor se pega pela
+  etiqueta. Toda conta é de `faultloc/refino.py` (sobre `seqneg.localizar` e
+  `ldl`), a tela de `plot/refino.py`. **O deslocamento escolhido ali é
+  CONFERÊNCIA: não muda o painel** (decisão pendente do Alexandre).
 - **A calculadora é uma GAVETA, e a conta mora no Python** *(variante 10,
   11/11/2026)*. Visor (expressão, valor nos cursores, prévia) + teclado em
   grade; abas «calculadora | sugestões | minhas contas»; o botão
