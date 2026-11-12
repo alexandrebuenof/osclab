@@ -21,7 +21,6 @@ Cada variação aqui existe porque apareceu num arquivo real do parque:
 
 from __future__ import annotations
 
-import struct
 from pathlib import Path
 
 import numpy as np
@@ -73,6 +72,19 @@ def _digitais(nd: int, n: int) -> np.ndarray:
     return ((idx[None, :] >> np.arange(nd)[:, None]) & 1).astype(np.int8)
 
 
+def _degraus(nd: int, n: int, mudam: int | None = None) -> np.ndarray:
+    """(nd, n) de 0/1. Os `mudam` primeiros canais (todos, sem `mudam`) ligam
+    UMA vez — o k-ésimo na amostra `(k+1)·n/(mudam+1)` — e ficam; os outros
+    ficam em 0 o registro inteiro, como as milhares de entradas paradas de um
+    SEL-487E."""
+    mudam = nd if mudam is None else min(mudam, nd)
+    saida = np.zeros((nd, n), dtype=np.int8)
+    if mudam:
+        liga = (np.arange(1, mudam + 1) * n) // (mudam + 1)
+        saida[:mudam] = np.arange(n)[None, :] >= liga[:, None]
+    return saida
+
+
 #: Os terminais de corrente de um relé, na ordem em que ele os grava. São
 #: letras porque é assim num SEL (`IAW`, `IAX`); a fábrica só precisa de um
 #: sufixo que não seja dígito — ver `nome_de_canal`.
@@ -118,6 +130,8 @@ def escrever_comtrade(
     lixo_no_fim: int = 0,
     escala_primaria: bool = False,
     taxas: list[tuple[float, int]] | None = None,
+    degraus: bool = False,
+    mudam: int | None = None,
 ) -> Path:
     """Escreve um par `.cfg`/`.dat` e devolve o caminho do `.cfg`."""
     pasta = Path(pasta)
@@ -127,7 +141,11 @@ def escrever_comtrade(
 
     instantes = _instantes(n, taxa, taxas)
     analog = _senoides(na, freq, instantes)
-    digital = _digitais(nd, n)
+    # `degraus`: cada digital liga UMA vez, em instantes espalhados pelo
+    # registro (o k-ésimo em (k+1)/(nd+1) do caminho) — como os de um evento
+    # de verdade, que entram todos na tela padrão. Sem isso, a contagem binária
+    # (o padrão, que confere o desempacotamento bit a bit) picota.
+    digital = _degraus(nd, n, mudam) if degraus else _digitais(nd, n)
     crus = np.rint(analog / ESCALA).astype(np.int64)
 
     ps = "P" if escala_primaria else "S"
@@ -177,23 +195,27 @@ def escrever_comtrade(
         dat_path.write_bytes(fim.join(partes).encode("ascii") + fim.encode("ascii"))
         return cfg_path
 
-    formato = {"BINARY": "<h", "BINARY32": "<i", "FLOAT32": "<f"}[tipo]
+    # Vetorizado (12/11/2026): o laço por amostra levava minutos para os
+    # registros de MILHÕES de amostras com que se mede a navegação (ondas
+    # viajantes). Os bytes são os mesmos do laço antigo.
+    formato = {"BINARY": "<i2", "BINARY32": "<i4", "FLOAT32": "<f4"}[tipo]
     palavras = (nd + 15) // 16
-    buf = bytearray()
-    for i in range(n):
-        buf += struct.pack("<II", i + 1, int(carimbos[i]))
-        for k in range(na):
-            valor = float(analog[k, i] / ESCALA) if tipo == "FLOAT32" else int(crus[k, i])
-            buf += struct.pack(formato, valor)
-        for w in range(palavras):
-            palavra = 0
-            for bit in range(16):
-                canal = w * 16 + bit
-                if canal < nd and digital[canal, i]:
-                    palavra |= 1 << bit
-            buf += struct.pack("<H", palavra)
-    buf += b"\x1a" * lixo_no_fim
-    dat_path.write_bytes(bytes(buf))
+    campos = [("n", "<u4"), ("t", "<u4")]
+    campos += [(f"a{k}", formato) for k in range(na)]
+    campos += [(f"d{w}", "<u2") for w in range(palavras)]
+    linhas_dat = np.zeros(n, dtype=np.dtype(campos))
+    linhas_dat["n"] = np.arange(1, n + 1, dtype=np.uint32)
+    linhas_dat["t"] = carimbos.astype(np.uint32)
+    for k in range(na):
+        linhas_dat[f"a{k}"] = (analog[k] / ESCALA) if tipo == "FLOAT32" else crus[k]
+    for w in range(palavras):
+        palavra = np.zeros(n, dtype=np.uint32)
+        for bit in range(16):
+            canal = w * 16 + bit
+            if canal < nd:
+                palavra |= digital[canal].astype(np.uint32) << bit
+        linhas_dat[f"d{w}"] = palavra.astype(np.uint16)
+    dat_path.write_bytes(linhas_dat.tobytes() + b"\x1a" * lixo_no_fim)
     return cfg_path
 
 

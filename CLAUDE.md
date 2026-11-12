@@ -213,7 +213,36 @@ osclab/
   ingênua. Pelo máximo ele sempre aparece — mais largo do que é, e isso é o
   certo: **trip que some da tela é pior que trip gordo demais.** Colunas
   ligadas seguidas viram um retângulo só, senão o antialiasing abre fresta e
-  um trip contínuo se lê como intermitente.
+  um trip contínuo se lê como intermitente. **A tira sai das TRANSIÇÕES**
+  *(12/11/2026)*: `digitais.trocas` acha, uma vez por registro, as amostras
+  em que cada digital muda; a tira de uma janela é busca binária nas bordas
+  das colunas (o mesmo máximo, sem olhar amostra) e viaja como
+  `{inicial, trocas, colunas}` — as colunas em que o estado desenhado troca.
+  Um 0/1 por coluna eram 2,1 MB de JSON por pedido num SEL-411L.
+- **Conta do REGISTRO INTEIRO é lembrada no registro, nunca refeita por
+  gesto** *(12/11/2026)*. O custo de um pedido de janela ou de cursor tem de
+  ser da janela. Presença de sinal, trincas, energia do catálogo, início da
+  perturbação, prefixo k, transições dos digitais: `base.lembrado_do_registro`
+  (os `mesmos` são as matrizes e as tuplas de canais; a impressão barata das
+  amostras vai nos `iguais`). Conta nova que lê o registro todo e não depende
+  da janela entra ali, com teste de que é feita uma vez
+  (`tests/test_leveza.py`). E o que é do registro e é grande (catálogo, lista
+  de todos os digitais) não viaja de novo enquanto não muda
+  (`janela.sem_repetir`, por selo do conteúdo).
+- **O canal cru numa janela larga se reduz pela PIRÂMIDE** *(12/11/2026)*:
+  `serie.piramide` guarda mín./máx. por bloco de 64 amostras (uma vez por
+  registro, 2/64 da matriz) e `serie.reduzir_canal` monta cada coluna com
+  os blocos inteiros mais as pontas amostra a amostra — o MESMO resultado de
+  `reduzir`, bit a bit (há teste), com custo das colunas: ondas viajantes
+  a 1 MHz têm milhões de amostras por canal. Converter (TC/TP, `k`) vem
+  depois de reduzir: multiplicar por positivo não troca o mínimo. E os
+  picos e zeros do ímã (uma passada pela série cheia) só são achados quando
+  o ímã gruda neles (`imas=` na janela, `janela._atracoes`).
+- **O que AINDA é O(amostras) por gesto, e por quê**: as envoltórias (RMS,
+  60 Hz, DC, componentes, contas) e os picos/zeros pedidos são contas sobre
+  a janela inteira — guardá-las do registro todo seria 8 bytes por amostra
+  por sinal (96 MB num registro de 12 × 1 M). Abrir é O(registro) uma vez:
+  diagnóstico bruto × filtrado, presença, energia do catálogo.
 - **O gráfico é um PAINEL, e a lista de painéis é da TELA.** Um painel é
   `{id, tipo, nome, sinais, medida}` (ver `plot/paineis.py`): a tela manda a
   lista inteira no corpo do pedido e o servidor desenha o que veio, na ordem em
@@ -306,6 +335,27 @@ osclab/
   localizador; agora é feito uma vez por registro aberto (1,08 → 0,17 s).
   Teste: `tests/test_roda_localizador_navegador.py`, com as respostas
   atrasadas e fora de ordem de propósito.
+- **Todo pedido de janela vai em FILA, e todo passo de cursor se soma**
+  *(12/11/2026)*. A regra da roda valia só para a roda: dois arrastos soltos
+  com o primeiro pedido em voo andavam UM (o segundo saía da mesma janela), e
+  seis toques de seta com a leitura em voo andavam dois. Hoje `carregar` põe
+  o gesto numa fila (um em voo; recargas sem gesto viram uma; arrastos
+  seguidos somam), o deslocamento da tela desconta só o arrasto que a
+  resposta levou, e `lerCursores` soma os passos que esperam. **O arrasto
+  pendente é guardado em SEGUNDOS** (`arrastoS`; o pixel sai da escala de
+  cada momento, `acertarArrasto`): em pixels, uma resposta de roda no meio
+  mudava o tempo que ele valia. **O foco da roda é o instante sob o mouse NO
+  GIRO**, não o pixel convertido 70 ms depois (um arrasto nesse meio
+  deslocava o zoom). A roda vale durante o arrasto da oscilografia. Teste:
+  `tests/test_navegacao_navegador.py`, com `combinacoes.mjs` — a janela final
+  é a composição dos gestos, conferida gesto a gesto.
+- **Traço reto é riscado em PEDAÇOS de 32 vértices** (`tracarEmPedacos`,
+  junta e ponta redondas: o mesmo desenho). O navegador contorna uma linha de
+  1,4 px com 2600 vértices (mín./máx. de 1300 colunas) de uma vez, e o
+  zigue-zague que se cruza custa 3× a soma dos pedaços — com placa de vídeo
+  também (210 × 69 ms, 13 traços). Traço transparente fica numa passada só
+  (o encontro de dois pedaços escureceria). E o painel de tiras guarda o
+  fundo como as ondas e só pinta a faixa à vista (`faixaDaTela`).
 - **Estado de desenho não se escreve POR CIMA do desenho** *(11/11/2026)*.
   «Ponha o cursor…», «falta o terminal remoto», «sem linha» iam no canvas,
   sobre a grade e os rótulos, e o rodapé repetia. Hoje vão numa linha logo
@@ -1564,7 +1614,10 @@ para cruzar com outro registro:
 - **SEL-TWFL** fecha o `.dat` com 64 bytes `0x1A` (fim-de-arquivo do DOS). Sobra
   de bytes no fim não é erro.
 - **SEL-487E** tem 5760 canais digitais: a matriz de estados fica com dezenas de
-  MB. Se virar problema, desempacotar sob demanda.
+  MB. Se virar problema, desempacotar sob demanda. **Desempacotar é um BYTE
+  por bit** (`np.unpackbits`, `bitorder="little"`): o deslocamento com
+  `arange` em int64 fazia cada bit virar 8 bytes, duas vezes — 368 MB de pico
+  para abrir um SEL-411L de 3 MB (12/11/2026; hoje 53 MB).
 - Nomes de subestação com acento vêm em **cp1252**, não UTF-8.
 - **Siemens SIPROTEC** escreve o NÚMERO DO CANAL no campo `ccbm` (`1`, `2`, `3`
   para IA, IB, IC). O `ccbm` da norma é o equipamento vigiado e é o mesmo nas

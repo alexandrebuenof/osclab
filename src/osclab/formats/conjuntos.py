@@ -54,7 +54,7 @@ from enum import StrEnum
 import numpy as np
 
 from osclab.formats import fases
-from osclab.formats.base import Record, lembrado
+from osclab.formats.base import Record, lembrado, lembrado_do_registro
 
 #: As três que a transformação exige. O neutro é bem-vindo e não é obrigatório:
 #: ele não entra na conta, só acompanha o conjunto na tela.
@@ -625,6 +625,19 @@ def _prefixo(unidade: str) -> float:
 
 def _ondas(registro: Record) -> frozenset[int] | None:
     """Os canais que podem fechar trinca: tudo menos a MAGNITUDE do relé.
+
+    Lembrado no registro (`base.lembrado`, 12/11/2026): mede a fundamental de
+    cada canal no registro inteiro, e é chamado por `_agrupar`, `_pendurados`
+    e `_avulsos` — várias vezes por pedido. Num registro de um milhão de
+    amostras por canal eram 20 dos 32 s de abrir.
+    """
+    from osclab.dsp import fasor
+    return lembrado_do_registro(registro, "conjuntos.ondas", (fasor.estimador(),),
+                                lambda: _medir_ondas(registro))
+
+
+def _medir_ondas(registro: Record) -> frozenset[int] | None:
+    """A conta de `_ondas`.
 
     **Magnitude calculada pelo relé não é fase.** O GE grava, junto das ondas,
     o módulo do fasor de cada fase com a unidade de corrente e a letra da fase

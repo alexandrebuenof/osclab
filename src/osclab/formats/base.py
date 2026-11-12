@@ -354,8 +354,62 @@ class Record:
 
 
 #: Quantas respostas cada registro guarda (`lembrado`). Cada combinação de
-#: lado e contas é uma; as contas mudam enquanto o usuário digita.
-_LEMBRADOS_POR_REGISTRO = 16
+#: lado e contas é uma; as contas mudam enquanto o usuário digita. Subiu de 16
+#: para 48 quando as medições do registro inteiro (transições dos digitais,
+#: presença de sinal, energia, início da perturbação, prefixo k) passaram a
+#: morar aqui também (12/11/2026): com 16, quem digita uma conta empurrava
+#: para fora justamente as que custam caro.
+_LEMBRADOS_POR_REGISTRO = 48
+
+
+def amostras_do_registro(registro: Record) -> tuple:
+    """Os `mesmos` de uma conta que lê as AMOSTRAS e os canais do registro.
+
+    Para `lembrado`: as matrizes, o tempo, as taxas e as tuplas de canais. A
+    correção de fase, a de trinca e a relação digitada trocam a tupla de
+    canais (ou o registro inteiro), e a conta lembrada deixa de valer sozinha.
+    """
+    return (registro.analog_channels, registro.analog, registro.time,
+            registro.status_channels, registro.status, registro.sample_rates)
+
+
+#: Quantas colunas de amostra, e quantas linhas (canais), no máximo, entram
+#: na `impressao_das_amostras`. Ela é feita a CADA consulta a uma conta
+#: lembrada: tem de custar microssegundos.
+_AMOSTRAS_DA_IMPRESSAO = 512
+_LINHAS_DA_IMPRESSAO = 32
+
+
+def impressao_das_amostras(registro: Record) -> tuple:
+    """Uma impressão BARATA do conteúdo das matrizes, para os `iguais`.
+
+    `amostras_do_registro` confere as matrizes pela identidade; quem as
+    altera NO LUGAR (`r.analog[:, 300:] *= 4`, o que só os testes fazem)
+    passaria pela conferência com a conta velha. Esta soma umas duas mil
+    colunas espalhadas pelo registro inteiro — microssegundos — e pega a
+    alteração de qualquer trecho mais largo que o passo entre elas. `NaN`
+    fica de fora da soma: `nan != nan`, e uma impressão com `NaN` nunca
+    bateria consigo mesma.
+    """
+    saida = []
+    for m in (registro.analog, registro.status):
+        if m.ndim != 2 or m.size == 0:
+            saida.append(0.0)
+            continue
+        passo = max(1, m.shape[1] // _AMOSTRAS_DA_IMPRESSAO)
+        linhas = max(1, m.shape[0] // _LINHAS_DA_IMPRESSAO)
+        amostra = np.asarray(m[::linhas, ::passo], dtype=np.float64)
+        with np.errstate(all="ignore"):
+            saida.append(float(amostra[np.isfinite(amostra)].sum()))
+    return tuple(saida)
+
+
+def lembrado_do_registro(registro: Record, nome: str, iguais: tuple, fazer):
+    """`lembrado` para uma conta que lê as amostras e os canais do registro:
+    os `mesmos` são `amostras_do_registro`, e a `impressao_das_amostras` entra
+    nos `iguais`."""
+    return lembrado(registro, nome, tuple(iguais) + impressao_das_amostras(registro),
+                    amostras_do_registro(registro), fazer)
 
 
 def lembrado(registro: Record, nome: str, iguais: tuple, mesmos: tuple, fazer):

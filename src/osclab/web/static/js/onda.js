@@ -85,7 +85,7 @@
   //: navegador recarrega o `.js` sozinho: quem troca de versão sem reiniciar
   //: fica com tela nova e servidor velho, e o resultado é uma tela que mostra
   //: coisas que não fazem sentido sem dar erro nenhum. Já custou três rodadas.
-  const CONTRATO = 32;
+  const CONTRATO = 33;
 
   //: A margem de cima abriga a etiqueta numerada dos cursores, que fica FORA da
   //: área de desenho: por dentro ela tapa o pico da onda — e o pico é
@@ -243,7 +243,23 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   let arrastando = null;
 
   //: Deslocamento visual em pixels enquanto a mão arrasta (ver cabeçalho).
+  //: Sai SEMPRE de `arrastoS` (`acertarArrasto`): o deslocamento de verdade
+  //: é em SEGUNDOS, porque uma resposta de roda que chega no meio do arrasto
+  //: muda a escala — em pixels, o arrasto pendente passaria a valer outro
+  //: tempo, e em segundos ele continua sendo o que a mão fez (12/11/2026).
   let arrastoPx = 0;
+  //: O arrasto que a tela mostra e o servidor ainda não aplicou, em segundos:
+  //: o da mão agora mais os soltos cujo pedido está na fila ou em voo.
+  let arrastoS = 0;
+  //: A largura do desenho em pixels, do último arrasto (para converter).
+  let larguraDoArrasto = 0;
+
+  /** `arrastoPx` a partir de `arrastoS`, na escala da janela da tela. */
+  function acertarArrasto() {
+    const largura = dados ? dados.ate - dados.de : 0;
+    arrastoPx = arrastoS && largura > 0 && larguraDoArrasto > 0
+      ? (arrastoS * larguraDoArrasto) / largura : 0;
+  }
 
   //: A faixa sendo selecionada com Shift, em pixels: [inicio, atual].
   let selecao = null;
@@ -1029,16 +1045,28 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     return token(mapa[fase] || "--suave");
   };
 
-  const formatar = (v, casas, agrupar = true) =>
-    v === null || v === undefined || !isFinite(v)
-      ? "—"
-      : v.toLocaleString("pt-BR", {
-          minimumFractionDigits: casas,
-          maximumFractionDigits: casas,
-          // O tempo dispensa separador de milhar: `1043,2` cabe onde
-          // `1.043,2` não cabe, e ninguém lê um instante como contagem.
-          useGrouping: agrupar,
-        });
+  //: Um `Intl.NumberFormat` por (casas, agrupar), feito uma vez. O
+  //: `toLocaleString` com opções monta um formatador NOVO a cada chamada, e
+  //: esta função é chamada por rótulo de eixo e por célula da tabelinha a cada
+  //: quadro — era a função mais cara do arrasto de cursor depois da pintura
+  //: (12/11/2026). O texto é o mesmo.
+  const _formatadores = new Map();
+  const formatar = (v, casas, agrupar = true) => {
+    if (v === null || v === undefined || !isFinite(v)) return "—";
+    const chave = `${casas}|${agrupar}`;
+    let f = _formatadores.get(chave);
+    if (!f) {
+      f = new Intl.NumberFormat("pt-BR", {
+        minimumFractionDigits: casas,
+        maximumFractionDigits: casas,
+        // O tempo dispensa separador de milhar: `1043,2` cabe onde
+        // `1.043,2` não cabe, e ninguém lê um instante como contagem.
+        useGrouping: agrupar,
+      });
+      _formatadores.set(chave, f);
+    }
+    return f.format(v);
+  };
 
   /** Instante mostrado no eixo: milissegundos em relação ao disparo. */
   const paraMs = (t) => (t - (dados.disparo_s ?? 0)) * 1000;
@@ -1059,9 +1087,59 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   //: Pedidos de janela numerados, e o número do último aplicado.
   let pedidosDaJanela = 0;
   let janelaAplicada = 0;
+  //: Os campos do REGISTRO do último pacote inteiro, e o selo deles
+  //: (`{selo, campos}`): o servidor não os repete enquanto o selo bater.
+  let estaticos = null;
 
-  /** Pede uma janela ao servidor. `gesto` é o que o mouse acabou de fazer. */
-  async function carregar(gesto = {}) {
+  /** Pede uma janela ao servidor. `gesto` é o que o mouse acabou de fazer.
+   *
+   * **Um pedido de janela por vez, em FILA** (12/11/2026). Todo gesto é
+   * relativo à janela da tela («ande tanto», «amplie tanto em torno daqui»),
+   * e dois pedidos em voo ao mesmo tempo saíam da MESMA janela: soltar um
+   * arrasto e soltar outro antes da resposta perdia o primeiro (a segunda
+   * resposta, de `janela + d2`, punha por cima a de `janela + d1`); arrastar
+   * e girar a roda, idem. A roda já tinha isto para ela (`mandarZoom`); agora
+   * vale para todo gesto: o pedido seguinte só sai quando o anterior foi
+   * APLICADO, e sai da janela que ele deixou. Recargas sem gesto seguidas (o
+   * painel mudou, o tamanho mudou) viram uma só, e arrastos seguidos somam.
+   * Devolve uma promessa que se cumpre quando o pedido foi aplicado.
+   */
+  const filaDaJanela = [];
+  let janelaEmVoo = false;
+  function carregar(gesto = {}) {
+    return new Promise((cumprir) => {
+      const so = (g, chave) => Object.keys(g).every((k) => k === chave || k === "s");
+      const vazio = !Object.keys(gesto).length;
+      const ultimo = filaDaJanela[filaDaJanela.length - 1];
+      if (ultimo && vazio && ultimo.vazio) {
+        ultimo.esperando.push(cumprir);
+      } else if (ultimo && !vazio && gesto.andar !== undefined && so(gesto, "andar")
+                 && ultimo.gesto.andar !== undefined && so(ultimo.gesto, "andar")) {
+        ultimo.gesto.andar += gesto.andar;
+        if (gesto.s !== undefined) ultimo.gesto.s = (ultimo.gesto.s || 0) + gesto.s;
+        ultimo.esperando.push(cumprir);
+      } else {
+        filaDaJanela.push({ gesto: { ...gesto }, vazio, esperando: [cumprir] });
+      }
+      andarNaFila();
+    });
+  }
+
+  async function andarNaFila() {
+    if (janelaEmVoo) return;
+    const item = filaDaJanela.shift();
+    if (!item) return;
+    janelaEmVoo = true;
+    try {
+      await carregarAgora(item.gesto);
+    } finally {
+      janelaEmVoo = false;
+      for (const cumprir of item.esperando) cumprir();
+      andarNaFila();
+    }
+  }
+
+  async function carregarAgora(gesto = {}) {
     // Resposta mais VELHA que a última aplicada é descartada: com o servidor
     // lento, um pedido de antes que chegasse depois punha de volta a janela
     // de antes — a tela andava para trás sozinha (12/11/2026).
@@ -1082,6 +1160,11 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     if (gesto.tudo) p.set("tudo", "1");
     if (filtro) p.set("filtro", "1");
     if (filtroEscolhido !== FILTROS[0][0]) p.set("estimador", filtroEscolhido);
+    // O selo do que a tela já tem (o catálogo, a lista de todos os
+    // digitais): igual, o servidor não manda de novo. Ver `janela.sem_repetir`.
+    if (estaticos) p.set("estaticos", estaticos.selo);
+    const pontos = pontosDasOndas();
+    p.set("imas", pontos);
 
     try {
       const r = await fetch(`/api/onda/${sha}?${p}`, pedidoComLayout());
@@ -1091,7 +1174,24 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       }
       const chegou = await r.json();
       if (numero < janelaAplicada) return;
+      if (chegou.estaticos_omitidos) {
+        // Omitido contra um selo que a tela não tem mais (outra resposta o
+        // trocou no meio): pede de novo, inteiro. Não deveria acontecer.
+        if (!estaticos || estaticos.selo !== chegou.estaticos) {
+          estaticos = null;
+          return carregarAgora(gesto);
+        }
+        for (const k of chegou.estaticos_omitidos) chegou[k] = estaticos.campos[k];
+      } else if (chegou.estaticos) {
+        estaticos = { selo: chegou.estaticos, campos: {} };
+        for (const k of Object.keys(chegou)) {
+          if (k === "catalogo" || k === "digitais_disponiveis" || k === "energia") {
+            estaticos.campos[k] = chegou[k];
+          }
+        }
+      }
       janelaAplicada = numero;
+      pontosDaJanela = pontos;
       dados = chegou;
       if ((dados.contrato || 0) !== CONTRATO) {
         avisarDeVersao();
@@ -1110,7 +1210,14 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       mostrarTaxa();
       mostrarSemSinal();
       window.__janela = { de: dados.de, ate: dados.ate };   // para teste no navegador
-      arrastoPx = 0;
+      // O arrasto que este pedido levou já está na janela nova: sai do
+      // deslocamento da tela. Só ele — um arrasto feito DEPOIS (com este
+      // pedido em voo, ou ainda na mão) continua deslocando, em segundos, e
+      // vai no pedido seguinte. A roda que chega no meio de um arrasto muda
+      // só a escala em que esse deslocamento é desenhado.
+      if (gesto.s !== undefined) arrastoS -= gesto.s;
+      if (Math.abs(arrastoS) < 1e-12) arrastoS = 0;
+      acertarArrasto();
       desenharTudo();
       // Os registros da aba e o alinhamento podem ter mudado: quem mostra
       // algo por registro (a lista de eventos) pergunta de novo.
@@ -1165,15 +1272,39 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   const regua = document.createElement("canvas").getContext("2d");
 
   /** O texto que cabe em `largura`, cortado com reticencias se preciso. */
+  //: O corte já medido de cada (texto, largura): medir é caro, e as tiras
+  //: eram medidas uma a uma a cada quadro de arrasto — duzentas tiras,
+  //: duzentos `measureText` (e um laço deles para cada nome cortado). A fonte
+  //: é sempre a mesma (`FONTE_TIRA`); a memória se esvazia quando passa de
+  //: alguns milhares de entradas.
+  const _encaixados = new Map();
   function encaixar(texto, largura) {
+    const chave = `${largura}|${texto}`;
+    const achado = _encaixados.get(chave);
+    if (achado !== undefined) return achado;
+    if (_encaixados.size > 5000) _encaixados.clear();
     regua.font = FONTE_TIRA;
-    if (regua.measureText(texto).width <= largura) return texto;
-    let corte = texto.length;
-    while (corte > 1 && regua.measureText(`${texto.slice(0, corte)}…`).width > largura) {
-      corte -= 1;
+    let saida = texto;
+    if (regua.measureText(texto).width > largura) {
+      let corte = texto.length;
+      while (corte > 1 && regua.measureText(`${texto.slice(0, corte)}…`).width > largura) {
+        corte -= 1;
+      }
+      saida = `${texto.slice(0, corte)}…`;
     }
-    return `${texto.slice(0, corte)}…`;
+    _encaixados.set(chave, saida);
+    return saida;
   }
+  // Fonte que termina de carregar mede diferente: o que foi guardado vale menos.
+  document.fonts?.addEventListener?.("loadingdone", () => {
+    _encaixados.clear();
+    _maiorNome.de = null;
+  });
+
+  //: A largura do maior nome de digital do pacote `de` — medida uma vez por
+  //: pacote, e não a cada `ajustarMargem` (que roda a cada desenho e a cada
+  //: pedido).
+  const _maiorNome = { de: null, largura: 0 };
 
   /** Abre a margem esquerda ate' caber o maior nome de digital.
    *
@@ -1200,11 +1331,16 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     // começariam em x diferentes e o mesmo instante apareceria em dois
     // lugares. (Saía de `dados.digitais`, que deixou de existir com os
     // painéis — e sem isto os nomes voltavam todos cortados.)
-    const tiras = (dados && dados.paineis || [])
-      .flatMap((x) => x.tiras || []);
-    if (!tiras.length) return;
-    regua.font = FONTE_TIRA;
-    const maior = Math.max(...tiras.map((t) => regua.measureText(t.nome).width));
+    if (_maiorNome.de !== dados) {
+      const tiras = (dados && dados.paineis || [])
+        .flatMap((x) => x.tiras || []);
+      regua.font = FONTE_TIRA;
+      _maiorNome.largura = tiras.reduce(
+        (m, t) => Math.max(m, regua.measureText(t.nome).width), -1);
+      _maiorNome.de = dados;
+    }
+    if (_maiorNome.largura < 0) return;
+    const maior = _maiorNome.largura;
     const teto = Math.max(MARGEM_BASE, Math.round((area.clientWidth || 900) * 0.42));
     MARGEM.esq = Math.min(Math.max(MARGEM_BASE, Math.ceil(maior) + 16), teto);
   }
@@ -2723,7 +2859,22 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     });
   }
 
-  /** Desenha as tiras. Mesmo eixo de tempo das ondas, mesmo arrasto. */
+  /** Desenha as tiras. Mesmo eixo de tempo das ondas, mesmo arrasto.
+   *
+   * Como as ondas (`pintar`), o que não muda a cada quadro — os nomes, a
+   * grade vertical e as tiras — fica guardado numa imagem (`canvas._fundo`)
+   * e só é refeito quando muda algo que ele desenha; o quadro de arrasto e o
+   * de cursor só colam essa imagem (deslocada dentro da moldura) e põem os
+   * cursores por cima. Antes, cada movimento do mouse redesenhava as
+   * duzentas tiras de um SEL-411L, media o nome de cada uma e pintava o
+   * milimetrado de um canvas de 3000 px de altura (12/11/2026).
+   *
+   * E o quadro só pinta a FAIXA do canvas que está na tela, com folga de uma
+   * altura de janela para cima e para baixo (`faixaDaTela`): com duzentas
+   * tiras o canvas é muitas vezes mais alto que a janela, e pintar o que
+   * ninguém está vendo era a maior parte do custo. Rolar a página para fora
+   * da faixa pinta de novo (`repintarNaRolagem`).
+   */
   function pintarDigitais(canvas, painel, ultimo) {
     const linhas = painel.tiras;
     const cssLargura = canvas.parentElement.clientWidth;
@@ -2749,6 +2900,16 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const y0 = MARGEM.topo;
     const y1 = y0 + Math.max(linhas.length, 1) * TIRA;
     if (x1 <= x0) return;
+
+    // A faixa que se pinta neste quadro, em pixels de CSS do canvas.
+    const faixa = faixaDaTela(canvas, cssAltura);
+    canvas._faixa = faixa;
+    if (faixa.b <= faixa.a) return;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, faixa.a, cssLargura, faixa.b - faixa.a);
+    ctx.clip();
+
     pintarMilimetrado(ctx, x0, y0, x1, y1);
 
     const tMin = dados.de;
@@ -2756,6 +2917,64 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const emX = (t) =>
       x0 + ((t - tMin) / (tMax - tMin || 1)) * (x1 - x0) + arrastoPx;
 
+    const haEscolha = selecionados.some(
+      (x) => x.tipo === "digital" && x.painel === painel.id);
+    const varios = variosIeds();
+
+    // --- o FUNDO: nomes, grade vertical e tiras, SEM o arrasto -------------
+    //
+    // A chave lista tudo que o fundo lê; o painel e o pacote entram por
+    // identidade (chegam novos a cada resposta do servidor).
+    const chaveDoFundo = [
+      canvas.width, canvas.height, dpr, x0, x1, y0, y1, haEscolha, varios,
+      faixa.a, faixa.b, token("--tinta"), token("--destaque"), token("--linha"), token("--fundo"),
+      ...linhas.map((tira) => `${tira.id || tira.indice}:${corDaTira(painel, tira)}:`
+        + estaSelecionado(painel, "digital", tira.id || tira.indice)),
+    ].join("¦");
+    let fundo = canvas._fundo;
+    if (!fundo || fundo._chave !== chaveDoFundo || fundo._painel !== painel || fundo._dados !== dados) {
+      if (!fundo) { fundo = document.createElement("canvas"); canvas._fundo = fundo; }
+      if (fundo.width !== canvas.width || fundo.height !== canvas.height) {
+        fundo.width = canvas.width;
+        fundo.height = canvas.height;
+      }
+      // `willReadFrequently` pela mesma razão do fundo das ondas: guardado
+      // em PIXELS, e não como a lista de comandos que o desenhou.
+      const fctx = fundo.getContext("2d", { willReadFrequently: true });
+      fctx.setTransform(1, 0, 0, 1, 0, 0);
+      fctx.clearRect(0, 0, fundo.width, fundo.height);
+      fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      pintarFundoDasTiras(fctx);
+      fundo._chave = chaveDoFundo;
+      fundo._painel = painel;
+      fundo._dados = dados;
+    }
+    // Fora da moldura (os nomes), o fundo como está; dentro, deslocado pelo
+    // arrasto. Só as linhas de pixel da faixa.
+    const sy = Math.max(0, Math.floor(faixa.a * dpr));
+    const sh = Math.min(canvas.height, Math.ceil(faixa.b * dpr)) - sy;
+    if (sh > 0) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, cssLargura, cssAltura);
+      ctx.rect(x0, y0, x1 - x0, y1 - y0);
+      ctx.clip("evenodd");
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(fundo, 0, sy, fundo.width, sh, 0, sy, fundo.width, sh);
+      ctx.restore();
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x0, y0, x1 - x0, y1 - y0);
+      ctx.clip();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(fundo, 0, sy, fundo.width, sh,
+                    Math.round(arrastoPx * dpr), sy, fundo.width, sh);
+      ctx.restore();
+    }
+
+    function pintarFundoDasTiras(ctx) {
+    // O fundo é sempre pintado SEM o arrasto: ver `chaveDoFundo`.
+    const emX = (t) => x0 + ((t - tMin) / (tMax - tMin || 1)) * (x1 - x0);
     ctx.font = FONTE_TIRA;
     ctx.textBaseline = "middle";
 
@@ -2763,15 +2982,18 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     //
     // O corte é pela largura medida, não por um número fixo de letras: fonte
     // monoespaçada hoje, proporcional amanhã, e a etiqueta continua cabendo.
-    const haEscolha = selecionados.some(
-      (x) => x.tipo === "digital" && x.painel === painel.id);
     ctx.textAlign = "right";
+    // Só as tiras da faixa: as de fora não estão na tela (ver `faixaDaTela`).
+    const primeira = Math.max(0, Math.floor((faixa.a - y0) / TIRA) - 1);
+    const ultima = Math.min(linhas.length, Math.ceil((faixa.b - y0) / TIRA) + 1);
+    const naFaixa = (k) => k >= primeira && k < ultima;
     linhas.forEach((tira, k) => {
+      if (!naFaixa(k)) return;
       const escolhida = estaSelecionado(painel, "digital", tira.id || tira.indice);
       ctx.fillStyle = escolhida ? token("--destaque") : token("--tinta");
       ctx.globalAlpha = haEscolha && !escolhida ? 0.4 : 1;
       const meio = y0 + k * TIRA + TIRA / 2;
-      if (!variosIeds()) {
+      if (!varios) {
         ctx.fillText(encaixar(tira.nome, x0 - 12), x0 - 8, meio);
         return;
       }
@@ -2819,10 +3041,9 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     // desenhado. E como a linha nunca troca de altura, o olho lê a tira
     // inteira sem subir e descer: o que salta é a espessura.
     const tempoDoPainel = painel.tempo_digitais || dados.tempo_digitais || [];
-    // A cor é de CADA painel, escolhida na engrenagem; sem escolha, o token.
-    const meuPainel = painelPorId(painel.id) || {};
     const corEscolhida = token("--destaque");
     linhas.forEach((tira, k) => {
+      if (!naFaixa(k)) return;
       // A tira de outro IED traz as colunas DELA, no eixo da aba.
       const tempo = tira.tempo || tempoDoPainel;
       // A cor é de CADA TIRA: o pincel vence a categoria, que vence a cor do
@@ -2866,16 +3087,24 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         ctx.fillRect(a, topo, Math.max(b - a, 1), base - topo);
       };
 
+      // A tira vem como as colunas em que ela TROCA de estado (ver
+      // `plot/digitais.tiras`): cada trecho entre duas trocas é um retângulo.
       let inicio = 0;
-      for (let i = 1; i <= tira.ligado.length; i++) {
-        const acabou = i === tira.ligado.length;
-        if (acabou || tira.ligado[i] !== tira.ligado[inicio]) {
-          trecho(inicio, i - 1, !!tira.ligado[inicio]);
-          inicio = i;
-        }
+      let estado = !!tira.inicial;
+      for (const c of [...(tira.trocas || []), tira.colunas || 0]) {
+        if (c > inicio) trecho(inicio, c - 1, estado);
+        inicio = c;
+        estado = !estado;
       }
       ctx.globalAlpha = 1;
     });
+    ctx.restore();
+    }
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x0, y0, x1 - x0, y1 - y0);
+    ctx.clip();
 
     // --- os cursores ------------------------------------------------------
     cursores.forEach((t, k) => {
@@ -2906,9 +3135,49 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     ctx.lineWidth = 1;
     ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
 
+    ctx.font = FONTE_TIRA;
+    ctx.textBaseline = "middle";
     pintarEtiquetas(ctx, emX, x0, x1, y0);
     pintarRodapeDoTempo(ctx, emX, x0, x1, y1, ultimo);
+    ctx.restore();
   }
+
+  /** A faixa do canvas que vale pintar: o que está na janela, com folga de
+   *  uma altura de janela para cima e para baixo. `{a, b}` em pixels de CSS
+   *  do canvas, em DEGRAUS de uma altura de janela — rolar dentro do degrau
+   *  não muda a faixa, e o fundo guardado (que é só da faixa) continua
+   *  valendo. */
+  function faixaDaTela(canvas, alto) {
+    const r = canvas.getBoundingClientRect();
+    const tela = Math.max(200, window.innerHeight || document.documentElement.clientHeight || 800);
+    const topo = -r.top;
+    const a = Math.max(0, (Math.floor(topo / tela) - 1) * tela);
+    const b = Math.min(alto, a + 3 * tela);
+    return b > a ? { a, b } : { a: 0, b: 0 };
+  }
+
+  /** Rolou a página: os painéis de tiras cuja faixa pintada já não cobre o
+   *  que está na janela são pintados de novo — só eles. */
+  let rolagemPedida = 0;
+  function repintarNaRolagem() {
+    if (rolagemPedida) return;
+    rolagemPedida = requestAnimationFrame(() => {
+      rolagemPedida = 0;
+      const tela = window.innerHeight || 800;
+      for (const b of blocos) {
+        if (!b._painel || b._painel.tipo !== "digital" || !b._canvas) continue;
+        const r = b._canvas.getBoundingClientRect();
+        const vista = { a: Math.max(0, -r.top), b: Math.min(r.height, -r.top + tela) };
+        if (vista.b <= vista.a) continue;
+        const f = b._canvas._faixa;
+        if (f && f.a <= vista.a && f.b >= vista.b) continue;
+        pintarDigitais(b._canvas, b._painel, b._ultimo);
+        if (b._molduras) pintarMolduras(b);
+      }
+    });
+  }
+  window.addEventListener("scroll", repintarNaRolagem, { passive: true });
+  window.addEventListener("resize", repintarNaRolagem);
 
   /** A busca: qualquer digital do arquivo, para pôr NESTE painel.
    *
@@ -6634,6 +6903,55 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       pts.push({ x: emX(tempo[i]), y: paraY(v) });
     }
     despejar();
+  }
+
+  //: Quantos vértices vão em cada `stroke` de `tracarEmPedacos`.
+  const VERTICES_POR_TRACO = 32;
+
+  /** O traço RETO de um sinal, riscado em pedaços de `VERTICES_POR_TRACO`.
+   *
+   * O mesmo desenho de `tracar` + `stroke` — junta redonda, e ponta redonda
+   * onde um pedaço encontra o seguinte, o que dá exatamente a junta redonda
+   * que estaria ali —, em uma fração do tempo. Uma linha de 1,4 px com 2600
+   * vértices (o mínimo e o máximo de 1300 colunas) é contornada e preenchida
+   * de uma vez pelo navegador, e esse contorno de um zigue-zague que se cruza
+   * o tempo todo custa muito mais que a soma dos pedaços: medido em 12/11/2026
+   * com placa de vídeo, 13 traços desses, 210 ms numa passada só × 69 ms em
+   * pedaços de 32. Era a maior parte de cada entalhe da roda.
+   *
+   * Só para traço OPACO: com transparência (o sinal apagado quando outro está
+   * escolhido) o ponto em que dois pedaços se encontram seria pintado duas
+   * vezes e ficaria mais escuro — ali vale a passada única.
+   */
+  function tracarEmPedacos(ctx, serie, tempo, emX, paraY) {
+    ctx.save();
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    let n = 0;
+    ctx.beginPath();
+    for (let i = 0; i < serie.length; i++) {
+      const v = serie[i];
+      // Buraco na série corta o traço, como em `tracar`.
+      if (v === null) {
+        if (n > 1) ctx.stroke();
+        ctx.beginPath();
+        n = 0;
+        continue;
+      }
+      const x = emX(tempo[i]);
+      const y = paraY(v);
+      if (n === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+      n += 1;
+      if (n >= VERTICES_POR_TRACO) {
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        n = 1;
+      }
+    }
+    if (n > 1) ctx.stroke();
+    ctx.restore();
   }
 
   /** O lápis que abre a correção da trinca de uma componente simétrica. */
@@ -15304,6 +15622,24 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     if (!magnetico) { presos[0] = presos[1] = null; }
     marcarBotoes();
     repintar();
+    pedirPontosDoIma();
+  }
+
+  /** Os pontos das ONDAS em que o ímã gruda agora, como a janela os pede
+   *  (`imas=pico,zero`; `-` para nenhum). O servidor só acha os picos e as
+   *  passagens por zero pedidos — ver `janela._atracoes`. */
+  function pontosDasOndas() {
+    const q = magnetico ? ["pico", "zero"].filter((k) => atracoes.has(k)) : [];
+    return q.length ? q.join(",") : "-";
+  }
+
+  //: Os pontos das ondas que a janela na tela trouxe.
+  let pontosDaJanela = null;
+
+  /** Ligou o ímã, ou um tipo de ponto dele: se a janela na tela não os
+   *  trouxe, pede de novo. */
+  function pedirPontosDoIma() {
+    if (dados && pontosDaJanela !== null && pontosDasOndas() !== pontosDaJanela) carregar();
   }
 
   /** Abre (ou fecha) um menu pendurado num botão.
@@ -15547,6 +15883,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
           guardarAtracoes();
           travarAUltima();
           marcarBotoes();
+          pedirPontosDoIma();
         });
         marcas.set(chave, marca);
         linha.append(marca, criar("span", null, rotulo));
@@ -16351,9 +16688,13 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
                   * (pista.y1 - pista.y0)
               : emYdir)
           : emYp;
-        ctx.beginPath();
-        tracar(ctx, sinal.serie, tempo, emX, paraY);
-        ctx.stroke();
+        if (ctx.globalAlpha === 1 && !suavizavel()) {
+          tracarEmPedacos(ctx, sinal.serie, tempo, emX, paraY);
+        } else {
+          ctx.beginPath();
+          tracar(ctx, sinal.serie, tempo, emX, paraY);
+          ctx.stroke();
+        }
         if (pontosDeAmostra) {
           pintarAmostras(ctx, sinal.serie, tempo, emX, paraY, x0, x1);
         }
@@ -17175,7 +17516,15 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       if (!ajustarEspaco()) repintar();
       return;
     }
-    if (lendo) { pedidoDeLeitura = [passos, ciclos]; return; }
+    // Com uma leitura em voo, o pedido espera — e os PASSOS se somam. Eram
+    // substituídos: dez toques de seta com o servidor lento andavam menos de
+    // dez amostras, porque os do meio sumiam (12/11/2026).
+    if (lendo) {
+      const antes = pedidoDeLeitura || [[0, 0], [0, 0]];
+      pedidoDeLeitura = [[antes[0][0] + passos[0], antes[0][1] + passos[1]],
+                         [antes[1][0] + ciclos[0], antes[1][1] + ciclos[1]]];
+      return;
+    }
 
     lendo = true;
     const p = new URLSearchParams();
@@ -17640,7 +17989,15 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     // diferencial…) também não: a roda ali ampliava a oscilografia — que
     // nem está naquele gráfico — quando a mão só queria descer a página.
     // Pedido dele, 22/10/2026.
-    if (!noDesenho(a) || arrastando || !temEixoDeTempo(a.canvas)) return;
+    //
+    // Durante um ARRASTO da oscilografia a roda vale (12/11/2026): o arrasto
+    // é guardado em segundos (`arrastoS`), então o zoom que chega no meio só
+    // muda a escala em que ele é desenhado, e os dois gestos se compõem. Era
+    // ignorada — um gesto perdido sem aviso. Com a faixa do Shift ou com um
+    // cursor na mão, continua não valendo: ali o pixel já tem dono.
+    const ocupado = arrastando && (arrastando.faixa || arrastando.parado
+                                   || arrastando.cursor !== undefined);
+    if (!noDesenho(a) || ocupado || !temEixoDeTempo(a.canvas)) return;
     // Evento que não se pode cancelar é de uma rolagem da PÁGINA já em curso
     // (o Chrome prende o gesto ao primeiro alvo: começou rolando a página,
     // o resto do giro vem sem `cancelable`). A página vai rolar de qualquer
@@ -17650,9 +18007,14 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     evento.preventDefault();
 
     zoomAcumulado *= fatorDaRoda(evento);
-    // Guarda-se o PIXEL, não o instante: o instante sai na hora de mandar,
-    // contra a janela que estiver na tela então (ver `mandarZoom`).
-    zoomFoco = a;
+    // O INSTANTE que está sob o mouse AGORA, na tela de agora (com o arrasto
+    // que ainda não voltou do servidor). Era o pixel, convertido na hora de
+    // mandar — e um arrasto feito nos 70 ms entre o giro e o pedido mudava o
+    // que estava sob aquele pixel: o zoom saía em torno de outro ponto, uns
+    // pixels ao lado do que a mão girou (12/11/2026, combinação roda +
+    // arrasto). Um zoom que volta no meio não muda o instante: ele mantém
+    // parado justamente o ponto sob o mouse.
+    zoomFoco = instanteEm(a);
 
     clearTimeout(zoomPendente);
     zoomPendente = setTimeout(mandarZoom, 70);
@@ -17668,15 +18030,15 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
    * localizador), dez entalhes ampliavam 0,51× em vez de 0,11×, aos trancos
    * — a roda «quebrada» do localizador (12/11/2026). Agora, com um pedido em
    * voo, os entalhes se acumulam e saem juntos quando ele volta, a partir da
-   * janela nova. O foco é o instante sob o MESMO pixel, calculado nessa
-   * hora: o zoom mantém parado o ponto sob o mouse, então o instante dali é
+   * janela nova. O foco é o instante que estava sob o mouse no giro (ver o
+   * ouvinte da roda): o zoom mantém parado o ponto sob o mouse, então ele é
    * o mesmo antes e depois da resposta.
    */
   let zoomEmVoo = false;
   async function mandarZoom() {
     zoomPendente = null;
-    if (zoomEmVoo || zoomAcumulado === 1 || !zoomFoco || !dados) return;
-    const gesto = { zoom: zoomAcumulado, foco: instanteEm(zoomFoco) };
+    if (zoomEmVoo || zoomAcumulado === 1 || zoomFoco === null || !dados) return;
+    const gesto = { zoom: zoomAcumulado, foco: zoomFoco };
     zoomAcumulado = 1;
     zoomEmVoo = true;
     try {
@@ -17735,7 +18097,13 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     const semEixoDeTempo = !temEixoDeTempo(a.canvas);
     arrastando = { a, canvas: a.canvas, xInicial: a.x,
                    faixa: evento.shiftKey && !semEixoDeTempo,
-                   parado: semEixoDeTempo };
+                   parado: semEixoDeTempo,
+                   // O que ESTE gesto arrastou, em pixels (para o clique
+                   // parado) e em segundos (para o pedido); e onde a mão
+                   // estava no movimento anterior. Um arrasto anterior cujo
+                   // pedido ainda está em voo continua em `arrastoS`.
+                   px: 0, s: 0, ultimoX: a.x };
+    larguraDoArrasto = a.x1 - a.x0;
     if (arrastando.faixa) selecao = [a.x, a.x];
     area.setPointerCapture?.(evento.pointerId);
     area.classList.add(arrastando.faixa ? "selecionando" : "arrastando");
@@ -17776,7 +18144,15 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       selecao = [arrastando.xInicial, Math.min(Math.max(x, arrastando.a.x0),
                                                arrastando.a.x1)];
     } else {
-      arrastoPx = x - arrastando.xInicial;
+      // Cada movimento vale em SEGUNDOS na escala da tela de AGORA: se uma
+      // resposta de roda chegou no meio, o resto do gesto anda na escala nova.
+      const d = x - arrastando.ultimoX;
+      arrastando.ultimoX = x;
+      const ds = d * segundosPorPixel(arrastando.a);
+      arrastando.px += d;
+      arrastando.s += ds;
+      arrastoS += ds;
+      acertarArrasto();
     }
     repintar();
   });
@@ -17784,6 +18160,8 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   function soltar(evento) {
     if (!arrastando) return;
     const { a, xInicial, faixa, cursor } = arrastando;
+    const desteS = arrastando.s || 0;
+    const destePx = arrastando.px || 0;
     const arrastando_parado = !!arrastando.parado;
     arrastando = null;
     area.classList.remove("arrastando", "selecionando");
@@ -17800,7 +18178,11 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     // 4 px é o mesmo da faixa — mão nenhuma fica imóvel de verdade.
     // `parado` nunca mexeu em `arrastoPx`: o clique vale sempre, e não depende
     // de um valor que é de OUTRO painel.
-    if (arrastando_parado || (!faixa && Math.abs(arrastoPx) < 4)) {
+    // O que ESTE gesto arrastou: `arrastoS` pode trazer, além dele, um
+    // arrasto anterior cujo pedido ainda está em voo.
+    if (arrastando_parado || (!faixa && Math.abs(destePx) < 4)) {
+      // Clique: o pouco que a mão tremeu volta (não vira pedido).
+      if (desteS) { arrastoS -= desteS; acertarArrasto(); repintar(); }
       // A seleção de ANTES do primeiro clique de um possível duplo: o duplo
       // no localizador a devolve (ver `zoomNaFalta`).
       const agoraMs = performance.now();
@@ -17823,9 +18205,9 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       return;
     }
 
-    if (arrastoPx === 0) return;
+    if (desteS === 0) return;
     // Arrastar para a direita traz o passado: a janela anda para trás.
-    carregar({ andar: -arrastoPx * segundosPorPixel(a) });
+    carregar({ andar: -desteS, s: desteS });
   }
 
   // Clicar em qualquer lugar que não seja um sinal limpa a seleção. A regra é

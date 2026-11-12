@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from osclab.formats.base import Record
+from osclab.formats.base import Record, lembrado_do_registro
 from osclab.plot import conversao
 
 #: Acima disto o prefixo `k` compensa. Abaixo, o número inteiro se lê melhor.
@@ -164,7 +164,16 @@ def por_unidade(registro: Record, lado: str) -> dict[str, tuple[float, str]]:
     Existe para o desenho e a leitura do cursor usarem **a mesma conta**. Se
     cada um decidisse por si, o gráfico mostraria `kA` e o cursor leria `A` no
     mesmo instante — e o usuário acreditaria no que estivesse olhando.
+
+    Lembrado no registro (`base.lembrado`): o maior valor de cada grupo é do
+    registro INTEIRO, e era medido a cada pedido. Sai uma cópia do dicionário.
     """
+    vinculos = repr(getattr(registro, "vinculos_de_potencia", None))
+    return dict(lembrado_do_registro(registro, "unidades.por_unidade", (lado, vinculos),
+                         lambda: _por_unidade(registro, lado)))
+
+
+def _por_unidade(registro: Record, lado: str) -> dict[str, tuple[float, str]]:
     grupos: dict[str, list] = {}
     for canal in registro.analog_channels:
         grupos.setdefault(canal.unit.strip(), []).append(canal)

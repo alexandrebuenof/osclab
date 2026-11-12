@@ -124,6 +124,44 @@ def test_topo_achatado_e_UM_pico_so():
     assert imas.picos(onda).size == 1
 
 
+def test_topo_achatado_LONGO_tambem_e_um_pico_so():
+    """Num registro a 1 MHz o canal saturado fica centenas de amostras no
+    mesmo valor. O platô era preenchido copiando a vizinha `log2(n)` vezes, e
+    um platô mais longo que isso ficava com zeros no meio: dois picos, um em
+    cada ponta (12/11/2026)."""
+    subida = np.linspace(0.0, 3.0, 50)
+    onda = np.concatenate([subida, np.full(500, 3.0), subida[::-1], -subida, np.full(400, -3.0),
+                           -subida[::-1]])
+    picos = imas.picos(onda)
+    assert picos.size == 2                          # a crista e o vale, uma vez cada
+    assert onda[picos[0]] == 3.0 and onda[picos[1]] == -3.0
+
+
+def _picos_do_laco(valores):
+    """A conta antiga (o laço de `log2(n)` cópias), para conferir que nada muda
+    onde ela acertava."""
+    v = np.asarray(valores, dtype=np.float64)
+    inclinacao = np.sign(np.diff(v))
+    for _ in range(int(np.log2(max(inclinacao.size, 2))) + 1):
+        zerados = inclinacao == 0
+        if not zerados.any():
+            break
+        inclinacao[zerados] = np.roll(inclinacao, 1)[zerados]
+    troca = np.flatnonzero(np.diff(inclinacao) != 0) + 1
+    return troca[np.isfinite(v[troca])].astype(np.int64)
+
+
+def test_o_preenchimento_de_uma_vez_e_o_laco_de_sempre_nos_platos_curtos():
+    gerador = np.random.default_rng(3)
+    for _ in range(50):
+        n = int(gerador.integers(3, 3000))
+        # senoide quantizada: platôs curtos nas cristas, como num conversor A/D
+        periodo, amplitude = gerador.uniform(8, 40), gerador.uniform(3, 50)
+        v = np.round(np.sin(np.arange(n) * 2 * np.pi / periodo) * amplitude)
+        v[gerador.random(n) < 0.01] = np.nan
+        assert list(imas.picos(v)) == list(_picos_do_laco(v))
+
+
 def test_trecho_sem_curva_nao_tem_pico():
     """O primeiro ciclo de uma envoltória vem sem valor. `NaN` não é pico de
     nada, e um ponto de atração ali poria o cursor onde não há medida."""

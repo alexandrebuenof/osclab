@@ -1,5 +1,49 @@
 # Onde o trabalho está
 
+**12/11/2026 — navegação LEVE e gestos que se compõem (ramo do agente, para revisão):**
+«meio travado nas oscilografias maiores como a de Alto Boa Vista»; depois: ondas
+viajantes (milhões de amostras), 487E, registros longos, duas pesadas na aba. Medido em
+processo (servidor, mediana de 3) e no Chrome sem janela; registros pesados SINTÉTICOS
+do mesmo tamanho (`tests/fabrica.py`, agora com `degraus`/`mudam` e escrita vetorizada).
+
+| registro | entalhe da roda (servidor) | arrasto | abrir | pacote por gesto | pico de memória |
+|---|---|---|---|---|---|
+| ABV, SEL-411L, 3968 dig. | 240 → 52 ms | 242 → 42 ms | 702 → 169 ms | 2,9 → 0,35 MB | 426 → 111 MB |
+| ABV ×2 (localizador) | 457 → 166 ms | 428 → 143 ms | 1,5 → 0,4 s | 7,8 → 2,5 MB | 452 → 148 MB |
+| tipo 487E, 5760 dig. | 158 → 89 ms | 130 → 62 ms | 690 → 285 ms | 1,9 → 0,8 MB | 591 → 134 MB |
+| tipo 487E ×2 | 373 → 217 ms | 297 → 144 ms | 1,5 → 0,5 s | 4,9 → 2,5 MB | 628 → 174 MB |
+| longo, 60 s × 24 an. | 1015 → 60 ms | 915 → 75 ms | 5,7 → 1,6 s | 1,1 → 0,4 MB | 292 → 163 MB |
+| ondas viajantes, 12 × 1 M | 6,6 s → 86 ms | 6,7 s → 70 ms | 30,5 → 12 s | igual | 441 → 449 MB |
+| ondas viajantes, 12 × 3 M | 21,7 s → 0,10 s | 22,7 s → 0,10 s | 86 → 36 s | igual | 1,2 GB (igual) |
+
+No navegador (do giro à janela nova pintada, com os 70 ms de espera da roda): ABV
+505 → 239 ms; ABV ×2 867 → 415; tipo 487E 763 → 328; 487E ×2 1478 → 610; longo
+1134 → 311; 12 × 3 M 20 s → 0,25 s. Sequência roda+arrasto+roda+arrasto no ABV: 346 →
+141 ms do último gesto à tela final.
+
+O que mudou: contas do REGISTRO INTEIRO lembradas no registro (`base.lembrado_do_registro`;
+presença, trincas, energia, início da perturbação, prefixo k, transições); tira digital
+pelas transições, viajando como colunas de troca; catálogo e lista de digitais só quando
+mudam (`janela.sem_repetir`, `CONTRATO` 33); pirâmide de mín./máx. por bloco de 64 para o
+canal cru (`serie.reduzir_canal`, idêntico bit a bit); picos/zeros só quando o ímã os pede
+(`imas=`); `media_do_ciclo` por fatias; desempacotar um byte por bit; na tela, traço em
+pedaços de 32 vértices (3× mais rápido de rasterizar, mesmo desenho), fundo guardado e só a
+faixa à vista para o painel de tiras, formatador e medidas de texto guardados.
+**Defeitos achados e presos com teste de navegador** (`tests/test_navegacao_navegador.py`,
+falham no código antigo): dois arrastos com o primeiro em voo andavam um; setas com a
+leitura em voo se perdiam (6 toques → 2 amostras); roda+arrasto, arrasto+roda e roda no
+meio do arrasto perdiam um dos gestos; o foco da roda deslizava se a mão arrastasse nos
+70 ms; platô longo virava dois picos no ímã.
+**Ainda O(amostras) por gesto:** envoltórias (RMS, 60 Hz, DC, componentes, contas) e
+picos/zeros quando pedidos — calculados sobre a janela; guardá-los do registro todo seria
+8 bytes por amostra por sinal. **Abrir** um registro de ondas viajantes ainda leva dezenas
+de segundos (diagnóstico bruto × filtrado no leitor, presença, energia do catálogo —
+cada um uma DFT deslizante por canal; a mesma fundamental é calculada 3–4 vezes por
+canal). **Para ele decidir:** (1) a energia do «+ sinal» poderia ser calculada só quando o
+menu abre (tira ~40 % do abrir de um registro gigante); (2) o fundo das ondas usa canvas de
+software (`willReadFrequently`): medido aqui com placa Intel, colar é 0,3 ms contra 5 ms
+sem ele, então fica — conferir na máquina dele se o arrasto está liso.
+
 **12/11/2026 — clique duplo no LOCALIZADOR amplia a região da falta (ramo do agente, para
 revisão):** pedido dele: «ao clicar duas vezes no gráfico de localizador de faltas ele dá
 um zoom automático… mas o zoom seria em todos os gráficos». A janela é a da aba (a mesma

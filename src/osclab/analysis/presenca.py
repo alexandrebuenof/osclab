@@ -97,7 +97,7 @@ import numpy as np
 
 from osclab.dsp import envoltoria, fasor
 from osclab.formats import fases
-from osclab.formats.base import Record
+from osclab.formats.base import Record, lembrado_do_registro
 
 #: Abaixo disto, em relação ao maior canal da MESMA unidade, o canal vira
 #: candidato a morto — e aí quem decide é a fundamental. Serve para proteger a
@@ -127,6 +127,17 @@ def fundamental_relativa(sinal: np.ndarray, por_ciclo: int) -> float:
 
 def alternados(registro: Record) -> frozenset[int]:
     """Os canais em que `RMS` e `filtro de 60 Hz` significam alguma coisa.
+
+    Medido no registro INTEIRO e lembrado nele (`base.lembrado`): a
+    fundamental de cada canal é uma passada por todas as amostras, e o
+    catálogo, as contas e a lista do OscLab perguntam isto a cada pedido.
+    """
+    return lembrado_do_registro(registro, "presenca.alternados", (fasor.estimador(),),
+                                lambda: _alternados(registro))
+
+
+def _alternados(registro: Record) -> frozenset[int]:
+    """A conta de `alternados`.
 
     Três condições, e cada uma existe por um caso real — ver o cabeçalho:
 
@@ -170,6 +181,15 @@ def alternados(registro: Record) -> frozenset[int]:
 
 def sem_sinal(registro: Record) -> frozenset[int]:
     """Os índices dos canais analógicos que não estão ligados em nada.
+
+    Lembrado no registro (`base.lembrado`), como `alternados`.
+    """
+    return lembrado_do_registro(registro, "presenca.sem_sinal", (fasor.estimador(),),
+                                lambda: _sem_sinal(registro))
+
+
+def _sem_sinal(registro: Record) -> frozenset[int]:
+    """A conta de `sem_sinal`.
 
     **Canal por canal, e é só metade da resposta.** Quem decide o que some da
     tela é `formats/conjuntos.py`, que só esconde uma TRINCA INTEIRA — ver lá o
