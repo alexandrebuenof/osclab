@@ -6412,12 +6412,122 @@ p.sem-logica {
 .selo-em-uso { display: inline-block; margin-top: 4px; font: 600 11px var(--mono); color: var(--fundo);
   background: var(--destaque); border-radius: 4px; padding: 1px 7px; }
 .ficha-loc .usar-col { margin-top: 4px; font-size: 11px; padding: 2px 8px; }
-/* «? métodos» */
-.busca.ajuda-metodos-loc { width: min(760px, 94vw); }
-.ajuda-metodos-loc .corpo-ajuda { max-height: 70vh; overflow-y: auto; }
-.ajuda-metodos-loc .marca-do-metodo { width: 14px; height: 4px; border-radius: 2px; flex: none; }
-.ajuda-metodos-loc .linha-da-logica { grid-template-columns: 120px minmax(0, 1fr); }
-.ajuda-metodos-loc .linha-da-logica .valor { white-space: normal; font-family: var(--sans); font-size: 12.5px; }
+/* «? métodos» — as equações DESENHADAS, lado a lado (variante 06, 12/11/2026;
+   `js/metodos-loc.js`). A STIX Two Text (SIL OFL 1.1) viaja no pacote, só
+   latino e grego — nada de CDN; ver `fontes/LEIA.md`. */
+@font-face {
+  font-family: "STIX Two Text";
+  src: url("../fontes/stix-two-text-latin-400-normal.woff2") format("woff2");
+  font-style: normal; font-weight: 400; font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "STIX Two Text";
+  src: url("../fontes/stix-two-text-latin-400-italic.woff2") format("woff2");
+  font-style: italic; font-weight: 400; font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "STIX Two Text";
+  src: url("../fontes/stix-two-text-greek-400-normal.woff2") format("woff2");
+  font-style: normal; font-weight: 400; font-display: swap;
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+@font-face {
+  font-family: "STIX Two Text";
+  src: url("../fontes/stix-two-text-greek-400-italic.woff2") format("woff2");
+  font-style: italic; font-weight: 400; font-display: swap;
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+.ajuda-metodos-loc { --eq-tam: 1.32; --eq-fonte: "STIX Two Text", "Cambria Math", Georgia, serif; }
+
+/* a equação */
+.eq { font-family: var(--eq-fonte, Georgia, serif); font-size: calc(13px * var(--eq-tam, 1.32)); color: var(--tinta);
+      line-height: 1.25; letter-spacing: 0; white-space: nowrap; }
+.eq-r { display: inline-flex; align-items: center; }
+.eq-v { font-style: italic; padding: 0 .02em; border-radius: 3px; transition: background .08s; }
+.eq-v[data-sim] { cursor: help; }
+.eq-v .eq-sub, .eq-v .eq-sup { font-style: normal; font-size: .68em; }
+.eq-v .eq-sub { vertical-align: -.32em; margin-left: .04em; }
+.eq-v .eq-sup { vertical-align: .55em; margin-left: .03em; }
+.eq-v .eq-ss { display: inline-flex; flex-direction: column; vertical-align: -.42em; margin-left: .04em;
+               font-style: normal; font-size: .68em; line-height: 1.05; }
+.eq-v .eq-ss > span { font-size: 1em; vertical-align: 0; margin: 0; }
+.eq-v .eq-reto { font-style: normal; }
+.eq-n { font-style: normal; }
+.eq-o { margin: 0 .3em; }
+.eq-p { margin: 0 .1em; }
+.eq-txt { font-family: var(--sans); font-size: .82em; color: var(--suave); margin-left: .3em; }
+.eq-fname { font-style: normal; margin-right: .06em; }
+.eq-frac { display: inline-flex; flex-direction: column; align-items: stretch; margin: 0 .14em;
+           vertical-align: middle; }
+.eq-frac > .eq-num, .eq-frac > .eq-den { display: flex; justify-content: center; }
+.eq-frac > .eq-num { padding: 0 .22em .1em; }
+.eq-frac > .eq-den { padding: .12em .22em 0; border-top: max(1px, .055em) solid currentColor; }
+.eq-num .eq-frac, .eq-den .eq-frac { font-size: .84em; }
+.eq-d { display: inline-flex; align-items: stretch; }
+.eq-d > .eq-dentro { display: inline-flex; align-items: center; }
+.eq-dl { display: inline-flex; align-items: center; font-style: normal; }
+.eq-dl.alto { width: .42em; }
+.eq-dl.alto svg { width: 100%; height: 100%; overflow: visible; }
+.eq-dl.alto path { fill: none; stroke: currentColor; stroke-width: 1.15; vector-effect: non-scaling-stroke; }
+.eq-dl.esq { margin-right: .04em; }
+.eq-dl.dir { margin-left: .04em; }
+/* o símbolo apontado: o mesmo id aceso no método inteiro, e a dica */
+.eq-v.eq-aceso { background: var(--destaque-fraco); box-shadow: 0 0 0 1px var(--linha); }
+.eq-dica { position: fixed; z-index: 2147483100; max-width: 300px; padding: 5px 8px; border-radius: 4px;
+           background: var(--superficie); color: var(--tinta); border: 1px solid var(--cartao-borda);
+           box-shadow: 0 4px 14px rgb(0 0 0 / .18); font: 12px/1.35 var(--sans); pointer-events: none; }
+.eq-dica .eq { font-size: 15px; margin-right: 6px; }
+
+/* a janela: lista à esquerda, o método escolhido à direita */
+.busca.ajuda-metodos-loc { width: min(940px, 96vw); }
+.ajuda-metodos-loc .corpo-ajuda { max-height: 74vh; overflow-y: auto; }
+.ajuda-metodos-loc .lado-mt { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 14px;
+                              min-height: 360px; }
+.ajuda-metodos-loc .lista-mt { display: flex; flex-direction: column; gap: 4px; border-right: 1px solid var(--linha);
+                               padding-right: 10px; }
+.ajuda-metodos-loc .lista-mt button { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 8px;
+  align-items: center; text-align: left; border: 1px solid transparent; background: none; padding: 6px 8px;
+  border-radius: 5px; cursor: pointer; font: 12.5px var(--sans); color: var(--tinta); box-shadow: none; }
+.ajuda-metodos-loc .lista-mt button.atual { background: var(--destaque-fraco); border-color: var(--linha); }
+.ajuda-metodos-loc .lista-mt .nome-curto { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ajuda-metodos-loc .lista-mt .km-mt { font-size: 12px; }
+.ajuda-metodos-loc .miolo-mt { min-width: 0; padding: 0 2px; }
+.ajuda-metodos-loc .cabeca-mt { display: flex; align-items: center; gap: 8px; min-height: 22px; }
+.ajuda-metodos-loc .cabeca-mt .titulo-mt { font: 600 13px var(--sans); color: var(--titulo); }
+.ajuda-metodos-loc .cabeca-mt .regua { flex: 1; height: 1px; background: var(--linha); }
+.ajuda-metodos-loc .cabeca-mt .qts { font: 10.5px var(--mono); color: var(--suave); }
+.ajuda-metodos-loc .marca-mt { width: 16px; height: 4px; border-radius: 2px; flex: none; background: var(--cor-mt); }
+.ajuda-metodos-loc .km-mt { font: 600 13px var(--mono); color: var(--cor-mt); white-space: nowrap; }
+.ajuda-metodos-loc .km-mt.sem { font: italic 11.5px var(--sans); color: var(--suave); }
+.ajuda-metodos-loc .km-mt.fora { text-decoration: underline dotted; }
+.ajuda-metodos-loc .selo-res { font: 10.5px var(--mono); color: var(--destaque); border: 1px solid var(--linha);
+                               border-radius: 9px; padding: 0 6px; white-space: nowrap; }
+.ajuda-metodos-loc .prosa { font: 12.5px/1.45 var(--sans); color: var(--tinta); }
+.ajuda-metodos-loc .prosa.suave { color: var(--suave); }
+.ajuda-metodos-loc .rotulo { font: 10.5px var(--mono); color: var(--suave); text-transform: lowercase; }
+.ajuda-metodos-loc .pares { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 4px 12px;
+                            align-items: baseline; margin-top: 4px; }
+.ajuda-metodos-loc .neste { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.ajuda-metodos-loc .bloco-eq { display: flex; justify-content: center; align-items: center; gap: 18px;
+                               flex-wrap: wrap; padding: 10px 4px 8px; overflow-x: auto; }
+.ajuda-metodos-loc .eqs-aux { display: flex; justify-content: center; align-items: center; gap: 26px;
+                              flex-wrap: wrap; padding: 0 4px 6px; }
+.ajuda-metodos-loc .eqs-aux .eq { font-size: calc(12px * var(--eq-tam)); color: var(--suave); }
+.ajuda-metodos-loc .eqs-aux .eq .eq-v { color: var(--tinta); }
+/* o esquema da linha S — m — R */
+.ajuda-metodos-loc .esquema-lt { flex: none; color: var(--tinta); }
+.ajuda-metodos-loc .esquema-lt text { font-family: var(--eq-fonte); font-size: 13px; fill: currentColor; }
+.ajuda-metodos-loc .esquema-lt text.ui { font-family: var(--sans); font-size: 10px; fill: var(--suave); }
+.ajuda-metodos-loc .esquema-lt .fio { stroke: currentColor; stroke-width: 1.4; fill: none; }
+.ajuda-metodos-loc .esquema-lt .fio.apagado { stroke: var(--suave); stroke-dasharray: 4 3; opacity: .7; }
+.ajuda-metodos-loc .esquema-lt .barra-se { stroke: currentColor; stroke-width: 3.2; }
+.ajuda-metodos-loc .esquema-lt .falta { stroke: var(--cor-mt); stroke-width: 1.6; fill: none; }
+.ajuda-metodos-loc .esquema-lt .ponto { fill: var(--cor-mt); }
+.ajuda-metodos-loc .esquema-lt .seta { stroke: var(--suave); stroke-width: 1.2; fill: none; }
+.ajuda-metodos-loc .esquema-lt .ponta { fill: var(--suave); }
+.ajuda-metodos-loc .esquema-lt .cota { stroke: var(--suave); stroke-width: .8; }
 .parametros-loc .tabela-de-linhas { flex: 1; min-height: 0; overflow-y: auto; }
 .parametros-loc .resumo-das-linhas { margin: 2px 0 6px; color: var(--suave); font-size: 11px; }
 .parametros-loc .tabela-de-linhas { font-family: var(--mono); font-size: 12px; }

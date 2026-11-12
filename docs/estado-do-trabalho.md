@@ -1,5 +1,20 @@
 # Onde o trabalho está
 
+**12/11/2026 — «? métodos» com as equações desenhadas (variante 06), num ramo para revisão:**
+a janela do painel localizador virou lado a lado — métodos à esquerda com a cor e o km,
+o escolhido à direita com a frase, a equação principal DESENHADA ao lado do esquema da
+linha S — m — R, as auxiliares, detalhe, quando vale e «neste registro» como conta
+(`d = m · L = 0,6140 × 100,0 km = 61,40 km`); no fim da lista, «resultado e trecho».
+Passar o mouse num símbolo acende o mesmo símbolo no método e diz o que ele é. Árvore,
+símbolos e números em `faultloc/equacoes.py` (testes em `tests/test_equacoes.py`);
+pintura em `static/js/metodos-loc.js`; fonte STIX Two Text (OFL) em `static/fontes`.
+**Fração aninhada do laço resolvida** como `m = Im{Z_laço} / X1L` + auxiliar
+`Z_laço = V_laço / I_laço`. Teste de navegador `tests/test_metodos_navegador.py`.
+`CONTRATO` 28 → 29. **Achado de passagem:** o Esc não fechava esta janela com o foco
+num botão dela (o teclado da página faz `preventDefault` no Esc para tirar os cursores,
+e isso cancela o fechamento do `<dialog>`) — corrigido só aqui; as outras `<dialog>`
+que não tratam o Esc por conta própria devem ter o mesmo defeito (não conferido).
+
 ## Resumo da manhã — 12/11/2026
 
 **No main (sem push; GitHub em 2d95590 = 0.8.0):** tudo junto, suíte inteira passando e `ruff check .` limpo.

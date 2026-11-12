@@ -56,7 +56,7 @@ import numpy as np
 from osclab.analysis import falta as falta_mod
 from osclab.dsp import envoltoria, simetricas
 from osclab.dsp.fasor import ciclo_em_amostras
-from osclab.faultloc import seqneg
+from osclab.faultloc import equacoes, seqneg
 from osclab.formats import conjuntos
 from osclab.formats.base import Filtering, Record
 from osclab.plot import conversao, escala, serie, unidades
@@ -739,7 +739,9 @@ def montar(reg_a: Record, reg_b: Record | None, d: float, linha: dict | None,
                     _GUARDADOS.pop(next(iter(_GUARDADOS)))
                 _GUARDADOS[chave] = guardado
     pacote, interno = guardado
-    pacote = dict(pacote)
+    # As equações desenhadas da ajuda «? métodos» e os números «neste
+    # registro» (`equacoes.anexar` devolve cópia: o guardado não muda).
+    pacote = equacoes.anexar(pacote)
     pacote["cursor"] = _cursor(interno, linha, d, t_cursor) if interno else None
     return pacote
 
