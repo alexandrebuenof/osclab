@@ -177,23 +177,27 @@ def escrever_comtrade(
         dat_path.write_bytes(fim.join(partes).encode("ascii") + fim.encode("ascii"))
         return cfg_path
 
-    formato = {"BINARY": "<h", "BINARY32": "<i", "FLOAT32": "<f"}[tipo]
+    # Vetorizado (12/11/2026): o laço por amostra levava minutos para os
+    # registros de MILHÕES de amostras com que se mede a navegação (ondas
+    # viajantes). Os bytes são os mesmos do laço antigo.
+    formato = {"BINARY": "<i2", "BINARY32": "<i4", "FLOAT32": "<f4"}[tipo]
     palavras = (nd + 15) // 16
-    buf = bytearray()
-    for i in range(n):
-        buf += struct.pack("<II", i + 1, int(carimbos[i]))
-        for k in range(na):
-            valor = float(analog[k, i] / ESCALA) if tipo == "FLOAT32" else int(crus[k, i])
-            buf += struct.pack(formato, valor)
-        for w in range(palavras):
-            palavra = 0
-            for bit in range(16):
-                canal = w * 16 + bit
-                if canal < nd and digital[canal, i]:
-                    palavra |= 1 << bit
-            buf += struct.pack("<H", palavra)
-    buf += b"\x1a" * lixo_no_fim
-    dat_path.write_bytes(bytes(buf))
+    campos = [("n", "<u4"), ("t", "<u4")]
+    campos += [(f"a{k}", formato) for k in range(na)]
+    campos += [(f"d{w}", "<u2") for w in range(palavras)]
+    linhas_dat = np.zeros(n, dtype=np.dtype(campos))
+    linhas_dat["n"] = np.arange(1, n + 1, dtype=np.uint32)
+    linhas_dat["t"] = carimbos.astype(np.uint32)
+    for k in range(na):
+        linhas_dat[f"a{k}"] = (analog[k] / ESCALA) if tipo == "FLOAT32" else crus[k]
+    for w in range(palavras):
+        palavra = np.zeros(n, dtype=np.uint32)
+        for bit in range(16):
+            canal = w * 16 + bit
+            if canal < nd:
+                palavra |= digital[canal].astype(np.uint32) << bit
+        linhas_dat[f"d{w}"] = palavra.astype(np.uint16)
+    dat_path.write_bytes(linhas_dat.tobytes() + b"\x1a" * lixo_no_fim)
     return cfg_path
 
 
