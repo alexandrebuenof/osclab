@@ -602,18 +602,23 @@ def resolver(registro: Record, lidos: dict, manuais: dict, fab: str,
 def _conferir(id_, campo, campos, relacoes) -> tuple[str, dict | None]:
     """`(motivo, sugestão)`: o que não fecha com o registro, ou `("", None)`."""
     valor = campo["valor"]
+
+    def br(x, formato="g"):
+        # Vírgula decimal, como o resto da tela: `1.5` se lê mil e quinhentos.
+        return format(x, formato).replace(".", ",")
+
     if campo["tipo"] == "num":
         minimo, maximo = campo["minimo"], campo["maximo"]
         if id_ in ("pct2", "pct5") and valor == 0:
             return "", None
         if valor < minimo or valor > maximo:
-            return (f"fora da faixa usual ({minimo:g} a {maximo:g} "
+            return (f"fora da faixa usual ({br(minimo)} a {br(maximo)} "
                     f"{campo['unidade']})".replace(" )", ")"), None)
     if id_ in ("rtc1", "rtc2") and relacoes[id_] > 0:
         declarada = relacoes[id_]
         if abs(valor / declarada - 1.0) > TOLERANCIA_DO_RTC:
-            return (f"o arquivo declara a relação {declarada:g}",
-                    {"valor": declarada, "texto": f"usar {declarada:g} (do arquivo)"})
+            return (f"o arquivo declara a relação {br(declarada)}",
+                    {"valor": declarada, "texto": f"usar {br(declarada)} (do arquivo)"})
     if id_ in ("tap1", "tap2"):
         lado = id_[-1]
         calculado = tap_calculado(
@@ -621,9 +626,9 @@ def _conferir(id_, campo, campos, relacoes) -> tuple[str, dict | None]:
             campos["rtc" + lado]["valor"], campos["con" + lado]["valor"])
         if calculado and abs(valor / calculado - 1.0) > TOLERANCIA_DO_TAP:
             return (f"difere {100 * (valor / calculado - 1):+.0f} % do calculado "
-                    f"por Potência nominal, V nominal e RTC ({calculado:.3g} A)",
+                    f"por Potência nominal, V nominal e RTC ({br(calculado, '.3g')} A)",
                     {"valor": round(calculado, 4),
-                     "texto": f"usar {calculado:.3g} (calculado)"})
+                     "texto": f"usar {br(calculado, '.3g')} (calculado)"})
     return "", None
 
 

@@ -502,3 +502,16 @@ def test_o_lido_fica_guardado_com_digitado_por_cima():
     assert campos["rtc1"]["lido"] == {"valor": 60.0, "variavel": "CTR1",
                                       "bruto": "CTR1 := 60"}
     assert campos["rtc2"]["lido"] is None
+
+
+def test_o_motivo_da_conferencia_escreve_VIRGULA_decimal():
+    """Ensaio geral (15/11/2026): o hover do ajuste suspeito escrevia
+    «fora da faixa usual (0.1 a 1.5 pu)» e «usar 2.09 (calculado)». Na tela
+    inteira o decimal é vírgula — e `1.500` é mil e quinhentos."""
+    import re
+    campo = {"valor": 5.0, "tipo": "num", "minimo": 0.1, "maximo": 1.5, "unidade": "pu"}
+    motivo, _ = diferencial._conferir("pickup", campo, {}, {})
+    assert motivo and not re.search(r"\d\.\d", motivo), motivo
+    campo = {"valor": 2.5, "tipo": "num", "minimo": 0.0, "maximo": 99999.0, "unidade": ""}
+    motivo, sugestao = diferencial._conferir("rtc1", campo, {}, {"rtc1": 62.5})
+    assert motivo and not re.search(r"\d\.\d", motivo + sugestao["texto"]), (motivo, sugestao)
