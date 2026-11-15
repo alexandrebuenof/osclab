@@ -98,7 +98,36 @@ def test_a_abertura_anda_pelas_etapas_em_ordem(acervo_temporario, cliente, monke
     fim = cliente.get("/api/abertura/T1").get_json()
     assert fim["pronto"] and fim["erro"] is None and fim["fracao"] == 1.0
     # A etapa das contas diz QUAL conta está andando.
-    assert {"presença de sinal", "energia dos sinais"} <= {f["rotulo"] for f in fotos}
+    rotulos = {f["rotulo"] for f in fotos}
+    assert "presença de sinal" in rotulos
+    # A energia do catálogo não é mais feita ao abrir (14/11/2026).
+    assert "energia dos sinais" not in rotulos
+
+
+def test_a_energia_do_catalogo_tem_barra_so_dela(acervo_temporario, cliente, monkeypatch):
+    """O «+ sinal» de um registro gigante pede a energia com um token: a barra
+    é SÓ dela, de 0 a 100 %, dita «energia dos sinais», e anda linha a linha."""
+    sha = _guardar(acervo_temporario)
+    assert cliente.get(f"/api/onda/{sha}?colunas=600").status_code == 200
+    fotos = _espiar(monkeypatch, "TE")
+    r = cliente.post(f"/api/onda/{sha}/energia?abertura=TE", json={})
+    assert r.status_code == 200 and r.get_json()["energia"]
+    assert fotos and {f["etapa"] for f in fotos} == {"contas"}
+    assert {f["rotulo"] for f in fotos} == {"energia dos sinais"}
+    fr = [f["fracao"] for f in fotos]
+    assert fr == sorted(fr) and fr[0] < 0.2 and len(set(fr)) > 2
+    fim = cliente.get("/api/abertura/TE").get_json()
+    assert fim["pronto"] and fim["erro"] is None and fim["fracao"] == 1.0
+    # A rota dá o mesmo número da conta, com o lado e as contas do pedido.
+    from osclab.plot import contas as contas_mod
+    from osclab.plot import janela
+    registro = acervo.ler(sha)
+    assert r.get_json()["energia"] == janela.energia(registro)
+    contas = [{"id": "x1", "nome": "SOMA", "expressao": "[IAW] + [IBW]"}]
+    r2 = cliente.post(f"/api/onda/{sha}/energia?lado=primario", json={"contas": contas})
+    assert r2.get_json()["energia"] == janela.energia(
+        registro, lado="primario", contas=contas_mod.de_json(contas))
+    assert "SOMA" in r2.get_json()["energia"]
 
 
 def test_registro_ja_aberto_nao_abre_abertura(acervo_temporario, cliente):

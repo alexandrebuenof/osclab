@@ -85,7 +85,7 @@
   //: navegador recarrega o `.js` sozinho: quem troca de versão sem reiniciar
   //: fica com tela nova e servidor velho, e o resultado é uma tela que mostra
   //: coisas que não fazem sentido sem dar erro nenhum. Já custou três rodadas.
-  const CONTRATO = 33;
+  const CONTRATO = 34;
 
   //: A margem de cima abriga a etiqueta numerada dos cursores, que fica FORA da
   //: área de desenho: por dentro ela tapa o pico da onda — e o pico é
@@ -1164,7 +1164,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
 
   /** Acompanha a abertura `token`; devolve `{ parar }`, a chamar quando o
    *  pedido da janela terminar (deu certo ou não). */
-  function acompanharAbertura(token) {
+  function acompanharAbertura(token, lugar) {
     let vivo = true;
     let relogio = null;
     let caixa = null;
@@ -1179,8 +1179,12 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       // Sem nada desenhado, a barra toma o lugar do «Carregando…» (e leva
       // `.vazio`: o tratador de erro global continua sabendo que a tela não
       // desenhou). Com a tela cheia — «+ adicionar oscilografia» —, ela vai
-      // na tira dos IEDs, onde o registro novo vai aparecer.
-      if (!blocos.length) {
+      // na tira dos IEDs, onde o registro novo vai aparecer. Com `lugar` (a
+      // energia do «+ sinal»), ela vai dentro dele.
+      if (lugar) {
+        el.classList.add("abertura-no-catalogo");
+        lugar.append(el);
+      } else if (!blocos.length) {
         el.classList.add("vazio");
         area.replaceChildren(el);
       } else {
@@ -1200,7 +1204,10 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       caixa.querySelector(".abertura-pct").textContent = e.erro ? "" : `${pct} %`;
       caixa.classList.toggle("com-erro", !!e.erro);
       caixa.setAttribute("aria-valuenow", String(pct));
-      caixa.title = e.registros > 1
+      caixa.title = lugar
+        ? "Medindo onde está a energia de cada sinal, no registro inteiro. "
+          + "É feito uma vez por registro, na primeira vez que esta janela abre."
+        : e.registros > 1
         ? `Abrindo ${e.registros} oscilografias desta aba.` : "Abrindo a oscilografia.";
     };
     const perguntar = async () => {
@@ -1223,6 +1230,63 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         if (caixa && caixa.isConnected) caixa.remove();
       },
     };
+  }
+
+  // --- a ENERGIA do «+ sinal», pedida quando ele abre (14/11/2026) --------
+  //
+  // A barrinha de onde está a energia de cada sinal (60 Hz, harmônicos,
+  // contínua) é do registro INTEIRO e era a conta mais cara da abertura —
+  // 3,4 s de 11 s num registro de 12 × 1 M amostras —, para uma barra que só
+  // o «+ sinal» mostra. Saiu do pacote da janela: a tela a pede ao abrir o
+  // catálogo (`/api/onda/<sha>/energia`, com o mesmo lado, estimador e
+  // contas da janela) e a guarda enquanto o catálogo for o mesmo. O
+  // catálogo abre na hora; as barras entram quando a conta chega, e num
+  // registro gigante a primeira vez mostra a barra de progresso.
+
+  //: A última energia recebida, com a chave do que ela vale.
+  let energiaGuardada = { chave: null, valor: null };
+  //: O pedido em voo, para duas aberturas seguidas não pedirem duas vezes.
+  let energiaEmVoo = null;
+
+  /** O que muda a energia: o catálogo (o selo dele, que já muda com contas,
+   *  trincas e vínculos), o lado e o estimador. */
+  function chaveDaEnergia() {
+    return [dados ? dados.estaticos : "", lado || "", filtroEscolhido,
+            JSON.stringify(contas || [])].join("|");
+  }
+
+  /** A energia que vale para o catálogo de agora, ou `null` se não chegou. */
+  function energiaDoCatalogo() {
+    return energiaGuardada.chave === chaveDaEnergia() ? energiaGuardada.valor : null;
+  }
+
+  /** Pede a energia (uma vez por chave); a barra de progresso vai em `lugar`. */
+  function pedirEnergia(lugar) {
+    const chave = chaveDaEnergia();
+    if (energiaEmVoo && energiaEmVoo.chave === chave) return energiaEmVoo.promessa;
+    const p = new URLSearchParams();
+    if (lado) p.set("lado", lado);
+    if (filtroEscolhido !== FILTROS[0][0]) p.set("estimador", filtroEscolhido);
+    const token = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+    p.set("abertura", token);
+    const barra = acompanharAbertura(token, lugar);
+    const promessa = (async () => {
+      try {
+        const r = await fetch(`/api/onda/${sha}/energia?${p}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contas }),
+        });
+        const e = r.ok ? await r.json() : null;
+        if (e && e.energia) energiaGuardada = { chave, valor: e.energia };
+        return energiaDoCatalogo();
+      } finally {
+        barra.parar();
+        if (energiaEmVoo && energiaEmVoo.chave === chave) energiaEmVoo = null;
+      }
+    })();
+    energiaEmVoo = { chave, promessa };
+    return promessa;
   }
 
   async function carregarAgora(gesto = {}) {
@@ -1278,7 +1342,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       } else if (chegou.estaticos) {
         estaticos = { selo: chegou.estaticos, campos: {} };
         for (const k of Object.keys(chegou)) {
-          if (k === "catalogo" || k === "digitais_disponiveis" || k === "energia") {
+          if (k === "catalogo" || k === "digitais_disponiveis") {
             estaticos.campos[k] = chegou[k];
           }
         }
@@ -3995,8 +4059,9 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
                   // usuário. Ver `catalogo.Sinal.dominio`.
                   dominio: x.dominio || "",
                   // A partição de energia desta linha, quando foi possível
-                  // medir: `[60 Hz, harmônicos, contínua]`.
-                  energia: (dados.energia || {})[x.linha || x.nome] || null,
+                  // medir: `[60 Hz, harmônicos, contínua]`. Chega depois do
+                  // catálogo abrir (`pedirEnergia`); até lá, sem barra.
+                  energia: (energiaDoCatalogo() || {})[x.linha || x.nome] || null,
                   sem_sinal: false, contas: new Map() };
         porChave.set(chave, linha);
       }
@@ -5521,6 +5586,19 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     fecharAoClicarFora(janelinha);
     janelinha.showModal();
     campo.focus();
+    // A energia das barrinhas é pedida AGORA, e não na abertura do registro
+    // (ver `pedirEnergia`). A lista já está na tela; quando a conta chega, ela
+    // é refeita no lugar — com a busca, o modo e a rolagem de antes.
+    if (!energiaDoCatalogo()) {
+      pedirEnergia(barra).then((valor) => {
+        if (!valor || !janelinha.open) return;
+        const rolagem = lista.scrollTop;
+        desenharLista();
+        lista.scrollTop = rolagem;
+      }).catch(() => {
+        // Sem energia, o catálogo continua servindo: só fica sem as barras.
+      });
+    }
   }
 
   /** Os grupos trifásicos do registro: quais três canais formam cada um.

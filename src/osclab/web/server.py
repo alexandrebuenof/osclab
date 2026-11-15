@@ -25,6 +25,7 @@ GET    /api/abertura/<token>      o progresso da abertura que esse pedido acompa
 POST   /api/onda/<sha>            a mesma janela, com o arranjo de painéis
 GET    /api/onda/<sha>/leitura    o valor de cada sinal onde os cursores estão
 POST   /api/onda/<sha>/leitura    a mesma leitura, com o arranjo de painéis
+POST   /api/onda/<sha>/energia    a barrinha de energia do «+ sinal», pedida ao abri-lo
 POST   /api/onda/<sha>/vinculos   corrige a fase de um canal, e guarda
 GET    /base                      a base de dados: gavetas e chaves
 GET    /api/base                  o estado da base, em JSON
@@ -354,6 +355,25 @@ def create_app() -> Flask:
                 # mais aberto em todo gesto, para nada na maioria das telas.
                 ajustes=_ajustes_do_registro(sha, registro, arranjo),
             ), selo))
+
+    @app.route("/api/onda/<sha>/energia", methods=["GET", "POST"])
+    def energia_do_catalogo(sha: str):
+        # A barrinha de energia do «+ sinal» (14/11/2026): saiu do pacote da
+        # janela porque é a conta mais cara da abertura e só o «+ sinal» a
+        # mostra. A tela a pede ao abri-lo, com o mesmo `lado`, `estimador` e
+        # contas (no corpo) da janela; num registro gigante, a primeira vez
+        # leva segundos, e `abertura=<token>` dá a barra de progresso dela.
+        # Ver `janela.energia`.
+        try:
+            registro = acervo.ler(sha)
+        except FormatError as exc:
+            return jsonify(erro=str(exc)), 404
+        with (progresso.abrindo(request.args.get("abertura"), [sha],
+                                contas=progresso.SO_A_ENERGIA),
+              fasor_mod.usando(request.args.get("estimador"))):
+            return jsonify(energia=janela.energia(
+                registro, lado=request.args.get("lado", "arquivo"),
+                contas=_contas()))
 
     @app.route("/api/onda/<sha>/leitura", methods=["GET", "POST"])
     def leitura_dos_cursores(sha: str):

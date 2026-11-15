@@ -18,7 +18,8 @@ Dentro de uma etapa, quem percorre canais ou linhas diz quantos já foram
 (`avancar(feito, total)`), e a fração anda dentro dela. Os PESOS das etapas
 e das contas são medidos (registros sintéticos de 1 M × 12 e 3 M × 6
 amostras, 14/11/2026: ler 1–2 %, diagnóstico 21–22 %, contas 70–72 %, o
-resto é a janela); em outro registro a proporção muda um pouco, e a barra
+resto é a janela; sem a energia do catálogo, que saiu da abertura no mesmo
+dia, diagnóstico ~32 % e contas ~54 %); em outro registro a proporção muda um pouco, e a barra
 anda mais depressa numa etapa e mais devagar noutra — mas nunca para trás
 (`fracao` só cresce) e nunca passa de 1 antes de terminar.
 
@@ -59,24 +60,28 @@ ORDEM = tuple(chave for chave, _ in ETAPAS)
 
 #: Quanto da barra cada etapa ocupa. Medido (ver o cabeçalho): somam 1.
 PESOS: dict[str, float] = {
-    "ler": 0.03, "diagnostico": 0.22, "canais": 0.01, "contas": 0.68, "desenho": 0.06,
+    "ler": 0.04, "diagnostico": 0.32, "canais": 0.01, "contas": 0.54, "desenho": 0.09,
 }
 #: As três primeiras são a LEITURA de um registro (`acervo.ler`).
 DA_LEITURA = ("ler", "diagnostico", "canais")
 
 #: O peso de cada conta do registro inteiro dentro da etapa `contas`, pelo
 #: tempo PRÓPRIO dela (sem as contas que ela chama), medido num sintético de
-#: 1 M amostras × 12 canais: energia 3,4 s, trincas 2,1 s, presença 1,6 s,
-#: início 0,6 s. Conta que não está aqui pesa `PESO_DE_OUTRA_CONTA`.
+#: 1 M amostras × 12 canais: trincas 2,1 s, presença 1,6 s, início 0,6 s.
+#: Conta que não está aqui pesa `PESO_DE_OUTRA_CONTA`. A energia do catálogo
+#: (3,4 s) saiu da abertura em 14/11/2026: é feita quando o «+ sinal» abre,
+#: com uma barra só dela (`abrindo(..., contas=SO_A_ENERGIA)`).
 PESOS_DAS_CONTAS: dict[str, float] = {
-    "catalogo.energia": 0.42,
-    "conjuntos.ondas": 0.27,
-    "presenca.alternados": 0.20,
-    "imas.inicio": 0.07,
-    "unidades.por_unidade": 0.02,
-    "presenca.sem_sinal": 0.02,
+    "conjuntos.ondas": 0.47,
+    "presenca.alternados": 0.34,
+    "imas.inicio": 0.12,
+    "unidades.por_unidade": 0.035,
+    "presenca.sem_sinal": 0.035,
 }
 PESO_DE_OUTRA_CONTA = 0.005
+#: As contas que uma barra «só destas contas» acompanha: a da energia do
+#: «+ sinal». Ali a barra inteira é dela — de 0 a 100 %.
+SO_A_ENERGIA = ("catalogo.energia",)
 
 #: O nome curto de cada conta, para a etapa `contas` dizer qual está andando.
 ROTULO_DA_CONTA: dict[str, str] = {
@@ -121,11 +126,15 @@ class _Leitura:
 class _Abertura:
     """A abertura que UM pedido acompanha."""
 
-    def __init__(self, token: str, shas: tuple[str, ...]) -> None:
+    def __init__(self, token: str, shas: tuple[str, ...],
+                 so: tuple[str, ...] = ()) -> None:
         self.token = token
         self.shas = shas
+        #: Uma barra «só destas contas» (a energia do «+ sinal»): sem leitura
+        #: nem desenho, e a barra inteira é delas. Vazio é a abertura de sempre.
+        self.so = so
         self.lidos: set[str] = set()
-        self.fase = "leitura"          # leitura → contas → desenho
+        self.fase = "contas" if so else "leitura"   # leitura → contas → desenho
         self.feito_das_contas = 0.0
         #: As contas em curso, da de fora para a de dentro: [nome, fração].
         self.pilha: list[list] = []
@@ -149,18 +158,22 @@ _leitura_atual: contextvars.ContextVar[_Leitura | None] = contextvars.ContextVar
 # ---------------------------------------------------------------------------
 
 @contextmanager
-def abrindo(token: str | None, shas):
+def abrindo(token: str | None, shas, contas=()):
     """Acompanha a abertura dos registros `shas` neste pedido, sob `token`.
 
     Sem token ou sem registro novo não acompanha nada: a janela de um registro
     já aberto não tem o que mostrar, e a barra não pode aparecer num gesto.
     Exceção dentro vira o estado de erro (e continua subindo).
+
+    Com `contas` (ex.: `SO_A_ENERGIA`), a barra acompanha SÓ essas contas do
+    registro já aberto, de 0 a 100 % — é a do «+ sinal» de um registro
+    gigante, que faz a energia do catálogo na primeira vez que se abre.
     """
     shas = tuple(dict.fromkeys(s for s in (shas or ()) if s))
     if not token or not shas:
         yield None
         return
-    abertura = _Abertura(str(token)[:64], shas)
+    abertura = _Abertura(str(token)[:64], shas, tuple(contas or ()))
     with _trava:
         _esquecer_velhas()
         _aberturas[abertura.token] = abertura
@@ -257,7 +270,15 @@ def conta(nome: str):
         with _trava:
             if item in abertura.pilha:
                 abertura.pilha.remove(item)
-            abertura.feito_das_contas += PESOS_DAS_CONTAS.get(nome, PESO_DE_OUTRA_CONTA)
+            abertura.feito_das_contas += _peso(abertura, nome)
+
+
+def _peso(abertura: _Abertura, nome: str) -> float:
+    """O peso da conta `nome` na barra desta abertura. Numa barra «só destas
+    contas», cada uma delas pesa 1 e as outras (que elas chamam) nada."""
+    if abertura.so:
+        return 1.0 if nome in abertura.so else 0.0
+    return PESOS_DAS_CONTAS.get(nome, PESO_DE_OUTRA_CONTA)
 
 
 # ---------------------------------------------------------------------------
@@ -287,6 +308,16 @@ def estado(token: str) -> dict | None:
 
 def _onde(abertura: _Abertura) -> tuple[str, str, float]:
     """(etapa, rótulo, fração) da abertura, sem a guarda de só crescer."""
+    if abertura.so:
+        # A barra inteira é das contas pedidas (a energia do «+ sinal»).
+        feito = abertura.feito_das_contas
+        rotulo = ROTULO_DA_CONTA.get(abertura.so[0], ROTULO["contas"])
+        for nome, parcial in abertura.pilha:
+            if nome in abertura.so:
+                feito += parcial
+                break
+        total = float(len(abertura.so))
+        return "contas", rotulo, min(feito / total, 0.99)
     peso_da_leitura = sum(PESOS[e] for e in DA_LEITURA)
     if abertura.fase == "leitura":
         partes, chave = [], None

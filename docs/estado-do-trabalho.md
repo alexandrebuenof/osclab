@@ -1,5 +1,29 @@
 # Onde o trabalho está
 
+**14/11/2026 — a ENERGIA do catálogo saiu da abertura (ramo do agente, para revisão,
+em cima da barra de progresso):** pedido aprovado por ele. A barrinha de energia do
+«+ sinal» (60 Hz · harmônicos · contínua, `catalogo.energia`) era a conta mais cara de
+abrir um registro gigante e só o «+ sinal» analógico a mostra (a barra e a linha
+«energia» da engrenagem do cartão — nenhum bloco, interruptor, «ocultar nulos» ou
+picotando depende dela). Agora a tela a pede quando o «+ sinal» abre
+(`/api/onda/<sha>/energia` → `janela.energia`): o catálogo abre na hora, as barrinhas
+entram quando a conta chega (mantendo busca e rolagem), e num registro gigante a
+primeira vez mostra a barra de progresso dentro do catálogo («energia dos sinais»).
+Reabrir não pede de novo. O número é o MESMO de antes (teste de igualdade; e os JSON
+dos três sintéticos abaixo, antes × depois, são idênticos byte a byte). `CONTRATO`
+33 → 34 (o pacote perdeu `energia`). Pesos da barra de abertura refeitos sem ela.
+
+| sintético (rota da janela, processo) | abrir antes | abrir depois | 1º «+ sinal» (energia) | de novo |
+|---|---|---|---|---|
+| ondas viajantes, 12 × 1 M | 10,95 s | 8,26 s | 3,45 s | 2 ms |
+| ondas viajantes, 6 × 3 M | 17,67 s | 11,72 s | 5,12 s | 2 ms |
+| tamanho SEL-411L (24 an. × 24 k, 3968 dig.) | 1,19 s | 1,07 s | 0,05 s | 2 ms |
+
+**Para ele decidir:** (1) a barra de progresso no catálogo entra como uma linha nova
+abaixo do «Agrupar por» e some no fim — a lista desce e sobe uma linha; preferir que
+ela fique no lugar de algo, ou só um «medindo…» discreto?; (2) até a conta chegar os
+cartões ficam sem barrinha — mostrar um traço vazio no lugar?
+
 **14/11/2026 — barra de PROGRESSO ao abrir uma oscilografia (ramo do agente, para
 revisão):** pedido dele: «quando estamos abrindo uma oscilografia, apareça uma barra com
 o progresso». No lugar do «Carregando o registro…» parado, uma linha: trilho, nome curto

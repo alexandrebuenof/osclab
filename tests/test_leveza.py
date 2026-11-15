@@ -18,7 +18,7 @@ import numpy as np
 
 from osclab.analysis import presenca
 from osclab.formats import conjuntos, registry
-from osclab.plot import catalogo, digitais, imas, janela, serie, unidades
+from osclab.plot import catalogo, digitais, imas, janela, leitura, serie, unidades
 from tests.fabrica import escrever_comtrade
 
 
@@ -46,7 +46,7 @@ def test_as_contas_do_registro_inteiro_sao_feitas_uma_vez(tmp_path, monkeypatch)
     contas = {nome: _contar(monkeypatch, modulo, nome) for modulo, nome in (
         (presenca, "_alternados"), (presenca, "_sem_sinal"), (conjuntos, "_medir_ondas"),
         (imas, "_inicio_da_perturbacao"), (digitais, "_trocas"), (digitais, "_resumos"),
-        (unidades, "_por_unidade"), (catalogo, "energia_das_linhas"))}
+        (unidades, "_por_unidade"))}
     primeiro = janela.montar(r, colunas=600)
     for zoom in (0.5, 0.25):
         meio = (primeiro["de"] + primeiro["ate"]) / 2
@@ -54,6 +54,42 @@ def test_as_contas_do_registro_inteiro_sao_feitas_uma_vez(tmp_path, monkeypatch)
     janela.montar(r, colunas=600, filtro=True)
     for nome, c in contas.items():
         assert c["n"] == 1, f"{nome} foi feita {c['n']} vezes em quatro pedidos"
+
+
+def test_abrir_nao_calcula_a_energia_do_catalogo(tmp_path, monkeypatch):
+    """A energia (a barrinha do «+ sinal») era ~30 % da abertura de um registro
+    gigante. Desde 14/11/2026 nem a janela nem a leitura do cursor a fazem: só
+    `janela.energia`, que a tela pede ao abrir o «+ sinal» — e uma vez só."""
+    r = _registro(tmp_path)
+    c = _contar(monkeypatch, catalogo, "energia_das_linhas")
+    primeiro = janela.montar(r, colunas=600)
+    assert "energia" not in primeiro
+    janela.montar(r, colunas=600, filtro=True, de=0.2, ate=0.9)
+    leitura.em(r, [(0.5, 0, 0.0), (None, 0, 0.0)])
+    assert c["n"] == 0
+    for _ in range(3):
+        janela.energia(r)
+    assert c["n"] == 1
+
+
+def test_a_energia_pedida_e_a_mesma_de_quando_ia_no_pacote(tmp_path):
+    """`janela.energia` dá EXATAMENTE o campo `energia` que o pacote da janela
+    levava até 13/11/2026 — a mesma conta, com o lado resolvido igual e as
+    contas do usuário dentro."""
+    from osclab.plot import contas as contas_mod
+    from osclab.plot import conversao
+    r = _registro(tmp_path)
+    contas = contas_mod.de_json([{"id": "x1", "nome": "SOMA",
+                                  "expressao": "[IAW] + [IBW]"}])
+    for lado, natural in (("arquivo", conversao.lado_natural(r)),
+                          ("primario", "primario"), ("secundario", "secundario")):
+        for cs in (None, contas):
+            antes = {k: [round(f, 4) for f in v] for k, v in
+                     catalogo.energia(r, natural, cs).items()}
+            r.__dict__.pop("_lembrados", None)
+            assert janela.energia(r, lado=lado, contas=cs) == antes
+            assert antes
+    assert "SOMA" in janela.energia(r, contas=contas)
 
 
 def test_lembrar_nao_muda_a_resposta(tmp_path):

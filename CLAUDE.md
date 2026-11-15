@@ -222,7 +222,8 @@ osclab/
   Um 0/1 por coluna eram 2,1 MB de JSON por pedido num SEL-411L.
 - **Conta do REGISTRO INTEIRO é lembrada no registro, nunca refeita por
   gesto** *(12/11/2026)*. O custo de um pedido de janela ou de cursor tem de
-  ser da janela. Presença de sinal, trincas, energia do catálogo, início da
+  ser da janela. Presença de sinal, trincas, energia do catálogo (pedida só
+  pelo «+ sinal», ver abaixo), início da
   perturbação, prefixo k, transições dos digitais: `base.lembrado_do_registro`
   (os `mesmos` são as matrizes e as tuplas de canais; a impressão barata das
   amostras vai nos `iguais`). Conta nova que lê o registro todo e não depende
@@ -243,7 +244,23 @@ osclab/
   60 Hz, DC, componentes, contas) e os picos/zeros pedidos são contas sobre
   a janela inteira — guardá-las do registro todo seria 8 bytes por amostra
   por sinal (96 MB num registro de 12 × 1 M). Abrir é O(registro) uma vez:
-  diagnóstico bruto × filtrado, presença, energia do catálogo.
+  diagnóstico bruto × filtrado, presença, trincas, início da perturbação.
+- **O que só UM lugar da tela mostra não se conta ao ABRIR**
+  *(14/11/2026)*. A energia do catálogo (a barrinha 60 Hz · harmônicos ·
+  contínua do «+ sinal», `catalogo.energia`) era 3,4 s dos 11 s de abrir um
+  registro de 12 × 1 M amostras, e só o «+ sinal» analógico a mostra (barra
+  e linha «energia» da engrenagem do cartão; nada mais a lê — nem bloco,
+  nem interruptor, nem «ocultar sinais nulos»). Saiu do pacote da janela:
+  a tela a pede ao abrir o «+ sinal» (`/api/onda/<sha>/energia` →
+  `janela.energia`, com o mesmo lado, estimador e contas da janela; mesmo
+  número de antes, há teste), o catálogo abre na hora e as barrinhas entram
+  quando a conta chega — sem perder busca nem rolagem. A tela guarda a
+  resposta pelo selo do catálogo + lado + estimador + contas
+  (`chaveDaEnergia`); o servidor a lembra no registro, como antes. Num
+  registro gigante a primeira vez mostra a barra de progresso DENTRO do
+  catálogo (`progresso.abrindo(..., contas=SO_A_ENERGIA)`: a barra inteira
+  é dela). Abrir não a calcula: `tests/test_leveza.py`; o fluxo na tela:
+  `tests/test_energia_navegador.py`.
 - **O gráfico é um PAINEL, e a lista de painéis é da TELA.** Um painel é
   `{id, tipo, nome, sinais, medida}` (ver `plot/paineis.py`): a tela manda a
   lista inteira no corpo do pedido e o servidor desenha o que veio, na ordem em
