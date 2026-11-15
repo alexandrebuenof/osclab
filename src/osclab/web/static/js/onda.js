@@ -13887,10 +13887,12 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     q.append(svgDoTrafo87(150, 64, true));
     const t = criar("div");
     const g = painel.lado1;
-    const titulo = criar("b", null, `Um lado só${g ? ` — ${g.rotulo}` : ""}`);
+    // Sem trinca NENHUMA (registro só de digitais) não há «um lado» nem
+    // «esta trinca» para olhar: o texto afirmaria uma corrente que não existe.
+    const titulo = criar("b", null, g ? `Um lado só — ${g.rotulo}` : "Sem trinca de corrente");
     if (g) titulo.title = g.nome;            // o radical só no hover
-    t.append(titulo, criar("p", null, painel.falta),
-             criar("p", "apagado-87", "Para olhar a corrente desta trinca, um gráfico analógico serve."));
+    t.append(titulo, criar("p", null, painel.falta));
+    if (g) t.append(criar("p", "apagado-87", "Para olhar a corrente desta trinca, um gráfico analógico serve."));
     q.append(t);
     return q;
   }
@@ -14437,9 +14439,11 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       ctx.stroke();
       ctx.globalAlpha = apagado ? 0.6 : 1;
       ctx.textAlign = "center"; ctx.textBaseline = "top";
-      ctx.fillText(textoDoNumero87(+vx.toFixed(2)), X(vx), y0 + 4);
+      // O número da divisão vem pronto do Python (`rotulos_dos_eixos`): com
+      // duas casas daqui, 0,375 virava «0,38».
+      ctx.fillText(p.rotulos_dos_eixos.irt[k], X(vx), y0 + 4);
       ctx.textAlign = "right"; ctx.textBaseline = "middle";
-      ctx.fillText(textoDoNumero87(+vy.toFixed(2)), x0 - 5, Y(vy));
+      ctx.fillText(p.rotulos_dos_eixos.iop[k], x0 - 5, Y(vy));
     }
 
     // A curva: cheia com tudo dado; tracejada onde entra valor de desenho.
@@ -14581,10 +14585,13 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       ctx.globalAlpha = 1;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(formatar(vx, vx % 1 ? 1 : 0), X(vx), y0 + 5);
+      // O número da divisão vem pronto do Python (`rotulos_dos_eixos`): com
+      // uma casa daqui, o quarto de 1 pu saía «0,3», escrito logo abaixo da
+      // linha do pickup de 0,30.
+      ctx.fillText(painel.rotulos_dos_eixos.irt[k], X(vx), y0 + 5);
       ctx.textAlign = "right";
       ctx.textBaseline = "middle";
-      ctx.fillText(formatar(vy, vy % 1 ? 1 : 0), x0 - 6, Y(vy));
+      ctx.fillText(painel.rotulos_dos_eixos.iop[k], x0 - 6, Y(vy));
     }
 
     // A curva da característica.

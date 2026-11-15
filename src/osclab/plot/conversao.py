@@ -35,6 +35,12 @@ def relacao(canal) -> float:
     p, s = float(canal.primary or 0.0), float(canal.secondary or 0.0)
     if p <= 0 or s <= 0:
         return 0.0
+    # 1:1 é o que o COMTRADE escreve por FALTA de relação (o acervo e
+    # `relacoes.declarada_no_arquivo` já liam assim). Dividir por 1 mostrava
+    # 648 A primários em «secundário», sem o aviso (ensaio geral, 15/11/2026).
+    # A digitada vale como foi digitada.
+    if p == s and not getattr(canal, "relacao_digitada", False):
+        return 0.0
     razao = p / s
     if not math.isfinite(razao) or razao <= 0:
         return 0.0

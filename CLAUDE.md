@@ -1043,6 +1043,17 @@ Três consequências para quem programa isto:
   renomear um GRÁFICO gravava o apelido do REGISTRO em disco. Hoje são
   `editarNomeDoPainel` e `editarNomeDoRegistro`, e há teste que recusa
   `function` repetida no nível do IIFE de qualquer `.js`.
+- **Número escrito em TEXTO pelo Python sai com vírgula decimal** *(ensaio geral,
+  15/11/2026)*. Rodapé, hover e tira montados com `f"{x:.2f}"` saíam «636.2 A»,
+  «± 90.01°», «959.693 Hz» — e em português o ponto é o MILHAR (`TP 7.920 : 66`
+  na mesma tira). Use `.replace(".", ",")` (há `br` em `faultloc/equacoes.py`, `_br`
+  em `plot/alfa.py`, o filtro `decimal` nos templates) ou mande o número e deixe a
+  tela formatar. Marcação de eixo também é número: sai pronta do Python
+  (`diferencial.rotulos_dos_eixos`), nunca arredondada na tela.
+- **Linha estragada no meio do CEV não encerra a leitura** *(15/11/2026)*. O leitor
+  parava nela: um SEL-311C do parque abria com 330 das 717 amostras, sem aviso. Ela
+  vira amostra em branco (como no `.dat` ASCII) e há aviso; a estragada no fim é
+  arquivo cortado, e também avisa.
 - **Toda rota POST lê o corpo por `_corpo()`**, que devolve sempre um
   dicionário. `request.get_json(silent=True) or {}` deixava passar `[1, 2]`
   e `"x"`, e o `.get` seguinte virava erro 500. Número da URL passa por

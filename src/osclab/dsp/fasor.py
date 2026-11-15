@@ -501,18 +501,25 @@ def regime_da_janela(janela: np.ndarray,
 LIMIAR_DE_REGIME = 0.30
 
 
-def distorcao_do_espectro(eficazes: np.ndarray) -> float | None:
+def distorcao_do_espectro(eficazes: np.ndarray,
+                          rms: float | None = None) -> float | None:
     """O THD a partir das barras: `√(Σ h≥2) / h1`, em percentual.
 
     **Não é o mesmo número de `Fasor.distorcao`**, e a diferença é informação:
     aquele é "tudo que não é fundamental" (inclui DC, ruído e o que está acima
     do teto de ordens); este é a soma das raias que o desenho mostra. O da tela
     tem que ser este, senão o usuário soma as barras e não fecha com o número.
+
+    Com `rms` (o eficaz da MESMA janela), vale a guarda de
+    `MINIMO_FUNDAMENTAL`, como em `Fasor.distorcao`: um TC sem corrente saía
+    com «THD 6.371,2 %» no painel de harmônicos (ensaio geral, 15/11/2026).
     """
     if eficazes is None or eficazes.size < 2:
         return None
     base = float(eficazes[0])
     if base <= 0:
+        return None
+    if rms is not None and not base >= MINIMO_FUNDAMENTAL * rms:
         return None
     sobra = float(np.sqrt(np.sum(np.square(eficazes[1:]))))
     return 100.0 * sobra / base

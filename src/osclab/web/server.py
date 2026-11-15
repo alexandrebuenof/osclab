@@ -186,6 +186,16 @@ def create_app() -> Flask:
         except (TypeError, ValueError):
             return str(v)
 
+    @app.template_filter("decimal")
+    def _decimal(v, formato: str = "%g") -> str:
+        """`959.693` -> `959,693`. Na tira da onda o ponto ja' e' o milhar
+        (`TP 7.920 : 66`); com ele tambem na taxa, `959.693 Hz` se lia como
+        959 mil hertz (ensaio geral, 15/11/2026)."""
+        try:
+            return (formato % float(v)).replace(".", ",")
+        except (TypeError, ValueError):
+            return str(v)
+
     @app.get("/")
     def menu():
         """A tela inicial: escolher o modulo.

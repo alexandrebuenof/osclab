@@ -88,6 +88,20 @@ def test_o_resumo_fica_em_cache(tmp_path):
     assert item.amostras_por_ciclo == pytest.approx(16.0, rel=0.01)
 
 
+def test_o_resumo_do_leitor_ANTIGO_do_CEV_se_refaz(tmp_path):
+    """Ensaio geral (15/11/2026): o leitor de CEV parava na linha estragada, e
+    o `meta.json` gravado por ele guarda o número curto de amostras (330 de
+    717 num SEL-311C). O registro abre inteiro, mas o cabeçalho da onda lê o
+    resumo — sem refazê-lo, diria 330 para sempre."""
+    import json
+    sha = acervo.guardar(_cev(tmp_path, por_ciclo=8, ciclos=4)).aceitos[0].sha
+    meta = paths.LIBRARY_DIR / sha / "meta.json"
+    velho = json.loads(meta.read_text(encoding="utf-8"))
+    velho.update(n_amostras=10, versao_do_resumo=6)
+    meta.write_text(json.dumps(velho), encoding="utf-8")
+    assert acervo.obter(sha).n_amostras == 32
+
+
 def test_o_registro_guardado_abre(tmp_path):
     sha = acervo.guardar(_par(tmp_path, n=64)).aceitos[0].sha
     registro = acervo.ler(sha)

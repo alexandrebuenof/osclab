@@ -510,7 +510,8 @@ def _espectro_da_onda(onda, i: int, por_ciclo: float, fator: float,
     if raias is None:
         return {"harmonicos": None, "thd": None,
                 "teto": fasor.ordens_mediveis(por_ciclo)}
-    thd = fasor.distorcao_do_espectro(raias)
+    thd = fasor.distorcao_do_espectro(
+        raias, math.sqrt(float(np.dot(pesos, janela * janela) / float(pesos.sum()))))
     # A CONTÍNUA da mesma janela: a média de um ciclo de tempo, pelos mesmos
     # pesos da DFT. É a raia de ordem ZERO do espectro — o desenho a mostra
     # como primeira barra, à esquerda da fundamental (escolha dele, 15/10, e é
@@ -706,7 +707,8 @@ def espectro_entre(registro: Record, a: dict, b: dict, lado: str,
                                harmonicos_mod.ORDENS_DESENHADAS, inteiros)
         if raias is None:
             continue
-        thd = fasor.distorcao_do_espectro(raias)
+        thd = fasor.distorcao_do_espectro(
+            raias, math.sqrt(float(np.dot(pesos, janela_ * janela_) / float(pesos.sum()))))
         # A LINHA do espectro: toda raia da janela, de `1/ciclos` em
         # `1/ciclos` de ordem. É o desenho; as barras de harmônico continuam
         # sendo as de cima, que são as que a tabela e o THD usam.

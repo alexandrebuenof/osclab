@@ -2980,3 +2980,15 @@ def test_o_botao_do_texto_cru_diz_texto():
     assert ">como veio</button>" not in onda
     assert onda.count(">texto</button>") == 2
     assert "como veio no arquivo" in onda
+
+
+def test_a_TAXA_na_tira_da_onda_tem_virgula_decimal(cliente, tmp_path):
+    """Ensaio geral (15/11/2026), GE 850 sem taxa declarada: a tira dizia
+    «959.693 Hz · 15.99/ciclo», com o TP ao lado em «7.920 : 66». Na mesma
+    tira o ponto era milhar num número e decimal no outro — 959 MIL hertz.
+    O acervo (`acervo.js`) já escrevia em pt-BR; a onda agora também."""
+    import re
+    sha = _sha_de_um_registro(cliente, tmp_path, n=480, taxa=959.693)
+    html = cliente.get(f"/onda/{sha}").get_data(as_text=True)
+    taxa = re.search(r'rot">taxa</span\s*><span class="val">([^<]*)<', html).group(1)
+    assert taxa == "959,693 Hz · 15,99/ciclo", taxa

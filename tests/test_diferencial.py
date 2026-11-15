@@ -502,3 +502,44 @@ def test_o_lido_fica_guardado_com_digitado_por_cima():
     assert campos["rtc1"]["lido"] == {"valor": 60.0, "variavel": "CTR1",
                                       "bruto": "CTR1 := 60"}
     assert campos["rtc2"]["lido"] is None
+
+
+def test_sem_trinca_NENHUMA_o_aviso_nao_diz_que_ha_uma(tmp_path):
+    """Ensaio geral (15/11/2026): num registro só de digitais o painel dizia
+    «Este registro tem uma trinca de corrente só» — e não tem nenhuma."""
+    from osclab.formats import registry
+    from tests.fabrica import escrever_comtrade
+    r = registry.read(escrever_comtrade(tmp_path, na=0, nd=4, n=96))
+    p = _montado(r, _painel())
+    assert "nenhuma trinca de corrente" in p["falta"], p["falta"]
+    pa = janela.montar(r, colunas=200, layout=[paineis.Painel(
+        id="pa", tipo=paineis.ALFA, nome="", sinais=("A", "B", "C"))])["paineis"][0]
+    assert "nenhuma trinca de corrente" in pa["falta"], pa["falta"]
+
+
+def test_os_numeros_das_divisoes_do_eixo_sao_EXATOS():
+    """Ensaio geral (15/11/2026): a tela escrevia as divisões com uma casa, e
+    num eixo de 0 a 1 pu o quarto saía «0,3» — logo abaixo da linha do pickup
+    de 0,30, que é exatamente onde se olha. Os números vêm do Python."""
+    assert diferencial.rotulos_dos_eixos({"iop": 1.0, "irt": 1.5}) == {
+        "iop": ["0", "0,25", "0,5", "0,75", "1"],
+        "irt": ["0", "0,375", "0,75", "1,125", "1,5"]}
+    p = diferencial.previa({})
+    assert p["rotulos_dos_eixos"] == diferencial.rotulos_dos_eixos(p["eixos"])
+    for painel in (_painel(), paineis.Painel(id="pd", tipo=paineis.DIFERENCIAL,
+                                             nome="", sinais=("A", "B", "C"))):
+        p = _montado(_registro("carga"), painel)
+        assert p["rotulos_dos_eixos"] == diferencial.rotulos_dos_eixos(p["eixos"])
+
+
+def test_o_motivo_da_conferencia_escreve_VIRGULA_decimal():
+    """Ensaio geral (15/11/2026): o hover do ajuste suspeito escrevia
+    «fora da faixa usual (0.1 a 1.5 pu)» e «usar 2.09 (calculado)». Na tela
+    inteira o decimal é vírgula — e `1.500` é mil e quinhentos."""
+    import re
+    campo = {"valor": 5.0, "tipo": "num", "minimo": 0.1, "maximo": 1.5, "unidade": "pu"}
+    motivo, _ = diferencial._conferir("pickup", campo, {}, {})
+    assert motivo and not re.search(r"\d\.\d", motivo), motivo
+    campo = {"valor": 2.5, "tipo": "num", "minimo": 0.0, "maximo": 99999.0, "unidade": ""}
+    motivo, sugestao = diferencial._conferir("rtc1", campo, {}, {"rtc1": 62.5})
+    assert motivo and not re.search(r"\d\.\d", motivo + sugestao["texto"]), (motivo, sugestao)

@@ -284,7 +284,10 @@ def _principal(pasta: Path) -> Path | None:
 #: 4 em 21/10/2026: a falta evolutiva (`falta_inicial`).
 #: 5 em 22/10/2026: o modelo do SIPROTEC 5 («nº de série»).
 #: 6 em 22/10/2026: o trip (`trip_sinal`, `trip_ms`), o raio do selo.
-RESUMO_ATUAL = 6
+#: 7 em 15/11/2026 (ensaio geral): o leitor de CEV deixou de parar na linha
+#: estragada — um SEL-311C que tinha 330 amostras no resumo tem 717, e o
+#: cabeçalho da onda continuaria dizendo 330.
+RESUMO_ATUAL = 7
 
 
 def _so_o_numero(v: float) -> str:

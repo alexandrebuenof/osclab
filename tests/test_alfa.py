@@ -219,3 +219,13 @@ def test_o_digitado_vence_o_lido():
 def test_87l_desligado_no_rele_e_avisado():
     p = _montado_com(_registro(interna=False), _plano(), [("E87L", "N"), ("87LPR", "6")])
     assert "DESLIGADO" in p["rodape"][0]
+
+
+def test_o_rodape_escreve_numero_com_VIRGULA_decimal():
+    """Ensaio geral (15/11/2026): «1 pu: 708 A no local · 636.2 A no remoto» e
+    «± 90.01°». Em português o ponto separa MILHAR — `636.2 A` se lê errado —, e
+    o resto da tela (`102,97 km`) usa vírgula."""
+    import re
+    p = _montado(_registro(interna=False, relacao_remota=96.33), _plano())
+    linha = next(x for x in p["rodape"] if x.startswith("1 pu"))
+    assert "," in linha and not re.search(r"\d\.\d", linha), linha
