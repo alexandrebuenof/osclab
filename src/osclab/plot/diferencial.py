@@ -888,6 +888,18 @@ def decidir(iop, lim, h2, h5, valor) -> np.ndarray:
         default=RESTRINGE)
 
 
+def rotulos_dos_eixos(eixos: dict) -> dict:
+    """Os números das QUATRO divisões de cada eixo, escritos como a tela os
+    mostra: exatos, com vírgula decimal.
+
+    A tela arredondava para uma casa, e num eixo de 0 a 1 o quarto virava
+    «0,3» — escrito logo ABAIXO da linha do pickup de 0,30 (ensaio geral,
+    15/11/2026). A marca do eixo é número e sai daqui, como as das ondas.
+    """
+    return {nome: [f"{round(eixo * k / 4, 6):g}".replace(".", ",") for k in range(5)]
+            for nome, eixo in eixos.items()}
+
+
 def _redondo(maximo: float) -> float:
     """O degrau «bonito» logo acima de `maximo` (1; 1,5; 2; 2,5; 3; 4; 5; 6; 8)."""
     if not (maximo > 0) or not math.isfinite(maximo):
@@ -967,6 +979,7 @@ def previa(valores: dict | None) -> dict:
         "irt": _arredondar(irt),
         "iop": _arredondar(iop),
         "eixos": {"irt": eixo_irt, "iop": eixo_iop},
+        "rotulos_dos_eixos": rotulos_dos_eixos({"irt": eixo_irt, "iop": eixo_iop}),
         "marcas": {"pickup": v["pickup"], "slp1": v["slp1"], "bp1": bp1,
                    "bp2": bp2, "slp2": slp2, "u87": v["u87"]},
         "exemplo": [x for x in exemplo if x in usados],
@@ -1010,6 +1023,7 @@ def montar(registro: Record, painel, ajustes: dict | None = None) -> dict:
         "equacoes": {"iop": "", "irt": ""},
         "curva": {"irt": [], "iop": []},
         "eixos": {"irt": 1.0, "iop": 1.0},
+        "rotulos_dos_eixos": rotulos_dos_eixos({"irt": 1.0, "iop": 1.0}),
         "marcas": {},
         "pontos": {"n": [], "t": []},
         "passo": 1,
@@ -1097,6 +1111,7 @@ def montar(registro: Record, painel, ajustes: dict | None = None) -> dict:
         "pronto": True,
         "curva": {"irt": _arredondar(curva_irt), "iop": _arredondar(curva_iop)},
         "eixos": {"irt": eixo_irt, "iop": eixo_iop},
+        "rotulos_dos_eixos": rotulos_dos_eixos({"irt": eixo_irt, "iop": eixo_iop}),
         "marcas": {"bp1": bp1, "bp2": bp2, "u87": valor["u87"],
                    "pickup": valor["pickup"]},
         "passo": int(passo),

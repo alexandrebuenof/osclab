@@ -504,6 +504,21 @@ def test_o_lido_fica_guardado_com_digitado_por_cima():
     assert campos["rtc2"]["lido"] is None
 
 
+def test_os_numeros_das_divisoes_do_eixo_sao_EXATOS():
+    """Ensaio geral (15/11/2026): a tela escrevia as divisões com uma casa, e
+    num eixo de 0 a 1 pu o quarto saía «0,3» — logo abaixo da linha do pickup
+    de 0,30, que é exatamente onde se olha. Os números vêm do Python."""
+    assert diferencial.rotulos_dos_eixos({"iop": 1.0, "irt": 1.5}) == {
+        "iop": ["0", "0,25", "0,5", "0,75", "1"],
+        "irt": ["0", "0,375", "0,75", "1,125", "1,5"]}
+    p = diferencial.previa({})
+    assert p["rotulos_dos_eixos"] == diferencial.rotulos_dos_eixos(p["eixos"])
+    for painel in (_painel(), paineis.Painel(id="pd", tipo=paineis.DIFERENCIAL,
+                                             nome="", sinais=("A", "B", "C"))):
+        p = _montado(_registro("carga"), painel)
+        assert p["rotulos_dos_eixos"] == diferencial.rotulos_dos_eixos(p["eixos"])
+
+
 def test_o_motivo_da_conferencia_escreve_VIRGULA_decimal():
     """Ensaio geral (15/11/2026): o hover do ajuste suspeito escrevia
     «fora da faixa usual (0.1 a 1.5 pu)» e «usar 2.09 (calculado)». Na tela
