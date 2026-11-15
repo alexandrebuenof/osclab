@@ -1,5 +1,86 @@
 # Onde o trabalho está
 
+**15/11/2026 — ENSAIO GERAL da 1.0.0 e caça de bugs em casos extremos (ramo do agente,
+para revisão):** servidor de ensaio à parte (acervo no scratchpad, base de linhas
+copiada), os 30 casos de `Oscilografias para testes 1.0` enviados pela rota do acervo e
+percorridos no Chrome sem janela (abrir; roda, arrasto, Shift+faixa, botão direito,
+cursores 1/2, setas, ímã, filtro, primário/secundário, «+ sinal» com a energia; cada
+gráfico que o caso pede; duplo clique no localizador, «parâmetros», «? métodos»,
+«refinar», calculadora, eventos com «+ arquivo»), mais 30 SINTÉTICOS de casos extremos
+(`tests/fabrica.py`: órfão, taxa múltipla, nrates = 0, acento cp1252/UTF-8, sem
+pré-falta, 50 Hz, canal sem unidade, trinca incompleta, só digitais, um canal, um ciclo,
+meio ciclo, UMA amostra, 2013 ASCII/BINARY/BINARY32/FLOAT32, CEV dos dois dialetos a
+4/8/16, `.dat` truncado/vazio, `.cfg` lixo/cortado, CEV cortado/soma errada/sem disparo,
+taxa zero, ASCII sujo) e gestos absurdos pela API (zoom 1e9, andar 1e6, cursor NaN,
+colunas negativas, todo tipo de painel vazio). **Nenhuma exceção de JavaScript, nenhum
+4xx/5xx inesperado, nenhum NaN/Infinity no JSON, nenhum «carregando» eterno** (registro
+que quebra ao abrir mostra a frase do leitor). Nenhum pedido passou de 800 ms; abrir
+≈ 0,4–1,0 s de servidor (o 487E de 5760 digitais é o mais lento).
+**Defeitos achados e corrigidos (cada um com teste que falha antes):**
+- CEV com UMA linha estragada no meio parava a leitura ali, sem aviso: o SEL-311C do
+  caso 14a (Braço Norte) abria com 330 das 717 amostras — a falta «acabava» em 1,37 s.
+  Agora a linha estragada vira amostra em branco (como o `.dat` ASCII), o resto segue, e
+  há aviso; CEV cortado no fim também avisa (`formats/cev.py`, `tests/test_cev.py`).
+  `RESUMO_ATUAL` 6 → 7, para o `meta.json` gravado pelo leitor antigo (330 amostras)
+  se refazer sozinho (`tests/test_acervo.py`).
+- Diferencial 87T: as divisões do eixo com uma casa — o quarto de 1 pu saía «0,3», logo
+  abaixo da linha do pickup de 0,30; a prévia escrevia 0,375 como «0,38». Os números
+  vêm agora do Python (`diferencial.rotulos_dos_eixos`).
+- Ponto decimal em texto de tela: «636.2 A», «± 90.01°» (plano alfa), «0.1 a 1.5 pu»
+  e «usar 2.09» (ajustes do 87T), e na tira da onda «959.693 Hz · 15.99/ciclo» ao lado
+  de «TP 7.920 : 66». Agora vírgula (filtro `decimal` no template).
+- Registro só de digitais: o diferencial e o plano alfa diziam «tem uma trinca de
+  corrente só» e «Um lado só». Agora «não tem nenhuma trinca de corrente».
+- Relação 1:1 (SEL-311C «Export By Event», caso 15): o acervo já a lia como FALTA de
+  relação, mas `conversao.relacao` dividia por 1 e a tela mostrava 648 A e 25 kV
+  primários em «secundário», sem aviso. Agora 1:1 não converte e o canal ganha a
+  etiqueta «prim.» (`tests/test_plot.py`; a digitada continua valendo).
+- Painel de harmônicos: TC sem corrente (0,0001 A) com «THD 6.371,2 %». A guarda de
+  `fasor.MINIMO_FUNDAMENTAL` (a da DC % da tabelinha) passa a valer ali: THD «—».
+**Para ele decidir** (detalhes e fotos no relatório local do ensaio): ver a lista
+«pendências do ensaio» logo abaixo.
+
+**Pendências do ensaio (15/11/2026), cada uma com alternativas:**
+1. CEV com linha estragada: o CEV não numera amostras, então se a linha estragada
+   engoliu outra, o tempo depois dela anda uma amostra (o aviso diz). No Braço Norte o
+   cabeçalho declara 180 ciclos (720) e há 717 linhas — pode ser isso. (a) deixar como
+   está; (b) avisar também quando `NUM_OF_CYC × SAM/CYC_A` não bate com o lido (em todos
+   os outros CEV do banco bate exato); (c) recusar o registro.
+2. O LEIA-ME do caso 14a diz «a gravação vai de 12:11:02,594 a 12:11:03,965» — era o
+   corte do defeito acima; agora vai até ≈ 12:11:05,58. Atualizar o LEIA-ME.
+3. `test_comissionamento` contra o banco do 1.0 (`OSCLAB_AMOSTRAS`): a conferência 6 (hora
+   do TRIP × digital) diverge em 1 amostra no CEV de Colíder (4 am/ciclo: carimbo em
+   137,32 amostras, o TRIP muda na 137, o teste espera a 138). Não é desta rodada — é
+   convenção da conferência num CEV decimado: (a) tolerância de 1 amostra abaixo de
+   8 am/ciclo; (b) arredondar o carimbo em vez de subir; (c) manter e investigar o relé.
+4. Localizador: a etiqueta «1» do cursor cai em cima da palavra «platô» quando o cursor
+   está no platô (fotos 11a). (a) «platô» à esquerda do colchete; (b) esconder «platô»
+   com cursor dentro; (c) etiqueta do cursor abaixo da moldura nesse painel.
+5. Plano de impedância: o rótulo «100 % da LT» fica sobre a trajetória (11b).
+   (a) rótulo do lado oposto ao da trajetória; (b) só no hover.
+6. Plano alfa: a célula «I remoto (pu)» corta o ângulo («0,173 ∠ 18…» — 18° ou 180°?).
+   (a) linha própria «∠ I remoto»; (b) coluna mais larga; (c) duas linhas na célula.
+7. Par fictício CLARO–IPÊ (17a): a seq. negativa 2T sai vazia («nenhum valor no platô»)
+   com 26,70/26,74/26,69 km nos outros métodos (esperado 26,2). Conferir se é o
+   esperado com o CEV de 8 am/ciclo e o alinhamento de ± 45° do plano alfa.
+8. Tabelinha escreve «-0,0000» (zero negativo) para valores que arredondam a zero.
+   (a) tirar o sinal quando o arredondado é zero; (b) manter (diz o lado).
+9. Legenda do localizador sem número do relé: o «—» sai pequeno e alto («‾»), pela
+   classe `lado`. (a) traço na altura do texto; (b) escrever «sem número».
+10. Ingeteam PL300 (05a): o LEIA-ME diz «10 analógicos em secundário», mas os números
+   (~112 kV de pico, 250 A) só fecham em PRIMÁRIO de 138 kV; sem relação no arquivo o
+   programa os rotula «secundário» e não converte — correto pela regra, mas o rótulo
+   engana. (a) campo para dizer «o arquivo está em primário»; (b) deixar.
+11. Harmônicos com um sinal sem fundamental (o TC morto do 487E): o THD virou «—», mas
+   as BARRAS dele continuam em % de 0,0001 A e a escala vai a 5.000 %, achatando as
+   fases sãs. (a) não desenhar as barras desse sinal e dizer «sem fundamental»;
+   (b) escala pelos sinais que têm fundamental; (c) deixar.
+12. O «refinar» desenha a onda de um CEV de 4 am/ciclo com RETAS entre as amostras,
+   enquanto o gráfico das ondas usa a curva (Catmull-Rom) abaixo de 8 am/ciclo.
+   (a) a mesma curva no refino; (b) deixar — lá os pontos das amostras é que importam.
+13. Caso 11a (VRI): «sem linha» — a base copiada não casou a LT CON–VRI; números do
+   localizador só aparecem digitando a linha. Conferir se a linha está na base.
+
 **14/11/2026 — a ENERGIA do catálogo saiu da abertura (ramo do agente, para revisão,
 em cima da barra de progresso):** pedido aprovado por ele. A barrinha de energia do
 «+ sinal» (60 Hz · harmônicos · contínua, `catalogo.energia`) era a conta mais cara de
