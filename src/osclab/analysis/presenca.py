@@ -290,8 +290,15 @@ def _alternados(registro: Record) -> frozenset[int]:
         maior = resumo_do_canal(registro, canal.index, por_ciclo).maior_fundamental
         # Canal todo NaN: `nanmean` avisaria «Mean of empty slice» no log a
         # cada registro; o resultado é o mesmo (NaN, e o canal fica de fora).
-        algum = extremos_do_canal(registro, canal.index).algum_finito
-        media = float(np.nanmean(valores)) if algum else float("nan")
+        extremos = extremos_do_canal(registro, canal.index)
+        # Sem NaN, `mean` é o `nanmean` sem a cópia do canal (a mesma soma,
+        # bit a bit: conferido em 1070 canais de teste, 15/11/2026).
+        if extremos.todos_finitos:
+            media = float(np.mean(valores))
+        elif extremos.algum_finito:
+            media = float(np.nanmean(valores))
+        else:
+            media = float("nan")
         if not np.isfinite(media) or maior < abs(media):
             continue
         if maior > 0.0 or fases.grandeza_da_unidade(canal.unit) in ("I", "V"):

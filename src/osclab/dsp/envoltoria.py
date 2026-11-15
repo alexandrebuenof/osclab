@@ -256,6 +256,8 @@ def fasores(sinal: np.ndarray, por_ciclo: int) -> np.ndarray:
     # caminho de `astype` (só que aos pedaços), e as multiplicações no lugar
     # são as mesmas, na mesma ordem: o número é o mesmo, bit a bit.
     media = media_do_ciclo(x * giro, janela)
+    # O `2·conj(giro)` NÃO é lembrado com o giro: seriam mais 16 bytes por
+    # amostra presos durante o laço (+48 MB no pico de um registro de 3 M).
     dobro = np.conj(giro)
     dobro *= 2.0
     # `dobro · média`, nesta ordem, escrito em cima da média (vale para um
@@ -288,6 +290,7 @@ def _giro(tamanho: int, n: float) -> np.ndarray:
         return lembrados[chave]
     k = np.arange(tamanho, dtype=np.float64)
     giro = np.exp(-2j * np.pi * k / n)
+    del k
     if lembrados is not None:
         lembrados.clear()           # um só por vez: 16 bytes por amostra
         lembrados[chave] = giro

@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from osclab import progresso
 from osclab.dsp import fasor
 from osclab.formats.base import Record, lembrado_do_registro
 from osclab.plot import digitais
@@ -281,6 +282,8 @@ def _inicio_da_perturbacao(registro: Record) -> int | None:
     from osclab.analysis import presenca
     primeiro = None
     for canal in range(dados.shape[0]):
+        # Canal a canal é o passo da barra de abertura (`osclab.progresso`).
+        progresso.avancar(canal, dados.shape[0])
         linha = dados[canal]
         d = np.subtract(linha[por_ciclo:], linha[:-por_ciclo])
         np.abs(d, out=d)

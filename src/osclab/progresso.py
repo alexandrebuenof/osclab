@@ -17,9 +17,9 @@ etapas conhecidas, e é ele quem diz a etapa e a fração:
 Dentro de uma etapa, quem percorre canais ou linhas diz quantos já foram
 (`avancar(feito, total)`), e a fração anda dentro dela. Os PESOS das etapas
 e das contas são medidos (registros sintéticos de 1 M × 12 e 3 M × 6
-amostras, 14/11/2026: ler 1–2 %, diagnóstico 21–22 %, contas 70–72 %, o
-resto é a janela; sem a energia do catálogo, que saiu da abertura no mesmo
-dia, diagnóstico ~32 % e contas ~54 %); em outro registro a proporção muda um pouco, e a barra
+amostras; 15/11/2026, com a fundamental de cada canal medida uma vez só, no
+diagnóstico: ler 6–9 %, diagnóstico ~61 %, contas ~30 %, o resto é a
+janela); em outro registro a proporção muda um pouco, e a barra
 anda mais depressa numa etapa e mais devagar noutra — mas nunca para trás
 (`fracao` só cresce) e nunca passa de 1 antes de terminar.
 
@@ -60,23 +60,29 @@ ORDEM = tuple(chave for chave, _ in ETAPAS)
 
 #: Quanto da barra cada etapa ocupa. Medido (ver o cabeçalho): somam 1.
 PESOS: dict[str, float] = {
-    "ler": 0.04, "diagnostico": 0.32, "canais": 0.01, "contas": 0.54, "desenho": 0.09,
+    "ler": 0.07, "diagnostico": 0.60, "canais": 0.01, "contas": 0.28, "desenho": 0.04,
 }
 #: As três primeiras são a LEITURA de um registro (`acervo.ler`).
 DA_LEITURA = ("ler", "diagnostico", "canais")
 
 #: O peso de cada conta do registro inteiro dentro da etapa `contas`, pelo
 #: tempo PRÓPRIO dela (sem as contas que ela chama), medido num sintético de
-#: 1 M amostras × 12 canais: trincas 2,1 s, presença 1,6 s, início 0,6 s.
-#: Conta que não está aqui pesa `PESO_DE_OUTRA_CONTA`. A energia do catálogo
-#: (3,4 s) saiu da abertura em 14/11/2026: é feita quando o «+ sinal» abre,
-#: com uma barra só dela (`abrindo(..., contas=SO_A_ENERGIA)`).
+#: 1 M amostras × 12 canais. Desde 15/11/2026 a fundamental de cada canal é
+#: medida UMA vez, no diagnóstico (`presenca.resumo_do_canal`), e a presença e
+#: as trincas só a leem; o que sobra nas contas é o início da perturbação
+#: (0,34 s), o maior |x| de cada canal, que a primeira a pedir paga — o prefixo
+#: k (0,19 s) —, a média dos alternados (0,05 s) e os digitais. Conta que não
+#: está aqui pesa `PESO_DE_OUTRA_CONTA`. A energia do catálogo saiu da
+#: abertura em 14/11/2026: é feita quando o «+ sinal» abre, com uma barra só
+#: dela (`abrindo(..., contas=SO_A_ENERGIA)`).
 PESOS_DAS_CONTAS: dict[str, float] = {
-    "conjuntos.ondas": 0.47,
-    "presenca.alternados": 0.34,
-    "imas.inicio": 0.12,
-    "unidades.por_unidade": 0.035,
-    "presenca.sem_sinal": 0.035,
+    "imas.inicio": 0.45,
+    "unidades.por_unidade": 0.25,
+    "presenca.alternados": 0.08,
+    "digitais.resumos": 0.05,
+    "digitais.trocas": 0.05,
+    "conjuntos.ondas": 0.02,
+    "presenca.sem_sinal": 0.02,
 }
 PESO_DE_OUTRA_CONTA = 0.005
 #: As contas que uma barra «só destas contas» acompanha: a da energia do
