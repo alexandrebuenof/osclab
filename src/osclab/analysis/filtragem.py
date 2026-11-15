@@ -57,6 +57,7 @@ from __future__ import annotations
 import numpy as np
 
 from osclab import progresso
+from osclab.analysis import presenca
 from osclab.dsp import envoltoria, fasor
 from osclab.formats.base import Filtering, FilteringSource, Record
 
@@ -78,26 +79,69 @@ CICLOS_PARADOS_MINIMOS = 2
 
 def _distorcoes_em_regime(sinal: np.ndarray, por_ciclo: float) -> np.ndarray:
     """A distorção do canal, só nas amostras em que a amplitude está parada."""
-    f = envoltoria.fundamental(sinal, por_ciclo)
-    r = envoltoria.rms(sinal, por_ciclo)
+    return _distorcoes_de(envoltoria.fundamental(sinal, por_ciclo),
+                          envoltoria.rms(sinal, por_ciclo), por_ciclo)
 
+
+def _distorcoes_de(f: np.ndarray, r: np.ndarray, por_ciclo: float) -> np.ndarray:
+    """`_distorcoes_em_regime` a partir das curvas `f` (fundamental) e `r` (RMS)."""
+    # As contas abaixo são escritas no lugar (15/11/2026): eram vinte vetores
+    # do tamanho do canal, um por operação, e criar vetor novo custa mais que
+    # a própria conta. As operações são as mesmas, na mesma ordem — o número
+    # é o mesmo, bit a bit (ver `test_filtragem`).
     parado = np.zeros(f.shape, dtype=bool)
     # O passo de "um ciclo atrás" é de ÍNDICE, então é inteiro; a janela de
     # medida é que é de um ciclo de tempo. Ver `fasor.pesos_do_ciclo`.
     passo = int(round(por_ciclo))
     if passo > 0 and f.size > passo:
         anterior, agora = f[:-passo], f[passo:]
-        parado[passo:] = np.abs(agora - anterior) <= VARIACAO_DE_REGIME * agora
+        variacao = np.subtract(agora, anterior)
+        np.abs(variacao, out=variacao)
+        limite = np.multiply(VARIACAO_DE_REGIME, agora)
+        np.less_equal(variacao, limite, out=parado[passo:])
+        del variacao, limite
 
     # A mesma guarda de `fasor.MINIMO_FUNDAMENTAL`: percentual DA fundamental só
     # significa algo quando há fundamental. Ela também exclui, de graça, os
     # canais mortos — os que só têm offset do conversor e nada de 60 Hz.
-    vale = parado & np.isfinite(f) & np.isfinite(r) & (f > fasor.MINIMO_FUNDAMENTAL * r)
+    vale = parado
+    vale &= np.isfinite(f)
+    vale &= np.isfinite(r)
+    vale &= f > fasor.MINIMO_FUNDAMENTAL * r
     if not vale.any():
         return np.empty(0)
 
-    sobra = np.maximum(r[vale] ** 2 - f[vale] ** 2, 0.0)
-    return 100.0 * np.sqrt(sobra) / f[vale]
+    fv = f[vale]
+    sobra = r[vale]
+    np.square(sobra, out=sobra)
+    sobra -= np.square(fv)
+    np.maximum(sobra, 0.0, out=sobra)
+    np.sqrt(sobra, out=sobra)
+    sobra *= 100.0
+    sobra /= fv
+    return sobra
+
+
+def _medir_trecho(registro: Record, trecho, n: float, juntas: np.ndarray,
+                  usadas: int, feitos: int, passos: int) -> tuple[int, int]:
+    """As distorções de cada canal num trecho, escritas em `juntas` a partir
+    de `usadas`. Devolve (`usadas`, `feitos`) depois do trecho."""
+    for k in range(registro.analog.shape[0]):
+        canal = registro.analog[k, trecho.inicio:trecho.fim]
+        f = envoltoria.fundamental(canal, n)
+        r = envoltoria.rms(canal, n)
+        # A fundamental e o eficaz do canal são as curvas mais caras de abrir,
+        # e a presença de sinal e as trincas perguntam delas de novo: o resumo
+        # fica guardado pela matriz (`presenca.resumo_do_canal`).
+        presenca.guardar_resumo(registro.analog, canal, k, trecho.inicio,
+                                trecho.fim, n, presenca.resumo_de(f, r))
+        d = _distorcoes_de(f, r, n)
+        del f, r
+        juntas[usadas:usadas + d.size] = d
+        usadas += d.size
+        feitos += 1
+        progresso.avancar(feitos, passos)
+    return usadas, feitos
 
 
 def diagnosticar(registro: Record) -> tuple[Filtering, FilteringSource]:
@@ -114,32 +158,39 @@ def diagnosticar(registro: Record) -> tuple[Filtering, FilteringSource]:
 
     # Cada trecho tem a sua janela de um ciclo. Medir o registro inteiro com a
     # taxa do primeiro trecho acharia "distorção" onde só há taxa diferente.
-    medidas = []
+    trechos = registro.trechos
+    canais = registro.analog.shape[0]
+    # As distorções de todos os canais vão juntas para UMA mediana. Escritas
+    # direto num vetor só (15/11/2026), e não numa lista que depois se junta:
+    # a lista e a junção conviviam com a cópia que a mediana faz — três vezes
+    # o vetor, 430 MB num registro de 3 M amostras × 6 canais.
+    juntas = np.empty(sum(t.fim - t.inicio for t in trechos) * canais, dtype=np.float64)
+    usadas = 0
     por_ciclo = 0
     # Canal a canal é o passo do progresso da abertura (`osclab.progresso`).
-    passos, feitos = len(registro.trechos) * registro.analog.shape[0], 0
-    for trecho in registro.trechos:
+    passos, feitos = len(trechos) * canais, 0
+    for trecho in trechos:
         n = fasor.ciclo_em_amostras(trecho.taxa_hz, registro.line_frequency)
         if n < fasor.MINIMO_POR_CICLO:
             continue
         por_ciclo = max(por_ciclo, n)
-        for canal in registro.analog[:, trecho.inicio:trecho.fim]:
-            if (d := _distorcoes_em_regime(canal, n)).size:
-                medidas.append(d)
-            feitos += 1
-            progresso.avancar(feitos, passos)
+        with envoltoria.mesmo_giro():
+            usadas, feitos = _medir_trecho(registro, trecho, n, juntas, usadas,
+                                           feitos, passos)
     if por_ciclo == 0:
         return Filtering.DESCONHECIDO, FilteringSource.DEDUZIDO
-    if not medidas:
+    if usadas == 0:
         return Filtering.DESCONHECIDO, FilteringSource.DEDUZIDO
 
-    juntas = np.concatenate(medidas)
+    juntas = juntas[:usadas]
     if juntas.size < CICLOS_PARADOS_MINIMOS * por_ciclo:
         return Filtering.DESCONHECIDO, FilteringSource.DEDUZIDO
 
     # Mediana, não média: um canal esquisito — saturado, mal escalado, ligado no
     # lugar errado — não pode decidir sozinho o que vale para o registro todo.
-    tipica = float(np.median(juntas))
+    # `overwrite_input` só deixa a mediana arrumar o próprio vetor em vez de
+    # copiá-lo: o número é o mesmo (o do meio da ordem).
+    tipica = float(np.median(juntas, overwrite_input=True))
 
     if tipica > SUJEIRA_DA_REDE:
         return Filtering.BRUTO, FilteringSource.DEDUZIDO

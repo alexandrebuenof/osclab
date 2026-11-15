@@ -80,6 +80,33 @@ que quebra ao abrir mostra a frase do leitor). Nenhum pedido passou de 800 ms; a
    (a) a mesma curva no refino; (b) deixar — lá os pontos das amostras é que importam.
 13. Caso 11a (VRI): «sem linha» — a base copiada não casou a LT CON–VRI; números do
    localizador só aparecem digitando a linha. Conferir se a linha está na base.
+**15/11/2026 — ABRIR registro gigante mais rápido, mesmos números (ramo do agente,
+para revisão, em cima da barra de progresso e da energia sob demanda):** a MESMA
+fundamental (e o mesmo RMS) de cada canal era calculada três vezes ao abrir — no
+diagnóstico bruto × filtrado, na presença de sinal e nas trincas. Agora o diagnóstico
+deixa o resumo de cada canal (pico da fundamental, maior fundamental/RMS) guardado pela
+MATRIZ de amostras (`base.lembrado_da_matriz`: o registro corrigido pelo acervo é outro
+`Record` com a mesma matriz), e os extremos de cada canal (maior |x|, mínimo, finitos)
+são achados uma vez (`presenca.extremos_do_canal`). A conta das envoltórias foi
+reescrita sem vetores temporários (soma acumulada e soma da janela no lugar, giro da DFT
+uma vez por trecho, início da perturbação canal a canal). **Nada mudou de resultado,
+bit a bit**: curvas (fundamental, RMS, 60 Hz, DC, fasores, nos cinco estimadores),
+vereditos, presença, trincas, início, prefixos k, catálogo e primeira janela, nos 73
+registros de teste e em 13 sintéticos com os casos difíceis. float32 foi medido e
+recusado: a distorção do diagnóstico de um sinal filtrado vira 0 em float32.
+
+| sintético (rota da janela, `imas=-` como a tela abre) | abrir antes | abrir depois | pico de memória |
+|---|---|---|---|
+| ondas viajantes, 12 × 1 M | 7,8 s | 2,2 s | 408 → 288 MB |
+| ondas viajantes, 6 × 3 M | 11,2 s | 3,4 s | 745 → 576 MB |
+| tamanho SEL-411L (24 an. × 24 k, 3968 dig.) | 1,08 s | 0,90 s | 221 → 221 MB |
+
+Por etapa (1 M × 12): bruto × filtrado 2,7 → 1,4 s; presença 1,7 → 0,05 s; trincas
+2,2 → 0 s; início 0,6 → 0,34 s. A barra foi recalibrada (ler 7 %, bruto × filtrado
+60 %, contas 28 %). `CONTRATO` não mudou. **O que sobrou:** o diagnóstico continua sendo
+a fundamental + RMS de cada canal inteiro (~60 % de abrir); o início da perturbação
+(mediana de `|x[n] − x[n−N]|`) e os digitais do SEL-411L (leitura do arquivo, 0,55 s)
+são o resto.
 
 **14/11/2026 — a ENERGIA do catálogo saiu da abertura (ramo do agente, para revisão,
 em cima da barra de progresso):** pedido aprovado por ele. A barrinha de energia do

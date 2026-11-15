@@ -25,6 +25,8 @@ Duas escolhas que valem explicação:
 
 from __future__ import annotations
 
+import threading
+import weakref
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -447,6 +449,76 @@ def lembrado(registro: Record, nome: str, iguais: tuple, mesmos: tuple, fazer):
     while len(caixa) > _LEMBRADOS_POR_REGISTRO:
         caixa.pop(next(iter(caixa)))
     return valor
+
+
+#: Quantas medidas cada matriz de amostras guarda (`lembrado_da_matriz`): uma
+#: por canal, por estimador e por trecho — números, não curvas.
+_MEDIDAS_POR_MATRIZ = 4096
+_caixas_das_matrizes: dict[int, tuple] = {}
+_trava_das_matrizes = threading.Lock()
+_NADA = object()
+
+
+def impressao_da_linha(linha: np.ndarray) -> float:
+    """A `impressao_das_amostras` de UM canal: a soma de umas 512 amostras
+    espalhadas por ele (microssegundos), para quem altera a matriz no lugar."""
+    if linha.size == 0:
+        return 0.0
+    amostra = np.asarray(linha[::max(1, linha.size // _AMOSTRAS_DA_IMPRESSAO)],
+                         dtype=np.float64)
+    with np.errstate(all="ignore"):
+        return float(amostra[np.isfinite(amostra)].sum())
+
+
+def _caixa_da_matriz(matriz: np.ndarray, criar: bool) -> dict | None:
+    """O dicionário de medidas guardado para ESTA matriz (pela identidade)."""
+    chave = id(matriz)
+    with _trava_das_matrizes:
+        achado = _caixas_das_matrizes.get(chave)
+        if achado is not None and achado[0]() is matriz:
+            return achado[1]
+        if not criar:
+            return None
+        caixa: dict = {}
+        # A entrada some junto com a matriz (o `id` pode ser reusado depois).
+        ref = weakref.ref(matriz, lambda _r, c=chave: _caixas_das_matrizes.pop(c, None))
+        _caixas_das_matrizes[chave] = (ref, caixa)
+        return caixa
+
+
+def lembrado_da_matriz(matriz: np.ndarray, chave: tuple, fazer):
+    """`lembrado` para uma MEDIDA de um canal que vale para a MATRIZ de
+    amostras, e não para o registro (15/11/2026).
+
+    Existe pela abertura: o diagnóstico bruto × filtrado (`registry.read`,
+    antes de as correções do acervo trocarem o `Record` por outro, com os
+    mesmos canais e a MESMA matriz) e a presença de sinal e as trincas (já no
+    registro corrigido) mediam a MESMA fundamental de cada canal — três vezes
+    a conta mais cara de abrir. Guardada pela matriz, a medida feita pelo
+    diagnóstico vale para as outras duas. A `chave` tem de dizer tudo de que a
+    medida depende além das amostras (o canal, o trecho, a janela, o
+    estimador) e a `impressao_da_linha` do canal, que pega quem altera a
+    matriz no lugar. Guarda-se o NÚMERO, nunca a curva: a fundamental do
+    registro inteiro seria 8 bytes por amostra por canal.
+    """
+    caixa = _caixa_da_matriz(matriz, criar=True)
+    achado = caixa.get(chave, _NADA)
+    if achado is not _NADA:
+        return achado
+    valor = fazer()
+    guardar_na_matriz(matriz, chave, valor)
+    return valor
+
+
+def guardar_na_matriz(matriz: np.ndarray, chave: tuple, valor) -> None:
+    """Guarda `valor` sob `chave` para a matriz (ver `lembrado_da_matriz`) —
+    para quem já fez a conta por outro caminho e quer poupá-la aos outros."""
+    caixa = _caixa_da_matriz(matriz, criar=True)
+    with _trava_das_matrizes:
+        caixa.pop(chave, None)
+        caixa[chave] = valor
+        while len(caixa) > _MEDIDAS_POR_MATRIZ:
+            caixa.pop(next(iter(caixa)))
 
 
 @runtime_checkable

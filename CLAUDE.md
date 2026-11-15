@@ -245,6 +245,29 @@ osclab/
   a janela inteira — guardá-las do registro todo seria 8 bytes por amostra
   por sinal (96 MB num registro de 12 × 1 M). Abrir é O(registro) uma vez:
   diagnóstico bruto × filtrado, presença, trincas, início da perturbação.
+- **Abrir mede a fundamental de cada canal UMA vez** *(15/11/2026)*. O
+  diagnóstico bruto × filtrado, a presença de sinal e as trincas mediam a
+  MESMA fundamental (e o mesmo RMS) de cada canal — 36 num registro de 12
+  canais, 2/3 do tempo de abrir. O diagnóstico roda dentro do leitor, ANTES
+  de o acervo trocar o `Record` pelo corrigido (outro objeto, a mesma
+  matriz), por isso a medida é lembrada pela MATRIZ de amostras
+  (`base.lembrado_da_matriz`, chave com canal, trecho, janela, estimador e
+  `impressao_da_linha`): `presenca.resumo_do_canal` (pico da fundamental e
+  maior fundamental/RMS) e `presenca.extremos_do_canal` (maior |x|, mínimo,
+  algum/todos finitos — presença, trincas, prefixo k, início). Guarda-se o
+  NÚMERO, nunca a curva. E a conta é escrita sem vetores temporários
+  (`media_do_ciclo` e `fasores` no lugar, o giro da DFT uma vez por trecho em
+  `envoltoria.mesmo_giro`, o início canal a canal) — **as mesmas operações,
+  na mesma ordem: o resultado é o mesmo BIT A BIT**, conferido nas curvas
+  dos cinco estimadores, vereditos, presença, trincas, início, prefixos,
+  catálogo e primeira janela em todos os registros de teste. **float32 NÃO**:
+  a distorção do diagnóstico é `√(r² − f²)/f`, e em float32 os 0,001 % de um
+  sinal filtrado com ruído de quantização viram 0 — a separação de 500× do
+  veredito depende do float64. Abrir: 12 × 1 M 7,8 → 2,2 s (pico 408 →
+  288 MB); 6 × 3 M 11,2 → 3,4 s (745 → 576 MB). Teste:
+  `tests/test_leveza.py` (uma fundamental por canal; o lembrado igual ao
+  feito do zero). Os pesos da barra (`progresso.PESOS`) foram medidos de
+  novo: o diagnóstico é hoje ~60 % de abrir.
 - **O que só UM lugar da tela mostra não se conta ao ABRIR**
   *(14/11/2026)*. A energia do catálogo (a barrinha 60 Hz · harmônicos ·
   contínua do «+ sinal», `catalogo.energia`) era 3,4 s dos 11 s de abrir um

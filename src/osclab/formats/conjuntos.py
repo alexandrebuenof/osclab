@@ -51,8 +51,6 @@ import re
 from dataclasses import dataclass, replace
 from enum import StrEnum
 
-import numpy as np
-
 from osclab import progresso
 from osclab.formats import fases
 from osclab.formats.base import Record, lembrado, lembrado_do_registro
@@ -632,9 +630,10 @@ def _ondas(registro: Record) -> frozenset[int] | None:
     e `_avulsos` — várias vezes por pedido. Num registro de um milhão de
     amostras por canal eram 20 dos 32 s de abrir.
     """
+    from osclab.analysis import presenca
     from osclab.dsp import fasor
     return lembrado_do_registro(registro, "conjuntos.ondas", (fasor.estimador(),),
-                                lambda: _medir_ondas(registro))
+                                lambda: presenca.com_mesmo_giro(_medir_ondas, registro))
 
 
 def _medir_ondas(registro: Record) -> frozenset[int] | None:
@@ -690,15 +689,15 @@ def _medir_ondas(registro: Record) -> frozenset[int] | None:
         # 10 A) é pequeno perto das FASES e do tamanho do `J1 -IG`.
         if fases.da_canal(canal)[0] == "N":
             grandeza += "N"
-        valores = registro.analog[canal.index]
-        finitos = valores[np.isfinite(valores)]
-        if finitos.size == 0:
+        extremos = presenca.extremos_do_canal(registro, canal.index)
+        if not extremos.algum_finito:
             continue
-        pico = float(np.max(np.abs(finitos))) * abs(_em_primario(canal))
-        if float(finitos.min()) >= 0.0:
+        pico = extremos.pico_finito * abs(_em_primario(canal))
+        if extremos.minimo_finito >= 0.0:
             candidatas.append((canal.index, grandeza, pico))
             continue
-        if presenca.fundamental_relativa(valores, por_ciclo) >= presenca.FUNDAMENTAL_MINIMA:
+        if presenca.resumo_do_canal(registro, canal.index,
+                                    por_ciclo).razao >= presenca.FUNDAMENTAL_MINIMA:
             maior_onda[grandeza] = max(maior_onda.get(grandeza, 0.0), pico)
 
     magnitudes = {i for i, g, pico in candidatas
