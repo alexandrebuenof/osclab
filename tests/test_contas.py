@@ -26,6 +26,13 @@ def _vale(registro, expressao):
     return contas.analisar(expressao, registro, _escalas(registro))
 
 
+def _de_unidade(avisos) -> tuple:
+    """Os avisos da CONTA, sem o de canal sem relação de TC/TP: os registros
+    sintéticos daqui (`trifasico`) não declaram relação (1:1), e desde o ensaio
+    geral (15/11/2026) 1:1 é falta de relação também na conversão."""
+    return tuple(a for a in avisos if "relação de TC/TP" not in a)
+
+
 # --- a gramática -----------------------------------------------------------
 
 def test_le_a_conta_mais_comum_do_oficio():
@@ -82,7 +89,7 @@ def test_numero_puro_se_soma_a_grandeza_com_ressalva():
     for limpa in ("[Current IA] * 5", "[Current IA] / 5"):
         a = _vale(r, limpa)
         assert a.unidade_escrita == "A"
-        assert a.avisos == ()
+        assert _de_unidade(a.avisos) == ()
 
 
 def test_as_unidades_se_multiplicam():
@@ -340,13 +347,13 @@ def test_componente_do_sinal_soma_com_a_onda_SEM_ressalva():
     canal = r.analog_channels[0].name
     distorcao = _vale(r, f"[{canal}] - [{canal} · 60Hz]")
     assert distorcao.vale
-    assert distorcao.avisos == ()
+    assert _de_unidade(distorcao.avisos) == ()
     # E ela continua sendo senoide para efeito de fasor: é combinação LINEAR
     # de ondas, e a DFT é operador linear.
     assert distorcao.alternado
 
     sem_dc = _vale(r, f"[{canal}] - [{canal} · DC]")
-    assert sem_dc.vale and sem_dc.avisos == ()
+    assert sem_dc.vale and _de_unidade(sem_dc.avisos) == ()
 
 
 def test_modulo_com_modulo_nao_avisa():
