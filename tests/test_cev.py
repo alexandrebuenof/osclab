@@ -177,6 +177,53 @@ def test_soma_de_verificacao_errada_avisa_mas_nao_recusa(tmp_path):
     assert any("Soma de verificação" in a for a in r.notes)
 
 
+def _estragar_linha(caminho, k):
+    """Estraga a k-ésima linha de AMOSTRA como um SEL-311C real fez (ensaio
+    geral de 15/11/2026): o meio da linha sumiu, e o que sobrou tem menos
+    campos que as outras."""
+    linhas = caminho.read_bytes().decode("latin-1").split("\r\n")
+    i = 7 + k
+    linhas[i] = linhas[i][:12] + linhas[i][-30:]
+    caminho.write_bytes("\r\n".join(linhas).encode("latin-1"))
+
+
+def test_uma_linha_ESTRAGADA_no_meio_nao_joga_fora_o_resto_do_registro(tmp_path):
+    """Num SEL-311C do parque a linha 338 veio com o meio comido, e o leitor
+    PARAVA nela: 330 das 717 amostras, sem aviso nenhum — a falta parecia
+    acabar ali. A linha estragada vira amostra em branco (como no `.dat`
+    ASCII, `comtrade._ler_ascii`), as seguintes ficam no lugar, e há aviso."""
+    caminho = escrever_cev(tmp_path, por_ciclo=8, ciclos=4)
+    inteiro = registry.read(caminho)
+    _estragar_linha(caminho, 10)
+    r = registry.read(caminho)
+
+    assert r.n_samples == inteiro.n_samples == 32
+    assert np.isnan(r.analog[:, 10]).all()
+    fora = np.arange(32) != 10
+    np.testing.assert_allclose(r.analog[:, fora], inteiro.analog[:, fora])
+    assert any("estragada" in a for a in r.notes), r.notes
+
+
+def test_um_CEV_CORTADO_no_fim_avisa(tmp_path):
+    """A cópia que não terminou: a última linha acaba no meio. O que veio
+    inteiro é lido, e o aviso diz que o arquivo acabou antes do que o
+    cabeçalho prometia — sem aviso, um registro cortado parece uma falta que
+    terminou cedo."""
+    caminho = escrever_cev(tmp_path, por_ciclo=8, ciclos=4, com_ajustes=False)
+    bruto = caminho.read_bytes()
+    caminho.write_bytes(bruto[: len(bruto) - 40])
+    r = registry.read(caminho)
+
+    assert r.n_samples == 31
+    assert any("cortado" in a for a in r.notes), r.notes
+
+
+def test_um_CEV_inteiro_nao_ganha_aviso_de_corte(tmp_path):
+    for pc in (4, 8, 16):
+        r = registry.read(escrever_cev(tmp_path, nome=f"x{pc}", por_ciclo=pc, ciclos=15))
+        assert not any("cortado" in a or "estragada" in a for a in r.notes), r.notes
+
+
 def test_o_evento_que_o_rele_classificou_e_RELATO_e_nao_aviso(tmp_path):
     r = registry.read(escrever_cev(tmp_path))
     # Em `relatos`, não em `notes`: é informação do arquivo, não coisa que deu
