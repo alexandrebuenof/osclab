@@ -504,6 +504,19 @@ def test_o_lido_fica_guardado_com_digitado_por_cima():
     assert campos["rtc2"]["lido"] is None
 
 
+def test_sem_trinca_NENHUMA_o_aviso_nao_diz_que_ha_uma(tmp_path):
+    """Ensaio geral (15/11/2026): num registro só de digitais o painel dizia
+    «Este registro tem uma trinca de corrente só» — e não tem nenhuma."""
+    from osclab.formats import registry
+    from tests.fabrica import escrever_comtrade
+    r = registry.read(escrever_comtrade(tmp_path, na=0, nd=4, n=96))
+    p = _montado(r, _painel())
+    assert "nenhuma trinca de corrente" in p["falta"], p["falta"]
+    pa = janela.montar(r, colunas=200, layout=[paineis.Painel(
+        id="pa", tipo=paineis.ALFA, nome="", sinais=("A", "B", "C"))])["paineis"][0]
+    assert "nenhuma trinca de corrente" in pa["falta"], pa["falta"]
+
+
 def test_os_numeros_das_divisoes_do_eixo_sao_EXATOS():
     """Ensaio geral (15/11/2026): a tela escrevia as divisões com uma casa, e
     num eixo de 0 a 1 pu o quarto saía «0,3» — logo abaixo da linha do pickup

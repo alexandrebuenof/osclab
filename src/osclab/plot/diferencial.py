@@ -1061,9 +1061,13 @@ def montar(registro: Record, painel, ajustes: dict | None = None) -> dict:
                           "o que se desenhar é estudo, não o que o relé fez.")
 
     if lado1 is None or lado2 is None:
-        pacote["falta"] = ("Este registro tem uma trinca de corrente só: o "
-                           "diferencial precisa da corrente dos DOIS lados do "
-                           "trafo.")
+        # Sem trinca nenhuma (um registro só de digitais), dizer «uma só»
+        # afirmava uma corrente que o arquivo não tem (ensaio geral).
+        pacote["falta"] = (("Este registro não tem nenhuma trinca de corrente"
+                            if lado1 is None else
+                            "Este registro tem uma trinca de corrente só")
+                           + ": o diferencial precisa da corrente dos DOIS "
+                             "lados do trafo.")
         return pacote
     if pacote["faltam"]:
         return pacote

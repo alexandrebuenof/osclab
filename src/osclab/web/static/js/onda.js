@@ -13887,10 +13887,12 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     q.append(svgDoTrafo87(150, 64, true));
     const t = criar("div");
     const g = painel.lado1;
-    const titulo = criar("b", null, `Um lado só${g ? ` — ${g.rotulo}` : ""}`);
+    // Sem trinca NENHUMA (registro só de digitais) não há «um lado» nem
+    // «esta trinca» para olhar: o texto afirmaria uma corrente que não existe.
+    const titulo = criar("b", null, g ? `Um lado só — ${g.rotulo}` : "Sem trinca de corrente");
     if (g) titulo.title = g.nome;            // o radical só no hover
-    t.append(titulo, criar("p", null, painel.falta),
-             criar("p", "apagado-87", "Para olhar a corrente desta trinca, um gráfico analógico serve."));
+    t.append(titulo, criar("p", null, painel.falta));
+    if (g) t.append(criar("p", "apagado-87", "Para olhar a corrente desta trinca, um gráfico analógico serve."));
     q.append(t);
     return q;
   }

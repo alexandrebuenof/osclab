@@ -339,8 +339,10 @@ def montar(registro: Record, painel, outros: list | None = None,
     remoto = escolher(getattr(painel, "remoto", "") or "",
                       _chave(local[0], local[1]) if local else "", bool(outros))
     if local is None or remoto is None:
-        pacote["falta"] = ("Este registro tem uma trinca de corrente só: o "
-                           "plano alfa precisa da corrente do OUTRO terminal. "
+        pacote["falta"] = (("Este registro não tem nenhuma trinca de corrente"
+                            if local is None else
+                            "Este registro tem uma trinca de corrente só")
+                           + ": o plano alfa precisa da corrente do OUTRO terminal. "
                            "Ponha o registro do outro terminal nesta aba, em "
                            "«+ adicionar oscilografia».")
         if local is not None:
