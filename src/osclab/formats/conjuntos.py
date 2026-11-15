@@ -698,7 +698,8 @@ def _medir_ondas(registro: Record) -> frozenset[int] | None:
         if float(finitos.min()) >= 0.0:
             candidatas.append((canal.index, grandeza, pico))
             continue
-        if presenca.fundamental_relativa(valores, por_ciclo) >= presenca.FUNDAMENTAL_MINIMA:
+        if presenca.resumo_do_canal(registro, canal.index,
+                                    por_ciclo).razao >= presenca.FUNDAMENTAL_MINIMA:
             maior_onda[grandeza] = max(maior_onda.get(grandeza, 0.0), pico)
 
     magnitudes = {i for i, g, pico in candidatas

@@ -57,6 +57,7 @@ from __future__ import annotations
 import numpy as np
 
 from osclab import progresso
+from osclab.analysis import presenca
 from osclab.dsp import envoltoria, fasor
 from osclab.formats.base import Filtering, FilteringSource, Record
 
@@ -78,9 +79,12 @@ CICLOS_PARADOS_MINIMOS = 2
 
 def _distorcoes_em_regime(sinal: np.ndarray, por_ciclo: float) -> np.ndarray:
     """A distorção do canal, só nas amostras em que a amplitude está parada."""
-    f = envoltoria.fundamental(sinal, por_ciclo)
-    r = envoltoria.rms(sinal, por_ciclo)
+    return _distorcoes_de(envoltoria.fundamental(sinal, por_ciclo),
+                          envoltoria.rms(sinal, por_ciclo), por_ciclo)
 
+
+def _distorcoes_de(f: np.ndarray, r: np.ndarray, por_ciclo: float) -> np.ndarray:
+    """`_distorcoes_em_regime` a partir das curvas `f` (fundamental) e `r` (RMS)."""
     parado = np.zeros(f.shape, dtype=bool)
     # O passo de "um ciclo atrás" é de ÍNDICE, então é inteiro; a janela de
     # medida é que é de um ciclo de tempo. Ver `fasor.pesos_do_ciclo`.
@@ -114,32 +118,51 @@ def diagnosticar(registro: Record) -> tuple[Filtering, FilteringSource]:
 
     # Cada trecho tem a sua janela de um ciclo. Medir o registro inteiro com a
     # taxa do primeiro trecho acharia "distorção" onde só há taxa diferente.
-    medidas = []
+    trechos = registro.trechos
+    canais = registro.analog.shape[0]
+    # As distorções de todos os canais vão juntas para UMA mediana. Escritas
+    # direto num vetor só (15/11/2026), e não numa lista que depois se junta:
+    # a lista e a junção conviviam com a cópia que a mediana faz — três vezes
+    # o vetor, 430 MB num registro de 3 M amostras × 6 canais.
+    juntas = np.empty(sum(t.fim - t.inicio for t in trechos) * canais, dtype=np.float64)
+    usadas = 0
     por_ciclo = 0
     # Canal a canal é o passo do progresso da abertura (`osclab.progresso`).
-    passos, feitos = len(registro.trechos) * registro.analog.shape[0], 0
-    for trecho in registro.trechos:
+    passos, feitos = len(trechos) * canais, 0
+    for trecho in trechos:
         n = fasor.ciclo_em_amostras(trecho.taxa_hz, registro.line_frequency)
         if n < fasor.MINIMO_POR_CICLO:
             continue
         por_ciclo = max(por_ciclo, n)
-        for canal in registro.analog[:, trecho.inicio:trecho.fim]:
-            if (d := _distorcoes_em_regime(canal, n)).size:
-                medidas.append(d)
+        for k in range(canais):
+            canal = registro.analog[k, trecho.inicio:trecho.fim]
+            f = envoltoria.fundamental(canal, n)
+            r = envoltoria.rms(canal, n)
+            # A fundamental e o eficaz do canal são as curvas mais caras de
+            # abrir, e a presença de sinal e as trincas perguntam delas de
+            # novo: o resumo fica guardado pela matriz (`presenca.resumo_do_canal`).
+            presenca.guardar_resumo(registro.analog, canal, k, trecho.inicio,
+                                    trecho.fim, n, presenca.resumo_de(f, r))
+            d = _distorcoes_de(f, r, n)
+            del f, r
+            juntas[usadas:usadas + d.size] = d
+            usadas += d.size
             feitos += 1
             progresso.avancar(feitos, passos)
     if por_ciclo == 0:
         return Filtering.DESCONHECIDO, FilteringSource.DEDUZIDO
-    if not medidas:
+    if usadas == 0:
         return Filtering.DESCONHECIDO, FilteringSource.DEDUZIDO
 
-    juntas = np.concatenate(medidas)
+    juntas = juntas[:usadas]
     if juntas.size < CICLOS_PARADOS_MINIMOS * por_ciclo:
         return Filtering.DESCONHECIDO, FilteringSource.DEDUZIDO
 
     # Mediana, não média: um canal esquisito — saturado, mal escalado, ligado no
     # lugar errado — não pode decidir sozinho o que vale para o registro todo.
-    tipica = float(np.median(juntas))
+    # `overwrite_input` só deixa a mediana arrumar o próprio vetor em vez de
+    # copiá-lo: o número é o mesmo (o do meio da ordem).
+    tipica = float(np.median(juntas, overwrite_input=True))
 
     if tipica > SUJEIRA_DA_REDE:
         return Filtering.BRUTO, FilteringSource.DEDUZIDO

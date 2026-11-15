@@ -93,12 +93,20 @@ volta. Um zero que era informação nunca some sem avisar.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from osclab import progresso
 from osclab.dsp import envoltoria, fasor
 from osclab.formats import fases
-from osclab.formats.base import Record, lembrado_do_registro
+from osclab.formats.base import (
+    Record,
+    guardar_na_matriz,
+    impressao_da_linha,
+    lembrado_da_matriz,
+    lembrado_do_registro,
+)
 
 #: Abaixo disto, em relação ao maior canal da MESMA unidade, o canal vira
 #: candidato a morto — e aí quem decide é a fundamental. Serve para proteger a
@@ -117,13 +125,67 @@ def fundamental_relativa(sinal: np.ndarray, por_ciclo: int) -> float:
     O MAIOR, e não a mediana: basta o canal ter sido uma senoide limpa em algum
     trecho para estar ligado. Um canal vivo que passa por um transitório tem
     razão baixa no transitório, e isso não o mata.
+
+    Quem tem o REGISTRO na mão usa `resumo_do_canal`, que faz a mesma conta
+    uma vez só por canal.
     """
-    f = envoltoria.fundamental(sinal, por_ciclo)
-    r = envoltoria.rms(sinal, por_ciclo)
+    return resumo_de(envoltoria.fundamental(sinal, por_ciclo),
+                     envoltoria.rms(sinal, por_ciclo)).razao
+
+
+@dataclass(frozen=True)
+class Resumo:
+    """O que a abertura pergunta da fundamental e do eficaz de UM canal.
+
+    `maior_fundamental` é o pico da curva de 60 Hz (`alternados`); `razao` é
+    `fundamental_relativa` (`sem_sinal`, e as trincas em `conjuntos`).
+    """
+
+    maior_fundamental: float
+    razao: float
+
+
+def resumo_de(f: np.ndarray, r: np.ndarray) -> Resumo:
+    """O `Resumo` das curvas `f` (fundamental) e `r` (RMS) de um canal."""
+    maior = float(np.nanmax(f)) if np.isfinite(f).any() else 0.0
     vale = np.isfinite(f) & np.isfinite(r) & (r > 0)
-    if not vale.any():
-        return 0.0
-    return float(np.max(f[vale] / r[vale]))
+    razao = float(np.max(f[vale] / r[vale])) if vale.any() else 0.0
+    return Resumo(maior, razao)
+
+
+def chave_do_resumo(linha: np.ndarray, indice: int, inicio: int, fim: int,
+                    por_ciclo: float) -> tuple:
+    """A chave de `lembrado_da_matriz` do resumo de um canal num trecho."""
+    return ("presenca.resumo", int(indice), int(inicio), int(fim), float(por_ciclo),
+            fasor.estimador(), impressao_da_linha(linha))
+
+
+def guardar_resumo(matriz: np.ndarray, linha: np.ndarray, indice: int, inicio: int,
+                   fim: int, por_ciclo: float, resumo: Resumo) -> None:
+    """Deixa guardado o resumo que `filtragem.diagnosticar` já mediu do canal
+    `indice` (amostras `linha` = `matriz[indice, inicio:fim]`)."""
+    guardar_na_matriz(matriz, chave_do_resumo(linha, indice, inicio, fim, por_ciclo),
+                      resumo)
+
+
+def resumo_do_canal(registro: Record, indice: int, por_ciclo: float) -> Resumo:
+    """O `Resumo` do canal `indice` no registro INTEIRO, medido UMA vez.
+
+    É a conta mais cara de abrir um registro (a fundamental do canal inteiro),
+    e três perguntas a faziam de novo: o diagnóstico bruto × filtrado, a
+    presença de sinal e as trincas (15/11/2026: 36 fundamentais num registro
+    de 12 canais). Guardada pela MATRIZ de amostras (`base.lembrado_da_matriz`),
+    e o diagnóstico (`filtragem.diagnosticar`) deixa a dele guardada: as
+    curvas são as mesmas, bit a bit, e o número também.
+    """
+    linha = registro.analog[indice]
+
+    def fazer():
+        return resumo_de(envoltoria.fundamental(linha, por_ciclo),
+                         envoltoria.rms(linha, por_ciclo))
+    return lembrado_da_matriz(
+        registro.analog,
+        chave_do_resumo(linha, indice, 0, registro.analog.shape[1], por_ciclo), fazer)
 
 
 def alternados(registro: Record) -> frozenset[int]:
@@ -169,8 +231,7 @@ def _alternados(registro: Record) -> frozenset[int]:
         if not canal.unit.strip():
             continue
         valores = registro.analog[canal.index]
-        f = envoltoria.fundamental(valores, por_ciclo)
-        maior = float(np.nanmax(f)) if np.isfinite(f).any() else 0.0
+        maior = resumo_do_canal(registro, canal.index, por_ciclo).maior_fundamental
         # Canal todo NaN: `nanmean` avisaria «Mean of empty slice» no log a
         # cada registro; o resultado é o mesmo (NaN, e o canal fica de fora).
         media = float(np.nanmean(valores)) if np.isfinite(valores).any() else float("nan")
@@ -233,8 +294,7 @@ def _sem_sinal(registro: Record) -> frozenset[int]:
             continue
         if picos[canal.index] > FRACAO_DO_MAIOR * maior:
             continue
-        if fundamental_relativa(registro.analog[canal.index],
-                                 por_ciclo) >= FUNDAMENTAL_MINIMA:
+        if resumo_do_canal(registro, canal.index, por_ciclo).razao >= FUNDAMENTAL_MINIMA:
             continue
         mortos.add(canal.index)
 
