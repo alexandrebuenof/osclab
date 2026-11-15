@@ -160,6 +160,62 @@ def chave_do_resumo(linha: np.ndarray, indice: int, inicio: int, fim: int,
             fasor.estimador(), impressao_da_linha(linha))
 
 
+@dataclass(frozen=True)
+class Extremos:
+    """Os extremos das AMOSTRAS de um canal, com as regras de cada pergunta.
+
+    `pico` é o `nanmax(|x|)` (infinito conta), que `sem_sinal` usa;
+    `pico_finito` e `minimo_finito` ignoram o que não é finito, como as
+    trincas (`conjuntos._medir_ondas`) os pediam. `None` sem amostra finita.
+    Com `todos_finitos`, `pico` é também o `max(|x|)` simples (`imas.inicio`).
+    """
+
+    algum_finito: bool
+    pico: float
+    pico_finito: float | None
+    minimo_finito: float | None
+    todos_finitos: bool = False
+
+
+def extremos_do_canal(registro: Record, indice: int) -> Extremos:
+    """Os `Extremos` do canal `indice`, achados UMA vez por matriz.
+
+    A presença de sinal e as trincas percorriam a linha inteira, cada uma com
+    a sua máscara de finitos, a sua cópia dos finitos e o seu `|x|`
+    (15/11/2026). O canal sem NaN nem infinito — o de sempre, e a soma finita
+    prova isso — passa uma vez só por `|x|`; o máximo e o mínimo são exatos,
+    e saem os mesmos números das contas de antes.
+    """
+    linha = registro.analog[indice]
+
+    def fazer():
+        with np.errstate(all="ignore"):
+            soma = np.sum(linha)
+        if np.isfinite(soma):
+            if linha.size == 0:
+                return Extremos(False, 0.0, None, None)
+            pico = float(np.max(np.abs(linha)))
+            return Extremos(True, pico, pico, float(np.min(linha)), todos_finitos=True)
+        finitos = np.isfinite(linha)
+        if not finitos.any():
+            return Extremos(False, 0.0, None, None)
+        so = linha[finitos]
+        return Extremos(True, float(np.nanmax(np.abs(linha))),
+                        float(np.max(np.abs(so))), float(so.min()))
+    return lembrado_da_matriz(registro.analog,
+                              ("presenca.extremos", int(indice), impressao_da_linha(linha)),
+                              fazer)
+
+
+def com_mesmo_giro(conta, registro: Record):
+    """`conta(registro)` com o giro da DFT feito uma vez para todos os canais
+    (`envoltoria.mesmo_giro`): quem percorre os canais pedindo
+    `resumo_do_canal` sem o diagnóstico ter passado antes (o `.CEV`, que
+    declara a filtragem) paga um `exp` complexo por registro, não por canal."""
+    with envoltoria.mesmo_giro():
+        return conta(registro)
+
+
 def guardar_resumo(matriz: np.ndarray, linha: np.ndarray, indice: int, inicio: int,
                    fim: int, por_ciclo: float, resumo: Resumo) -> None:
     """Deixa guardado o resumo que `filtragem.diagnosticar` já mediu do canal
@@ -196,7 +252,7 @@ def alternados(registro: Record) -> frozenset[int]:
     catálogo, as contas e a lista do OscLab perguntam isto a cada pedido.
     """
     return lembrado_do_registro(registro, "presenca.alternados", (fasor.estimador(),),
-                                lambda: _alternados(registro))
+                                lambda: com_mesmo_giro(_alternados, registro))
 
 
 def _alternados(registro: Record) -> frozenset[int]:
@@ -234,7 +290,8 @@ def _alternados(registro: Record) -> frozenset[int]:
         maior = resumo_do_canal(registro, canal.index, por_ciclo).maior_fundamental
         # Canal todo NaN: `nanmean` avisaria «Mean of empty slice» no log a
         # cada registro; o resultado é o mesmo (NaN, e o canal fica de fora).
-        media = float(np.nanmean(valores)) if np.isfinite(valores).any() else float("nan")
+        algum = extremos_do_canal(registro, canal.index).algum_finito
+        media = float(np.nanmean(valores)) if algum else float("nan")
         if not np.isfinite(media) or maior < abs(media):
             continue
         if maior > 0.0 or fases.grandeza_da_unidade(canal.unit) in ("I", "V"):
@@ -248,7 +305,7 @@ def sem_sinal(registro: Record) -> frozenset[int]:
     Lembrado no registro (`base.lembrado`), como `alternados`.
     """
     return lembrado_do_registro(registro, "presenca.sem_sinal", (fasor.estimador(),),
-                                lambda: _sem_sinal(registro))
+                                lambda: com_mesmo_giro(_sem_sinal, registro))
 
 
 def _sem_sinal(registro: Record) -> frozenset[int]:
@@ -271,8 +328,7 @@ def _sem_sinal(registro: Record) -> frozenset[int]:
 
     picos: dict[int, float] = {}
     for canal in registro.analog_channels:
-        valores = registro.analog[canal.index]
-        pico = float(np.nanmax(np.abs(valores))) if np.isfinite(valores).any() else 0.0
+        pico = extremos_do_canal(registro, canal.index).pico
         picos[canal.index] = 0.0 if not np.isfinite(pico) else pico
 
     maior_da_unidade: dict[str, float] = {}

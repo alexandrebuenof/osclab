@@ -50,6 +50,8 @@ o ângulo importa.
 from __future__ import annotations
 
 import math
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 import numpy as np
 
@@ -104,10 +106,15 @@ def media_do_ciclo(v: np.ndarray, por_ciclo: float) -> np.ndarray:
     pesos = pesos_do_ciclo(por_ciclo)
     largura = pesos.size
     n = v.shape[-1]
-    saida = np.full(v.shape, np.nan, dtype=v.dtype if np.iscomplexobj(v)
-                    else np.float64)
+    tipo = v.dtype if np.iscomplexobj(v) else np.float64
+    # A conta é feita no tipo da SAÍDA (todos os chamadores já mandam float64
+    # ou complex128; um real de outro tipo seria somado em float64).
+    v = np.asarray(v, dtype=tipo)
     if n < largura:
-        return saida
+        return np.full(v.shape, np.nan, dtype=tipo)
+    # Só a cabeça (antes de caber uma janela) é NaN; o resto é escrito abaixo.
+    saida = np.empty(v.shape, dtype=tipo)
+    saida[..., :largura - 1] = np.nan
 
     # NaN não pode vazar para as amostras seguintes.
     #
@@ -127,14 +134,22 @@ def media_do_ciclo(v: np.ndarray, por_ciclo: float) -> np.ndarray:
     #
     # Zero no lugar do NaN entra só na SOMA, nunca na saída: zero na tela
     # seria afirmar "medi, e deu isso" onde não há o que medir.
-    furos = ~np.isfinite(v)
-    tem_furo = bool(furos.any())
-    if tem_furo:
-        v = np.where(furos, v.dtype.type(0), v)
-
-    acumulado = np.concatenate(
-        (np.zeros(v.shape[:-1] + (1,), dtype=v.dtype), np.cumsum(v, axis=-1)),
-        axis=-1)
+    #
+    # A soma acumulada vai direto para o vetor dela, com o zero na frente
+    # (15/11/2026: era `concatenate` de um `cumsum`, duas cópias do canal). E
+    # o NaN se procura só se a soma TOTAL não for finita: soma finita prova
+    # que não há NaN nem infinito em lugar nenhum, e poupa a máscara do canal
+    # inteiro no caso de sempre. A conta é a mesma, bit a bit.
+    acumulado = np.empty(v.shape[:-1] + (n + 1,), dtype=v.dtype)
+    acumulado[..., 0] = 0
+    np.cumsum(v, axis=-1, out=acumulado[..., 1:])
+    tem_furo = False
+    if not np.isfinite(acumulado[..., -1]).all():
+        furos = ~np.isfinite(v)
+        tem_furo = bool(furos.any())
+        if tem_furo:
+            v = np.where(furos, v.dtype.type(0), v)
+            np.cumsum(v, axis=-1, out=acumulado[..., 1:])
     # `i` percorre as posições em que a janela cabe inteira, `largura − 1` a
     # `n − 1`, e `inicio = i − largura + 1` (a amostra mais antiga dela) vai
     # de 0 a `n − largura`. São FATIAS contíguas: escritas como fatia, e não
@@ -142,16 +157,24 @@ def media_do_ciclo(v: np.ndarray, por_ciclo: float) -> np.ndarray:
     # «gathers» eram 6 dos 14 s de abrir um registro de um milhão de amostras
     # por canal). A conta é a mesma, na mesma ordem.
     m = n - largura + 1                           # quantas janelas cabem
+    # A soma é escrita no próprio lugar da saída, parcela a parcela e na mesma
+    # ordem da expressão de antes (15/11/2026): cada parcela intermediária era
+    # um vetor do tamanho do canal, e são as mesmas operações, bit a bit.
+    total = saida[..., largura - 1:]
     if largura == int(round(por_ciclo)):
         # Taxa que fecha: soma retangular das `largura` amostras, como sempre.
-        total = acumulado[..., largura:largura + m] - acumulado[..., 0:m]
+        np.subtract(acumulado[..., largura:largura + m], acumulado[..., 0:m], out=total)
     else:
         # O miolo (pesos 1) por soma acumulada, e as três pontas na mão.
-        total = (acumulado[..., largura - 1:largura - 1 + m] - acumulado[..., 2:2 + m]
-                 + pesos[0] * v[..., 0:m]
-                 + pesos[1] * v[..., 1:1 + m]
-                 + pesos[-1] * v[..., largura - 1:largura - 1 + m])
-    saida[..., largura - 1:] = total / float(por_ciclo)
+        np.subtract(acumulado[..., largura - 1:largura - 1 + m],
+                    acumulado[..., 2:2 + m], out=total)
+        del acumulado
+        parcela = np.empty_like(total)
+        for peso, comeco in ((pesos[0], 0), (pesos[1], 1), (pesos[-1], largura - 1)):
+            np.multiply(peso, v[..., comeco:comeco + m], out=parcela)
+            total += parcela
+        del parcela
+    total /= float(por_ciclo)
     if tem_furo:
         # Soma retangular da máscara: quantos NaN em cada janela de `largura`.
         quantos = _soma_movel(furos.astype(np.float64), largura)
@@ -174,8 +197,14 @@ def fundamental(sinal: np.ndarray, por_ciclo: int) -> np.ndarray:
     """
     if estimador() == "pico_a_pico":
         return pico_a_pico(sinal, por_ciclo)
-    return _fasor_deslizante(sinal, por_ciclo,
-                             lambda x: np.abs(x) / math.sqrt(2.0))
+    return _fasor_deslizante(sinal, por_ciclo, _eficaz_do_fasor)
+
+
+def _eficaz_do_fasor(x: np.ndarray) -> np.ndarray:
+    """`|X| / √2`, dividido no lugar (um vetor a menos; o mesmo número)."""
+    modulo = np.abs(x)
+    modulo /= math.sqrt(2.0)
+    return modulo
 
 
 def pico_a_pico(sinal: np.ndarray, por_ciclo: float) -> np.ndarray:
@@ -214,12 +243,7 @@ def fasores(sinal: np.ndarray, por_ciclo: int) -> np.ndarray:
         return np.full(np.shape(sinal), np.nan + 0j, dtype=np.complex128)
 
     n = float(por_ciclo)
-    # O giro usa o índice ABSOLUTO, não `k % n`: com `n` fracionário a
-    # exponencial não tem período inteiro, e o resto quebraria a soma móvel.
-    # A 125 mil amostras o argumento chega a 4.700 radianos, que o float64
-    # ainda carrega com 1e-12 rad de erro — bem abaixo do que se lê na tela.
-    k = np.arange(x.shape[-1], dtype=np.float64)
-    giro = np.exp(-2j * np.pi * k / n)
+    giro = _giro(x.shape[-1], n)
 
     # A JANELA é o que separa Fourier, dois ciclos e meio ciclo: a mesma média
     # do sinal girado, sobre um ciclo, dois ou meio. Em meio ciclo a parcela
@@ -227,11 +251,63 @@ def fasores(sinal: np.ndarray, por_ciclo: int) -> np.ndarray:
     # exato numa senoide pura, e só a contínua e os pares o fazem oscilar.
     qual = estimador()
     janela = {"dois_ciclos": 2.0 * n, "meio_ciclo": n / 2.0}.get(qual, n)
-    fourier = 2.0 * np.conj(giro) * media_do_ciclo(x.astype(np.complex128) * giro,
-                                                   janela)
+    # `2·conj(giro)·média(x·giro)`, escrito com um vetor complexo a menos de
+    # cada vez (15/11/2026). `x * giro` converte `x` para complexo pelo
+    # caminho de `astype` (só que aos pedaços), e as multiplicações no lugar
+    # são as mesmas, na mesma ordem: o número é o mesmo, bit a bit.
+    media = media_do_ciclo(x * giro, janela)
+    dobro = np.conj(giro)
+    dobro *= 2.0
+    # `dobro · média`, nesta ordem, escrito em cima da média (vale para um
+    # canal e para vários de uma vez: o giro é o mesmo para todos).
+    fourier = np.multiply(dobro, media, out=media)
+    del dobro, media
     if qual == "cosseno":
         return _cosseno(fourier.real, n)
     return fourier
+
+
+#: Os giros já feitos, enquanto `mesmo_giro` estiver aberto: `None` fora dele.
+_GIROS: ContextVar[dict | None] = ContextVar("giros_da_envoltoria", default=None)
+
+
+def _giro(tamanho: int, n: float) -> np.ndarray:
+    """`e^(−j2πk/n)` para `k = 0 … tamanho − 1`.
+
+    O giro usa o índice ABSOLUTO, não `k % n`: com `n` fracionário a
+    exponencial não tem período inteiro, e o resto quebraria a soma móvel.
+    A 125 mil amostras o argumento chega a 4.700 radianos, que o float64
+    ainda carrega com 1e-12 rad de erro — bem abaixo do que se lê na tela.
+
+    Dentro de `mesmo_giro` sai do lembrado (é o mesmo vetor para todos os
+    canais de um trecho); quem o recebe não pode alterá-lo.
+    """
+    lembrados = _GIROS.get()
+    chave = (int(tamanho), float(n))
+    if lembrados is not None and chave in lembrados:
+        return lembrados[chave]
+    k = np.arange(tamanho, dtype=np.float64)
+    giro = np.exp(-2j * np.pi * k / n)
+    if lembrados is not None:
+        lembrados.clear()           # um só por vez: 16 bytes por amostra
+        lembrados[chave] = giro
+    return giro
+
+
+@contextmanager
+def mesmo_giro():
+    """Faz o giro da DFT uma vez para todos os canais medidos aqui dentro.
+
+    Quem percorre os canais de um registro (o diagnóstico bruto × filtrado, a
+    presença de sinal) pede a fundamental de cada um com o mesmo tamanho e a
+    mesma janela: o `exp` complexo do giro era um quarto da conta (32 ms por
+    milhão de amostras, por canal). O número é o mesmo, bit a bit.
+    """
+    marca = _GIROS.set({})
+    try:
+        yield
+    finally:
+        _GIROS.reset(marca)
 
 
 def _cosseno(y: np.ndarray, n: float) -> np.ndarray:
@@ -305,7 +381,8 @@ def rms(sinal: np.ndarray, por_ciclo: int) -> np.ndarray:
     if x is None:
         return np.full(np.shape(sinal), np.nan, dtype=np.float64)
 
-    return np.sqrt(media_do_ciclo(np.square(x), float(por_ciclo)))
+    media = media_do_ciclo(np.square(x), float(por_ciclo))
+    return np.sqrt(media, out=media)
 
 
 def continua(sinal: np.ndarray, por_ciclo: int) -> np.ndarray:
