@@ -186,7 +186,7 @@
     <span class="fi"><span class="rot">amostras</span
       ><span class="val">{{ item.n_amostras|milhar }}</span></span>
     <span class="fi"><span class="rot">taxa</span
-      ><span class="val">{{ '%g'|format(item.taxa_hz) }} Hz · {{ '%.2f'|format(item.amostras_por_ciclo) }}/ciclo</span></span>
+      ><span class="val">{{ item.taxa_hz|decimal }} Hz · {{ item.amostras_por_ciclo|decimal('%.2f') }}/ciclo</span></span>
     <span class="fi"><span class="rot">canais</span
       ><span class="val">{{ item.n_analogicos }} analóg. · {{ item.n_digitais }} digitais</span></span>
     {#- TC e TP sao de CADA canal, nao do arquivo: so' aparecem quando todos os
