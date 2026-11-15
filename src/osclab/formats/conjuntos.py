@@ -53,6 +53,7 @@ from enum import StrEnum
 
 import numpy as np
 
+from osclab import progresso
 from osclab.formats import fases
 from osclab.formats.base import Record, lembrado, lembrado_do_registro
 
@@ -680,7 +681,8 @@ def _medir_ondas(registro: Record) -> frozenset[int] | None:
 
     maior_onda: dict[str, float] = {}
     candidatas: list[tuple[int, str, float]] = []
-    for canal in registro.analog_channels:
+    for k, canal in enumerate(registro.analog_channels, 1):
+        progresso.avancar(k - 1, len(registro.analog_channels))
         grandeza = fases.grandeza_da_unidade(canal.unit)
         if not grandeza:
             continue

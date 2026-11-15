@@ -1139,6 +1139,92 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     }
   }
 
+  // --- a barra de progresso da ABERTURA (14/11/2026) ---------------------
+  //
+  // Abrir um registro grande leva segundos (ondas viajantes: 12 a 36 s), e o
+  // «Carregando o registro…» parado não dizia se o programa andava. O pedido
+  // da janela leva um TOKEN; enquanto ele está em voo, a tela pergunta a
+  // `/api/abertura/<token>` onde a abertura está. Quem diz a etapa e a
+  // fração é o SERVIDOR (`osclab/progresso.py`), que só abre uma abertura se
+  // algum registro do pedido ainda não estiver aberto — gesto não tem barra.
+  // A tela só pinta: a barra, o nome curto da etapa e a porcentagem.
+
+  //: Abaixo disto a barra não aparece: registro que abre depressa não pisca.
+  const ESPERA_DA_BARRA_MS = 300;
+  //: De quanto em quanto a tela pergunta, enquanto a barra está na tela.
+  const PASSO_DA_BARRA_MS = 150;
+
+  /** Este pedido pode ABRIR registro? Na primeira janela, ou quando a aba
+   *  ganhou um registro que a última janela ainda não trazia. */
+  function pedidoQueAbre() {
+    if (!dados) return true;
+    const ja = new Set((dados.ieds || []).map((f) => f.sha));
+    return outrosRegistros.some((x) => !ja.has(x.sha));
+  }
+
+  /** Acompanha a abertura `token`; devolve `{ parar }`, a chamar quando o
+   *  pedido da janela terminar (deu certo ou não). */
+  function acompanharAbertura(token) {
+    let vivo = true;
+    let relogio = null;
+    let caixa = null;
+    const montar = () => {
+      const el = criar("div", "abertura");
+      el.setAttribute("role", "progressbar");
+      el.setAttribute("aria-valuemin", "0");
+      el.setAttribute("aria-valuemax", "100");
+      const trilho = criar("span", "abertura-trilho");
+      trilho.append(criar("span", "abertura-feito"));
+      el.append(trilho, criar("span", "abertura-etapa"), criar("span", "abertura-pct"));
+      // Sem nada desenhado, a barra toma o lugar do «Carregando…» (e leva
+      // `.vazio`: o tratador de erro global continua sabendo que a tela não
+      // desenhou). Com a tela cheia — «+ adicionar oscilografia» —, ela vai
+      // na tira dos IEDs, onde o registro novo vai aparecer.
+      if (!blocos.length) {
+        el.classList.add("vazio");
+        area.replaceChildren(el);
+      } else {
+        const tira = document.getElementById("tira-dos-ieds");
+        el.classList.add("abertura-na-tira");
+        (tira || area).prepend(el);
+        if (tira) tira.hidden = false;
+      }
+      return el;
+    };
+    const pintar = (e) => {
+      caixa = caixa || montar();
+      const pct = Math.round(100 * Math.min(Math.max(e.fracao || 0, 0), 1));
+      caixa.querySelector(".abertura-feito").style.width = `${pct}%`;
+      caixa.querySelector(".abertura-etapa").textContent = e.erro
+        ? `Não consegui abrir: ${e.erro}` : (e.rotulo || "");
+      caixa.querySelector(".abertura-pct").textContent = e.erro ? "" : `${pct} %`;
+      caixa.classList.toggle("com-erro", !!e.erro);
+      caixa.setAttribute("aria-valuenow", String(pct));
+      caixa.title = e.registros > 1
+        ? `Abrindo ${e.registros} oscilografias desta aba.` : "Abrindo a oscilografia.";
+    };
+    const perguntar = async () => {
+      if (!vivo) return;
+      try {
+        const r = await fetch(`/api/abertura/${encodeURIComponent(token)}`);
+        const e = r.ok ? await r.json() : null;
+        if (vivo && e && e.ativa) pintar(e);
+      } catch (_e) {
+        // Sem resposta, não se inventa progresso: quem diz o erro é o
+        // pedido da janela, que falha junto (`avisarDaFalha`).
+      }
+      if (vivo) relogio = setTimeout(perguntar, PASSO_DA_BARRA_MS);
+    };
+    relogio = setTimeout(perguntar, ESPERA_DA_BARRA_MS);
+    return {
+      parar() {
+        vivo = false;
+        clearTimeout(relogio);
+        if (caixa && caixa.isConnected) caixa.remove();
+      },
+    };
+  }
+
   async function carregarAgora(gesto = {}) {
     // Resposta mais VELHA que a última aplicada é descartada: com o servidor
     // lento, um pedido de antes que chegasse depois punha de volta a janela
@@ -1165,6 +1251,13 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     if (estaticos) p.set("estaticos", estaticos.selo);
     const pontos = pontosDasOndas();
     p.set("imas", pontos);
+    // O token da barra de progresso, só no pedido que pode abrir registro.
+    let barra = null;
+    if (pedidoQueAbre()) {
+      const token = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+      p.set("abertura", token);
+      barra = acompanharAbertura(token);
+    }
 
     try {
       const r = await fetch(`/api/onda/${sha}?${p}`, pedidoComLayout());
@@ -1226,6 +1319,10 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       }));
     } catch (erro) {
       avisarDaFalha(erro);
+    } finally {
+      // Terminou, dando certo ou não: a barra sai (o desenho, ou a mensagem
+      // de erro, já tomou o lugar dela). Barra parada para sempre, nunca.
+      if (barra) barra.parar();
     }
   }
 

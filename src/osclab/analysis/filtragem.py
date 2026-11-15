@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from osclab import progresso
 from osclab.dsp import envoltoria, fasor
 from osclab.formats.base import Filtering, FilteringSource, Record
 
@@ -115,6 +116,8 @@ def diagnosticar(registro: Record) -> tuple[Filtering, FilteringSource]:
     # taxa do primeiro trecho acharia "distorção" onde só há taxa diferente.
     medidas = []
     por_ciclo = 0
+    # Canal a canal é o passo do progresso da abertura (`osclab.progresso`).
+    passos, feitos = len(registro.trechos) * registro.analog.shape[0], 0
     for trecho in registro.trechos:
         n = fasor.ciclo_em_amostras(trecho.taxa_hz, registro.line_frequency)
         if n < fasor.MINIMO_POR_CICLO:
@@ -123,6 +126,8 @@ def diagnosticar(registro: Record) -> tuple[Filtering, FilteringSource]:
         for canal in registro.analog[:, trecho.inicio:trecho.fim]:
             if (d := _distorcoes_em_regime(canal, n)).size:
                 medidas.append(d)
+            feitos += 1
+            progresso.avancar(feitos, passos)
     if por_ciclo == 0:
         return Filtering.DESCONHECIDO, FilteringSource.DEDUZIDO
     if not medidas:

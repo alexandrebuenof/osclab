@@ -21,6 +21,7 @@ POST   /api/acervo/<sha>/nome     renomeia o registro DENTRO do OscLab
 GET    /api/acervo/<sha>/exportar baixa os arquivos com o nome escolhido
 GET    /onda/<sha>                a tela de formas de onda
 GET    /api/onda/<sha>            uma janela do registro, pronta para desenhar
+GET    /api/abertura/<token>      o progresso da abertura que esse pedido acompanha
 POST   /api/onda/<sha>            a mesma janela, com o arranjo de painéis
 GET    /api/onda/<sha>/leitura    o valor de cada sinal onde os cursores estão
 POST   /api/onda/<sha>/leitura    a mesma leitura, com o arranjo de painéis
@@ -76,7 +77,7 @@ from flask import (
     send_from_directory,
 )
 
-from osclab import paths, version
+from osclab import paths, progresso, version
 from osclab.analysis import falta as falta_mod
 from osclab.basedados import digitais as digitais_mod
 from osclab.basedados import linhas as linhas_mod
@@ -272,11 +273,33 @@ def create_app() -> Flask:
             na_antessala=_antessala_em_json(),
         )
 
+    @app.route("/api/abertura/<token>")
+    def progresso_da_abertura(token: str):
+        # A rota LEVE que a tela consulta enquanto a primeira janela não
+        # chega: só lê o estado que o pedido da janela vai escrevendo. Ver
+        # `osclab/progresso.py`.
+        return jsonify(progresso.estado(token) or {"ativa": False})
+
     @app.route("/api/onda/<sha>", methods=["GET", "POST"])
     def janela_da_onda(sha: str):
+        # `abertura` é o token com que a tela acompanha o progresso. Só vira
+        # abertura se algum registro do pedido ainda não estiver aberto: a
+        # janela de um gesto não tem barra nenhuma.
+        shas = [sha, *_shas_dos_outros(sha)]
+        novos = [s for s in shas if not acervo.esta_aberto(s)]
+        with progresso.abrindo(request.args.get("abertura"), novos):
+            resposta = _janela_da_onda(sha)
+            if not isinstance(resposta, tuple):
+                # A janela está montada; o resto é o pacote viajar e a tela
+                # pintar — o «primeiro desenho».
+                progresso.etapa("desenho")
+            return resposta
+
+    def _janela_da_onda(sha: str):
         try:
             registro = acervo.ler(sha)
         except FormatError as exc:
+            progresso.falhou(str(exc))
             return jsonify(erro=str(exc)), 404
         # A tela manda o GESTO (ampliar tanto em torno deste instante, andar
         # tantos segundos) e a janela em que ela estava. Quem decide a janela
@@ -293,6 +316,9 @@ def create_app() -> Flask:
         )
         arranjo = _layout()
         outros = _outros_registros(sha)
+        # Lidos os registros, o que pesa são as contas do registro inteiro,
+        # feitas (uma vez) dentro da montagem da janela.
+        progresso.etapa("contas")
         # O que a tela já tem igual desde o pedido anterior não viaja de novo
         # (o catálogo, a lista de todos os digitais). Ver `janela.sem_repetir`.
         selo = request.args.get("estaticos")
@@ -1316,18 +1342,26 @@ def _outros_registros(sha: str) -> list:
     nada de cache: o servidor já caiu por falta de memória no Windows.
     Registro que sumiu do acervo é pulado, em vez de derrubar a tela.
     """
+    saida = []
+    for outro in _shas_dos_outros(sha):
+        try:
+            saida.append((acervo.ler(outro), acervo.apelido(outro), outro))
+        except FormatError:
+            continue
+    return saida
+
+
+def _shas_dos_outros(sha: str) -> list[str]:
+    """Os `sha` dos OUTROS registros da aba, como vieram no corpo, sem abrir
+    nenhum (é o que diz se o pedido é uma abertura, `progresso.abrindo`)."""
     corpo = request.get_json(silent=True)
     if not isinstance(corpo, dict) or not isinstance(corpo.get("registros"), list):
         return []
     saida = []
     for item in corpo["registros"][:varios_mod.MAXIMO_DE_REGISTROS - 1]:
         outro = str((item or {}).get("sha") or "") if isinstance(item, dict) else ""
-        if not outro or outro == sha:
-            continue
-        try:
-            saida.append((acervo.ler(outro), acervo.apelido(outro), outro))
-        except FormatError:
-            continue
+        if outro and outro != sha:
+            saida.append(outro)
     return saida
 
 

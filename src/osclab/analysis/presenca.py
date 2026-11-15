@@ -95,6 +95,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from osclab import progresso
 from osclab.dsp import envoltoria, fasor
 from osclab.formats import fases
 from osclab.formats.base import Record, lembrado_do_registro
@@ -163,7 +164,8 @@ def _alternados(registro: Record) -> frozenset[int]:
         return frozenset(c.index for c in registro.analog_channels)
 
     saida: set[int] = set()
-    for canal in registro.analog_channels:
+    for k, canal in enumerate(registro.analog_channels, 1):
+        progresso.avancar(k - 1, len(registro.analog_channels))
         if not canal.unit.strip():
             continue
         valores = registro.analog[canal.index]

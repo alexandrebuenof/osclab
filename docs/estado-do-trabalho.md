@@ -1,5 +1,26 @@
 # Onde o trabalho está
 
+**14/11/2026 — barra de PROGRESSO ao abrir uma oscilografia (ramo do agente, para
+revisão):** pedido dele: «quando estamos abrindo uma oscilografia, apareça uma barra com
+o progresso». No lugar do «Carregando o registro…» parado, uma linha: trilho, nome curto
+da etapa, porcentagem. O progresso é do SERVIDOR (`src/osclab/progresso.py`): o pedido da
+janela leva `abertura=<token>` e a tela pergunta `/api/abertura/<token>` a cada 150 ms
+enquanto ele está em voo; só aparece depois de 300 ms. Etapas e peso medido num
+sintético de ondas viajantes (12 canais × 1 M amostras, 11 s para abrir): ler o arquivo
+1 % (0,13 s) · bruto × filtrado 21 % (2,4 s, canal a canal) · canais e grupos ~0 % ·
+contas do registro 72 % (presença 1,6 s, trincas 2,1 s, início 0,6 s, energia 3,4 s; cada
+uma anda canal a canal ou linha a linha, e a etapa diz qual conta está rodando) ·
+primeiro desenho ~5 % (0,5 s). Medida a cada 150 ms, a barra anda quase em linha reta
+com o tempo (0 % → 93 % em 11 s, e 100 % no fim). Vale também para «+ adicionar
+oscilografia» (a barra vai na tira dos IEDs, sem apagar os gráficos). Gesto sobre registro
+aberto nunca tem barra. De passagem: `acervo.ler` ganhou trava por registro — dois
+pedidos que abriam o mesmo registro novo ao mesmo tempo o liam duas vezes. `CONTRATO`
+não mudou (o pacote da janela é o mesmo). **Para ele decidir:** (1) mostrar a
+porcentagem ao lado da etapa, ou só a barra e a etapa; (2) a etapa «bruto × filtrado» e
+«trincas» são nomes técnicos — trocar por outro texto?; (3) os 300 ms antes de aparecer;
+(4) onde a barra fica no «+ adicionar oscilografia» (hoje no alto da tira dos IEDs).
+Fotos: `tests/test_abertura_navegador.py` com `OSCLAB_FOTOS=<pasta>`.
+
 **12/11/2026 — navegação LEVE e gestos que se compõem (ramo do agente, para revisão):**
 «meio travado nas oscilografias maiores como a de Alto Boa Vista»; depois: ondas
 viajantes (milhões de amostras), 487E, registros longos, duas pesadas na aba. Medido em

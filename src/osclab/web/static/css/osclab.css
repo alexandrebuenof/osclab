@@ -830,6 +830,40 @@ code { font-family: var(--mono); font-size: 0.92em; }
 
 .vazio { color: var(--suave); font-size: 14px; margin: 0; }
 
+/* A barra de progresso da ABERTURA (14/11/2026): o servidor diz a etapa e a
+   fração (`osclab/progresso.py`), a tela só pinta. Uma linha: trilho, nome
+   curto da etapa, porcentagem. Só aparece se abrir demorar mais de 300 ms. */
+.abertura {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 560px;
+  font-size: 13px;
+  color: var(--suave);
+}
+.abertura-trilho {
+  flex: 1 1 auto;
+  min-width: 160px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--destaque-fraco);
+  border: 1px solid var(--linha);
+  overflow: hidden;
+}
+.abertura-feito {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--destaque);
+  transition: width 140ms linear;
+}
+.abertura-etapa { flex: none; min-width: 11em; color: var(--tinta); }
+.abertura-pct { flex: none; min-width: 3.5em; text-align: right;
+  font-variant-numeric: tabular-nums; }
+.abertura.com-erro .abertura-etapa { color: var(--ruim); }
+.abertura.com-erro .abertura-feito { background: var(--ruim); }
+.abertura-na-tira { padding: 4px 0; }
+
 .registro {
   background: var(--superficie);
   border: 1px solid var(--linha);

@@ -33,6 +33,8 @@ from typing import Protocol, runtime_checkable
 
 import numpy as np
 
+from osclab import progresso
+
 
 class FormatError(Exception):
     """Arquivo que nenhum leitor abre, ou que está corrompido.
@@ -436,7 +438,10 @@ def lembrado(registro: Record, nome: str, iguais: tuple, mesmos: tuple, fazer):
     if achado is not None and len(achado[0]) == len(mesmos) \
             and all(a is b for a, b in zip(achado[0], mesmos, strict=True)):
         return achado[1]
-    valor = fazer()
+    # Conta do registro inteiro sendo FEITA: é o passo da etapa «contas» do
+    # progresso da abertura (no-op fora dela). Ver `osclab.progresso`.
+    with progresso.conta(nome):
+        valor = fazer()
     caixa.pop(chave, None)
     caixa[chave] = (mesmos, valor)
     while len(caixa) > _LEMBRADOS_POR_REGISTRO:

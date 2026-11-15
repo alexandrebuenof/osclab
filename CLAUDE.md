@@ -147,6 +147,7 @@ osclab/
 ├── config/                config.ini.example é versionado; config.ini NÃO
 ├── src/osclab/
 │   ├── paths.py           TODO caminho sai daqui
+│   ├── progresso.py       a barra de progresso de abrir um registro
 │   ├── version.py         comparação de versões
 │   ├── formats/           um leitor por formato; base.py é o contrato
 │   ├── dsp/               fasor.py: DFT de um ciclo, RMS, DC, THD
@@ -349,6 +350,24 @@ osclab/
   deslocava o zoom). A roda vale durante o arrasto da oscilografia. Teste:
   `tests/test_navegacao_navegador.py`, com `combinacoes.mjs` — a janela final
   é a composição dos gestos, conferida gesto a gesto.
+- **Abrir registro tem barra de PROGRESSO, e ela é VERDADEIRA**
+  *(14/11/2026)*. O pedido da janela que pode abrir registro (a primeira, ou
+  a de um registro novo na aba) leva `abertura=<token>`; enquanto ele está em
+  voo a tela pergunta a `/api/abertura/<token>` a cada 150 ms. Quem diz a
+  etapa (ler · bruto × filtrado · canais e grupos · contas do registro ·
+  primeiro desenho) e a fração é o SERVIDOR (`osclab/progresso.py`): o
+  leitor, o diagnóstico e as contas do registro inteiro (`base.lembrado`)
+  anunciam o passo, canal a canal; os pesos das etapas são medidos; a fração
+  só cresce. Só vira abertura se algum registro do pedido NÃO estiver aberto
+  (`acervo.esta_aberto`) — gesto nunca tem barra —, e a barra só aparece
+  depois de 300 ms (o rápido não pisca). Erro vira estado de erro, e a barra
+  sai quando o pedido termina, dando certo ou não: barra parada para sempre
+  é o «carregando eterno» de novo. Sem nada desenhado ela toma o lugar do
+  «Carregando…» (com `.vazio`, para o tratador de erro global); com a tela
+  cheia («+ adicionar oscilografia») vai na tira dos IEDs. `acervo.ler` tem
+  uma trava POR REGISTRO: dois pedidos que abrem o mesmo o leem uma vez, e
+  quem espera acompanha a leitura do outro (ela é guardada por sha). Testes:
+  `tests/test_progresso.py`, `tests/test_abertura_navegador.py`.
 - **Traço reto é riscado em PEDAÇOS de 32 vértices** (`tracarEmPedacos`,
   junta e ponta redondas: o mesmo desenho). O navegador contorna uma linha de
   1,4 px com 2600 vértices (mín./máx. de 1300 colunas) de uma vez, e o

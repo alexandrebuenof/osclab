@@ -243,6 +243,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from osclab import progresso
 from osclab.dsp import envoltoria, potencia, simetricas
 from osclab.formats import conjuntos, fases
 from osclab.formats.base import Record, impressao_das_amostras, lembrado
@@ -1157,7 +1158,8 @@ def energia_das_linhas(registro: Record, disponiveis, lado: str,
     n = registro.analog.shape[1]
     hz = registro.line_frequency
     saida: dict[str, tuple] = {}
-    for linha, sinal in ondas.items():
+    for k, (linha, sinal) in enumerate(ondas.items(), 1):
+        progresso.avancar(k - 1, len(ondas))
         onda = serie(registro, sinal, 0, n, trechos, lado, escalas)
         if onda.size == 0:
             continue

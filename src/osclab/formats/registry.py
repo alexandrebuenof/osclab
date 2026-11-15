@@ -82,6 +82,10 @@ def read(path: Path) -> Record:
     """
     # Import adiado: `analysis` conversa com `formats`, e importá-lo no topo
     # fecharia um ciclo.
+    from osclab import progresso
     from osclab.analysis import filtragem
 
-    return filtragem.aplicar(reader_for(path).read(Path(path)))
+    progresso.etapa("ler")
+    registro = reader_for(path).read(Path(path))
+    progresso.etapa("diagnostico")
+    return filtragem.aplicar(registro)
