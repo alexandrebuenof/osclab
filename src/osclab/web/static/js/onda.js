@@ -405,7 +405,12 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   const MAXIMO_DE_OUTROS = 2;
   const NOME_DO_ALINHAMENTO = {
     falta: "início da falta", disparo: "disparo", hora: "hora do arquivo",
+    // o aplicado no refino da seq. negativa (`alinhamento.MAO`, 17/11/2026)
+    mao: "à mão",
   };
+  /** Algum IED tem alinhamento aplicado no refino? Sem ele, «à mão» some. */
+  const temAMao = () => !!(dados && (dados.ieds || []).some(
+    (f) => f.a_mao_ms !== null && f.a_mao_ms !== undefined));
 
   function lerAba() {
     try {
@@ -484,6 +489,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     if (ieds.length > 1) {
       barra.append(criar("span", "rotulo-dos-ieds", "alinhar por"));
       for (const [chave, nome] of Object.entries(NOME_DO_ALINHAMENTO)) {
+        if (chave === "mao" && !temAMao()) continue;
         const b = criar("button", "chave" + (alinharPor === chave ? " escolhido" : ""), nome);
         b.type = "button";
         b.title = {
@@ -492,6 +498,10 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
           disparo: "O gatilho de cada registro no mesmo instante.",
           hora: "O carimbo de tempo de cada arquivo: mostra a diferença de "
             + "relógio entre os relés como ela é.",
+          mao: "O deslocamento aplicado no «refinar» da seq. negativa: os "
+            + "gráficos, o painel localizador e o refino no mesmo alinhamento. "
+            + "Escolher outro critério não o apaga; quem apaga é o automático "
+            + "do refino.",
         }[chave];
         b.addEventListener("click", () => {
           if (alinharPor === chave) return;
@@ -13067,7 +13077,16 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   window.addEventListener("message", (e) => {
     if (e.origin !== location.origin || !e.data) return;
     if (e.data.tipo === "refino-fechar") fecharRefino();
-    else if (e.data.tipo === "refino-alinhamento") recalcularLoc();   // já gravado
+    else if (e.data.tipo === "refino-alinhamento") {                  // já gravado
+      // O aplicado no refino vale também para os gráficos: «alinhar por»
+      // passa a «à mão»; apagado (voltou ao automático), sai dele.
+      const antes = alinharPor;
+      if (e.data.d !== null && e.data.d !== undefined) alinharPor = "mao";
+      else if (alinharPor === "mao") alinharPor = "falta";
+      if (alinharPor !== antes) guardarAba();
+      carregar();
+      recalcularLoc();
+    }
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && quadroRefino) { e.stopImmediatePropagation(); pedirFecharRefino(); }
