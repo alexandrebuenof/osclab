@@ -9,6 +9,7 @@ e V_falta = Rf·I_falta). Sem fixture, como o `test_falta`.
 from __future__ import annotations
 
 import cmath
+import dataclasses
 import math
 from datetime import datetime
 
@@ -566,3 +567,60 @@ def test_a_capacitancia_da_base_chega_a_localizacao():
     zero = seqneg.linha_da_base(
         linhas.Linha("LT Z", "A", "B", 4.8, 24.0, 60.0, 18.0, 72.0, 0.0, 0.0))
     assert "b1" not in zero and "b0" not in zero
+
+
+# ---------------------------------------------------------------------------
+# Religamento sobre a falta (LT A_ FLORESTA, 16/11/2026)
+# ---------------------------------------------------------------------------
+
+T_FECHA = T_FALTA - 1.1 / F0
+
+
+def _religamento() -> Record:
+    """A linha começa DESLIGADA; o disjuntor fecha em `T_FECHA` com o polo A
+    atrasado (B e C levam carga) e a corrente da falta AG só aparece em
+    `T_FALTA`, pouco mais de um ciclo depois — o registro real de 20:13:45."""
+    rede = _rede(0.43, 0.0, "AG", delta=0.0)
+    r = _registro(rede["S"])
+    dados = r.analog.copy()
+    dados[:, r.time < T_FECHA] *= 0.001
+    dados[3, (r.time >= T_FECHA) & (r.time < T_FALTA)] *= 0.001
+    return Record(source=None, format_name="teste", station="SE ALFA", line_frequency=F0,
+                  start_time=r.start_time, analog_channels=r.analog_channels,
+                  sample_rates=r.sample_rates, analog=dados, time=r.time)
+
+
+def test_religamento_sobre_a_falta_localiza_a_partir_do_salto_da_fase(monkeypatch):
+    """O veredito marca o FECHAMENTO; a falta só começa um ciclo depois. Com o
+    início no fechamento, a falta «acabava» enquanto a corrente ainda subia,
+    não sobrava platô e nenhum método localizava.
+
+    O veredito é posto no fechamento à mão: no relé real as fases sãs
+    passando a levar carga bastaram para o detector, e no sintético não —
+    o que se testa aqui é o localizador, não o detector."""
+    reg = _religamento()
+    original = ldl.terminal
+
+    def no_fechamento(r):
+        term = original(r)
+        n = int(np.searchsorted(r.time, T_FECHA))
+        veredito = dataclasses.replace(term.veredito, instante=n)
+        return dataclasses.replace(term, veredito=veredito)
+    monkeypatch.setattr(ldl, "terminal", no_fechamento)
+    term = ldl.terminal(reg)
+    assert abs(ldl.inicio_da_falta(term) - T_FALTA) < 0.25 / F0
+    p = ldl.montar(reg, None, 0.0, LINHA, None)
+    # O fasor de um ciclo cruza a metade meio ciclo depois da abertura.
+    assert abs(p["eventos"]["fim_falta"] - T_ABRE) < 0.6 / F0
+    t0, t1 = p["eventos"]["plato"]
+    assert T_FALTA < t0 < t1 < T_ABRE
+    assert p["metodos"]["laco"]["km"] == pytest.approx(0.43 * L_KM, abs=0.1)
+
+
+def test_falta_comum_nao_muda_de_inicio():
+    """O critério é a contradição (a falta acabando antes do pico dela): numa
+    falta comum o início continua o do veredito."""
+    rede = _rede(0.43, 5.0, "AG")
+    for reg in (_registro(rede["S"]), _registro(rede["S"], abre=False)):
+        term = ldl.terminal(reg)
+        assert ldl.inicio_da_falta(term) == float(reg.time[term.veredito.instante])
