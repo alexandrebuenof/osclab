@@ -12,6 +12,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 
 import numpy as np
+import pytest
 
 from osclab.formats.base import AnalogChannel, Record, SampleRate, StatusChannel
 from osclab.plot import alinhamento, janela, leitura, paineis, varios
@@ -288,3 +289,20 @@ def test_a_tela_desenha_o_sinal_do_B_no_tempo_DELE():
         encoding="utf-8")
     assert "const seuTempo = sinal.tempo || tempo;" in js
     assert "tracarEmPedacos(ctx, sinal.serie, seuTempo," in js
+
+
+def test_alinhar_a_mao_usa_o_aplicado_no_refino_e_sem_ele_cai_na_falta():
+    """O aplicado no refino vale também para os gráficos (17/11/2026)."""
+    manual = 0.0237
+    p = varios.montar_janela(A, [(B, "terminal B", "shaB")], alinhar=alinhamento.MAO,
+                             montar=janela.montar, manuais={"shaB": manual},
+                             de=0.0, ate=0.25, colunas=200)
+    ficha = p["ieds"][1]
+    assert ficha["alinhado_por"] == alinhamento.MAO
+    assert ficha["deslocamento_ms"] == pytest.approx(23.7)
+    assert ficha["a_mao_ms"] == pytest.approx(23.7)
+    # sem o aplicado, «à mão» não inventa nada: vale o início da falta
+    sem = alinhamento.deslocamento(A, B, alinhamento.MAO, None)
+    assert sem["por"] == "falta"
+    # e o aplicado não pesa em outro critério
+    assert alinhamento.deslocamento(A, B, "falta", manual)["por"] == "falta"

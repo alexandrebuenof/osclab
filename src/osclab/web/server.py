@@ -341,6 +341,7 @@ def create_app() -> Flask:
                 # janela deslocada de cada um. Ver `plot/varios.py`.
                 return jsonify(janela.sem_repetir(varios_mod.montar_janela(
                     registro, outros, alinhar=_alinhar(), montar=janela.montar,
+                    manuais=_manuais(sha, outros),
                     apelido_a=acervo.apelido(sha), sha_a=sha,
                     de=de, ate=ate,
                     colunas=_colunas(request.args.get("colunas"), 900),
@@ -408,6 +409,7 @@ def create_app() -> Flask:
             if outros:
                 return jsonify(varios_mod.ler(
                     registro, outros, pedidos, alinhar=_alinhar(), ler=leitura.em,
+                    manuais=_manuais(sha, outros),
                     layout=_layout(),
                     lado=request.args.get("lado", "arquivo"),
                     refere=int(refere) if refere is not None else None,
@@ -1186,7 +1188,8 @@ def create_app() -> Flask:
         fontes = [("A", sha, acervo.apelido(sha), base, 0.0)]
         for letra, (outro, apelido, sha_outro) in zip("BC", _outros_registros(sha),
                                                        strict=False):
-            d = (alinhamento_mod.deslocamento(base, outro, _alinhar())["d"]
+            d = (alinhamento_mod.deslocamento(base, outro, _alinhar(),
+                                              acervo.refino_gravado(sha, sha_outro))["d"]
                  if base is not None else 0.0)
             fontes.append((letra, sha_outro, apelido, outro, d))
         # Cada registro dá a lista que veio com ele (o `.hdr` da Schneider) MAIS
@@ -1463,7 +1466,17 @@ def _alinhar() -> str:
     corpo = request.get_json(silent=True)
     modo = str((corpo or {}).get("alinhar") or "") if isinstance(corpo, dict) else ""
     from osclab.plot import alinhamento
-    return modo if modo in alinhamento.MODOS else alinhamento.MODOS[0]
+    return modo if modo in alinhamento.MODOS + (alinhamento.MAO,) else alinhamento.MODOS[0]
+
+
+def _manuais(sha: str, outros: list) -> dict:
+    """`{sha do outro: d}`: o alinhamento aplicado no refino de cada par."""
+    saida = {}
+    for _, _, sha_outro in outros:
+        d = acervo.refino_gravado(sha, sha_outro)
+        if d is not None:
+            saida[sha_outro] = d
+    return saida
 
 
 def _contas() -> list:

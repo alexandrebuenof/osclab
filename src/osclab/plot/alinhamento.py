@@ -46,6 +46,7 @@ informação sobre a sincronização dos relés.
 
 from __future__ import annotations
 
+import math
 from datetime import timedelta
 
 from osclab.analysis import falta as falta_mod
@@ -54,8 +55,12 @@ from osclab.formats.base import Record
 
 #: Os modos, na ordem do botão. O primeiro é o padrão.
 MODOS = ("falta", "disparo", "hora")
+#: «à mão»: o deslocamento APLICADO no refino da seq. negativa (gravado ao
+#: lado do registro, `acervo.refino_gravado`). Não é um critério que se
+#: calcula — sem o gravado, vale o primeiro dos `MODOS` (17/11/2026).
+MAO = "mao"
 NOMES = {"falta": "início da falta", "disparo": "disparo",
-         "hora": "hora do arquivo"}
+         "hora": "hora do arquivo", MAO: "à mão"}
 
 
 def instante_da_falta(registro: Record) -> float | None:
@@ -111,16 +116,20 @@ def amostra_ms(registro: Record) -> float:
     return 1000.0 / taxa if taxa > 0 else 0.0
 
 
-def deslocamento(base: Record, outro: Record, modo: str) -> dict:
+def deslocamento(base: Record, outro: Record, modo: str,
+                 manual: float | None = None) -> dict:
     """Quanto `outro` desloca em relação a `base`, e por qual critério.
 
     Devolve `{"d": s, "por": modo usado, "precisao_ms": …, "relogio_ms": …}`.
-    `d` é tal que o instante `t` da aba cai em `t + d` no `outro`.
+    `d` é tal que o instante `t` da aba cai em `t + d` no `outro`. Com o modo
+    «à mão» (`MAO`) e o `manual` gravado no refino, `d` é ele.
     """
-    modo = modo if modo in MODOS else MODOS[0]
     usado = None
     d = 0.0
-    for tentativa in MODOS[MODOS.index(modo):] + MODOS[:MODOS.index(modo)]:
+    if modo == MAO and manual is not None and math.isfinite(manual):
+        usado, d = MAO, float(manual)
+    modo = modo if modo in MODOS else MODOS[0]
+    for tentativa in ([] if usado else MODOS[MODOS.index(modo):] + MODOS[:MODOS.index(modo)]):
         if tentativa == "hora":
             if base.start_time is None or outro.start_time is None:
                 continue

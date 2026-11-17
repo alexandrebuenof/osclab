@@ -235,13 +235,17 @@ def _juntar_digital(base: dict, letra: str, pedaco: dict, tempo: list,
 
 
 def montar_janela(base: Record, outros: list, *, alinhar: str, montar,
-                  apelido_a: str = "", sha_a: str = "", **kw) -> dict:
+                  apelido_a: str = "", sha_a: str = "", manuais: dict | None = None,
+                  **kw) -> dict:
     """O pacote de uma janela com vários registros.
 
     `outros` é `[(registro, apelido, sha)]`, na ordem B, C. `montar` é
     `janela.montar` (passado por quem chama, para este módulo não depender
     dele e para o teste poder trocá-lo). `kw` vai igual para cada chamada.
+    `manuais` = `{sha do outro: d}`, o aplicado no refino: vale com o
+    «alinhar por» «à mão» (`alinhamento.MAO`).
     """
+    manuais = manuais or {}
     registros = [("A", base)] + [(LETRAS[k + 1], r) for k, (r, _, _) in
                                  enumerate(outros[:MAXIMO_DE_REGISTROS - 1])]
     layout = kw.pop("layout", None)
@@ -250,7 +254,10 @@ def montar_janela(base: Record, outros: list, *, alinhar: str, montar,
 
     # Os deslocamentos ANTES do A: o plano alfa do A precisa deles para pôr
     # o terminal remoto, que mora noutro registro, no tempo da aba.
-    deslocs = {letra: alinhamento.deslocamento(base, registro, alinhar)
+    shas = {LETRAS[k + 1]: sha for k, (_, _, sha) in
+            enumerate(outros[:MAXIMO_DE_REGISTROS - 1])}
+    deslocs = {letra: alinhamento.deslocamento(base, registro, alinhar,
+                                               manuais.get(shas[letra]))
                for letra, registro in registros[1:]}
     pacote = montar(base, layout=separar(layout, "A"),
                     outros=[(letra, registro, deslocs[letra])
@@ -304,7 +311,7 @@ def montar_janela(base: Record, outros: list, *, alinhar: str, montar,
         # Os digitais do B entram na busca dos digitais com a letra.
         for x in pedaco.get("digitais_disponiveis") or []:
             pacote["digitais_disponiveis"].append({**x, "ied": letra})
-        ieds.append(_ficha(letra, registro, apelido, sha, desl))
+        ieds.append(_ficha(letra, registro, apelido, sha, desl, manuais.get(sha)))
         pacote["limite_de"] = min(pacote["limite_de"], float(registro.time[0]) - d)
         pacote["limite_ate"] = max(pacote["limite_ate"], float(registro.time[-1]) - d)
         del pedaco
@@ -334,7 +341,8 @@ def montar_janela(base: Record, outros: list, *, alinhar: str, montar,
     return pacote
 
 
-def _ficha(letra: str, registro: Record, apelido: str, sha: str, desl) -> dict:
+def _ficha(letra: str, registro: Record, apelido: str, sha: str, desl,
+           manual: float | None = None) -> dict:
     """A linha do IED na tira de fatos."""
     taxas = sorted({round(t.taxa_hz) for t in registro.trechos if t.taxa_hz > 0})
     ficha = {
@@ -354,6 +362,9 @@ def _ficha(letra: str, registro: Record, apelido: str, sha: str, desl) -> dict:
             "alinhado_por": desl["por"],
             "precisao_ms": desl["precisao_ms"],
             "relogio_ms": desl["relogio_ms"],
+            # O aplicado no refino, haja ou não «à mão» escolhido: é o que
+            # acende a opção no «alinhar por».
+            "a_mao_ms": None if manual is None else round(manual * 1000.0, 3),
         })
     return ficha
 
@@ -379,7 +390,7 @@ def mesclar_leitura(base: dict, letra: str, outra: dict) -> None:
 
 
 def ler(base: Record, outros: list, pedidos: list, *, alinhar: str, ler,
-        layout, **kw) -> dict:
+        layout, manuais: dict | None = None, **kw) -> dict:
     """A leitura dos cursores com vários registros.
 
     O A é lido como sempre. Cada outro é lido no instante em que o cursor
@@ -392,8 +403,10 @@ def ler(base: Record, outros: list, pedidos: list, *, alinhar: str, ler,
         layout = padrao(registros, kw.get("lado", "arquivo"))
     resultado = ler(base, pedidos, layout=separar(layout, "A"), **kw)
     sub = {**kw, "refere": None, "contas": None}
-    for letra, registro in registros[1:]:
-        d = alinhamento.deslocamento(base, registro, alinhar)["d"]
+    manuais = manuais or {}
+    for k, (letra, registro) in enumerate(registros[1:]):
+        d = alinhamento.deslocamento(base, registro, alinhar,
+                                     manuais.get(outros[k][2]))["d"]
         instantes = [((c["t"] + d) if c else None, 0, 0.0)
                      for c in resultado.get("cursores") or []]
         outra = ler(registro, instantes, layout=separar(layout, letra), **sub)
