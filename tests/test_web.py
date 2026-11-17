@@ -885,10 +885,11 @@ def test_o_traco_suave_so_vale_onde_ha_POUCA_amostra_por_ciclo():
     from osclab import paths
     js = (paths.STATIC_DIR / "js" / "onda.js").read_text(encoding="utf-8")
     assert "AMOSTRAS_PARA_SUAVIZAR = 8" in js
-    assert "dados.amostras_da_janela_do_fasor <= AMOSTRAS_PARA_SUAVIZAR" in js
+    # Por sinal desde 17/11/2026: o de outro IED traz a taxa DELE.
+    assert "fonte.amostras_da_janela_do_fasor <= AMOSTRAS_PARA_SUAVIZAR" in js
     # E nunca sobre traço reduzido: ali o desenho já é mínimo e máximo por
     # coluna de pixel, e arredondar isso inventaria forma onde há estatística.
-    assert "!dados.reduzido" in js
+    assert "!fonte.reduzido" in js
 
 
 def test_canal_sem_vinculo_NAO_e_anunciado_como_problema():

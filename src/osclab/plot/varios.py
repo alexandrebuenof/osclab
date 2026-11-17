@@ -272,10 +272,18 @@ def montar_janela(base: Record, outros: list, *, alinhar: str, montar,
                         **{**sub, "de": de + d, "ate": ate + d})
         tempo = _deslocar(pedaco.get("tempo") or [], d)
         tempo_dig = _deslocar(pedaco.get("tempo_digitais") or [], d)
+        # O desenho de cada sinal segue a taxa e a redução do registro DELE:
+        # um `.CEV` de 4 amostras por ciclo é suavizado mesmo ao lado de um
+        # registro de 16 (a tela decide pelo sinal quando ele traz isto).
+        do_registro = {"amostras_da_janela_do_fasor": pedaco.get("amostras_da_janela_do_fasor"),
+                       "reduzido": pedaco.get("reduzido")}
         for p in pedaco["paineis"]:
             alvo = por_id.get(p["id"])
             if alvo is None:
                 continue
+            if p.get("tipo") == paineis.ANALOGICO:
+                for s in p.get("sinais") or []:
+                    s.update(do_registro)
             if p.get("tipo") == paineis.DIGITAL:
                 _juntar_digital(alvo, letra, p, tempo_dig, d)
             elif p.get("tipo") == paineis.HARMONICOS:
@@ -337,6 +345,8 @@ def _ficha(letra: str, registro: Record, apelido: str, sha: str, desl) -> dict:
         "rele": registro.device_id or "",
         "taxas_hz": taxas,
         "falta_s": alinhamento.instante_da_falta(registro),
+        # Por IED: o botão do filtro só trava quando TODOS vêm filtrados.
+        "filtragem": str(registro.filtering),
     }
     if desl is not None:
         ficha.update({

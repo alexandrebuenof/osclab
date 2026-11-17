@@ -7047,14 +7047,18 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
    */
   const AMOSTRAS_PARA_SUAVIZAR = 8;
 
-  function suavizavel() {
-    return !!dados && !dados.reduzido
-        && (dados.amostras_da_janela_do_fasor || 0) > 0
-        && dados.amostras_da_janela_do_fasor <= AMOSTRAS_PARA_SUAVIZAR;
+  // Por SINAL: o de outro IED traz a taxa e a redução DELE (`varios.py`) —
+  // um `.CEV` de 4 amostras por ciclo ao lado de um registro de 16 saía em
+  // retas, pontudo, porque a decisão era a do IED A (17/11/2026).
+  function suavizavel(sinal) {
+    const fonte = sinal && sinal.amostras_da_janela_do_fasor !== undefined ? sinal : dados;
+    return !!fonte && !fonte.reduzido
+        && (fonte.amostras_da_janela_do_fasor || 0) > 0
+        && fonte.amostras_da_janela_do_fasor <= AMOSTRAS_PARA_SUAVIZAR;
   }
 
-  function tracar(ctx, serie, tempo, emX, paraY) {
-    const suave = suavizavel();
+  function tracar(ctx, serie, tempo, emX, paraY, sinal) {
+    const suave = suavizavel(sinal);
     const pts = [];
     const despejar = () => {
       if (!pts.length) return;
@@ -15873,7 +15877,11 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
    * acontecido. O botão fica aceso e preso porque é esse o estado do sinal —
    * tendo sido o relé quem o pôs assim.
    */
-  const filtroTravado = () => !!dados && dados.filtragem === "filtrado";
+  // Com mais de um IED, trava só se TODOS vierem filtrados: um `.CEV` filtrado
+  // ao lado de um COMTRADE bruto deixa o botão livre, e o servidor filtra só o
+  // bruto (`sinais.aplicavel`, registro a registro) — 17/11/2026.
+  const filtroTravado = () => !!dados && dados.filtragem === "filtrado"
+    && (dados.ieds || []).every((f) => !f.filtragem || f.filtragem === "filtrado");
 
   /** Liga e desliga o ímã. Fica guardado: quem analisa com ele aceso costuma
    * querer o mesmo na próxima oscilografia. */
@@ -16951,15 +16959,19 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
                   * (pista.y1 - pista.y0)
               : emYdir)
           : emYp;
-        if (ctx.globalAlpha === 1 && !suavizavel()) {
-          tracarEmPedacos(ctx, sinal.serie, tempo, emX, paraY);
+        // Sinal de outro IED tem o SEU vetor de tempo, já no eixo da aba
+        // (`varios._sinais_de`): desenhá-lo nos instantes do A espremia a
+        // onda e ignorava o alinhamento (17/11/2026).
+        const seuTempo = sinal.tempo || tempo;
+        if (ctx.globalAlpha === 1 && !suavizavel(sinal)) {
+          tracarEmPedacos(ctx, sinal.serie, seuTempo, emX, paraY);
         } else {
           ctx.beginPath();
-          tracar(ctx, sinal.serie, tempo, emX, paraY);
+          tracar(ctx, sinal.serie, seuTempo, emX, paraY, sinal);
           ctx.stroke();
         }
         if (pontosDeAmostra) {
-          pintarAmostras(ctx, sinal.serie, tempo, emX, paraY, x0, x1);
+          pintarAmostras(ctx, sinal.serie, seuTempo, emX, paraY, x0, x1);
         }
         ctx.restore();
       }
@@ -17702,7 +17714,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     for (const sinal of painel.sinais) {
       ctx.strokeStyle = corDoSinal(sinal, painel);
       ctx.beginPath();
-      tracar(ctx, sinal.serie, sinal.tempo || dados.tempo, emX, escala(sinal.eixo));
+      tracar(ctx, sinal.serie, sinal.tempo || dados.tempo, emX, escala(sinal.eixo), sinal);
       ctx.stroke();
     }
 
