@@ -683,7 +683,7 @@ def fim_da_falta(term: Terminal, inicio: float | None = None) -> float | None:
     return float(t[achados[0]]) if achados.size else None
 
 
-def _plato(term: Terminal) -> tuple[float, float] | None:
+def _plato(term: Terminal, curto: bool = False) -> tuple[float, float] | None:
     """`(t0, t1)` do platô, em segundos do registro, ou `None`.
 
     Acaba ¾ de ciclo antes do primeiro destes: o fim da falta
@@ -691,7 +691,7 @@ def _plato(term: Terminal) -> tuple[float, float] | None:
     registro. Começa dois ciclos depois do início — ou 1,1 ciclo, numa falta
     curta demais para isso: a janela de um ciclo vale enquanto couber INTEIRA
     dentro da falta, e uma falta de 2,6 ciclos (o COXIPO real) não tem platô
-    nenhum pela regra longa.
+    nenhum pela regra longa. `curto` força a regra curta (`plato_comum`).
     """
     v = term.veredito
     if v is None or v.instante is None:
@@ -709,8 +709,29 @@ def _plato(term: Terminal) -> tuple[float, float] | None:
     # dois ciclos até o fasor assentar. Sem este ciclo a mais, uma falta curta
     # franca a 90 km saía «99,7 km» pelo laço (validação, 25/10/2026).
     a_mais = 1.0 if term.registro.filtering == Filtering.FILTRADO else 0.0
-    for antes in (CICLOS_ANTES_DO_PLATO, CICLOS_ANTES_NA_FALTA_CURTA):
+    regras = ((CICLOS_ANTES_NA_FALTA_CURTA,) if curto
+              else (CICLOS_ANTES_DO_PLATO, CICLOS_ANTES_NA_FALTA_CURTA))
+    for antes in regras:
         t0 = inicio + (antes + a_mais) * ciclo
+        if t1 > t0:
+            return (t0, t1)
+    return None
+
+
+def plato_comum(term_a: Terminal, term_b: Terminal, d: float) -> tuple[float, float] | None:
+    """O platô dos DOIS terminais, no tempo de A (`d`: t de A cai em t + d em B).
+
+    A interseção dos dois platôs; vazia, tenta de novo com a regra da falta
+    curta nos dois. Uma falta de 3,7 ciclos vista de um lado por um COMTRADE e
+    do outro por um `.CEV` filtrado (que pede um ciclo a mais) não tinha
+    platô comum nenhum, e a seq. negativa saía «nenhum valor no platô» com
+    tudo à vista na tela (LT A_ FLORESTA, 17/11/2026).
+    """
+    for curto in (False, True):
+        pa, pb = _plato(term_a, curto), _plato(term_b, curto)
+        if pa is None or pb is None:
+            continue
+        t0, t1 = max(pa[0], pb[0] - d), min(pa[1], pb[1] - d)
         if t1 > t0:
             return (t0, t1)
     return None
@@ -837,13 +858,10 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
     tem_b = term_b is not None and term_b.v is not None and term_b.i is not None
     idx_b = _mais_proximas(term_b.registro.time, t_a + d) if tem_b else None
     plato = plato_a
-    if tem_b and plato is not None:
-        plato_b = _plato(term_b)
-        if plato_b is not None:
-            # O platô de B, trazido para o tempo de A: os dois precisam estar
-            # dentro da falta sustentada ao mesmo tempo.
-            t0, t1 = max(plato[0], plato_b[0] - d), min(plato[1], plato_b[1] - d)
-            plato = (t0, t1) if t1 > t0 else None
+    if tem_b and plato is not None and _plato(term_b) is not None:
+        # O platô de B, trazido para o tempo de A: os dois precisam estar
+        # dentro da falta sustentada ao mesmo tempo.
+        plato = plato_comum(term_a, term_b, d)
     abre_a = None if v.fim is None else float(t_a[min(v.fim, t_a.size - 1)])
     fim_falta = fim_da_falta(term_a, inicio)
     pacote["eventos"] = {"inicio": inicio, "plato": list(plato) if plato else None,

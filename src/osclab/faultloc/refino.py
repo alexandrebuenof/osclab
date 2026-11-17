@@ -449,10 +449,8 @@ def curva_km(a: Lado, b: Lado, d: float, linha, s: str,
     plato = ldl._plato(term_a) if term_a.v is not None else None
     if plato is not None and b.v is not None:
         term_b = ldl.terminal(b.registro)
-        pb = ldl._plato(term_b) if term_b.v is not None else None
-        if pb is not None:
-            t0, t1 = max(plato[0], pb[0] - d), min(plato[1], pb[1] - d)
-            plato = (t0, t1) if t1 > t0 else None
+        if term_b.v is not None and ldl._plato(term_b) is not None:
+            plato = ldl.plato_comum(term_a, term_b, d)
     mediana = disp = None
     if plato is not None:
         t = a.registro.time

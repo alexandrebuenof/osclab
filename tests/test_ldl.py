@@ -624,3 +624,18 @@ def test_falta_comum_nao_muda_de_inicio():
     for reg in (_registro(rede["S"]), _registro(rede["S"], abre=False)):
         term = ldl.terminal(reg)
         assert ldl.inicio_da_falta(term) == float(reg.time[term.veredito.instante])
+
+
+def test_platos_que_nao_se_cruzam_tentam_a_regra_da_falta_curta(monkeypatch):
+    """Falta de 3,7 ciclos com um terminal num `.CEV` filtrado (um ciclo a
+    mais): pela regra longa os platôs não se cruzavam e a seq. negativa saía
+    «nenhum valor no platô» (LT A_ FLORESTA, 17/11/2026)."""
+    a, b = object(), object()
+    longos = {a: (0.124, 0.140), b: (0.208, 0.229)}
+    curtos = {a: (0.107, 0.140), b: (0.193, 0.229)}
+    monkeypatch.setattr(ldl, "_plato", lambda t, curto=False: (curtos if curto else longos)[t])
+    t0, t1 = ldl.plato_comum(a, b, 0.0646)
+    assert t0 == pytest.approx(0.193 - 0.0646) and t1 == pytest.approx(0.140)
+    # cruzando pela regra longa, ela vale e a curta nem é tentada
+    longos[b] = (0.150, 0.200)
+    assert ldl.plato_comum(a, b, 0.020) == pytest.approx((0.130, 0.140))
