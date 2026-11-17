@@ -154,8 +154,22 @@ def amostra(tempo: np.ndarray, t: float) -> int:
 # ---------------------------------------------------------------------------
 
 def no_grid(d: float, passo: float) -> float:
-    """O `d` numa amostra de B: múltiplo do intervalo de B."""
+    """O `d` num múltiplo de `passo`."""
     return round(d / passo) * passo if passo > 0 else d
+
+
+def passo_fino(passo_a: float, passo_b: float) -> float:
+    """O passo do alinhamento manual: uma amostra do registro MAIS RÁPIDO.
+
+    Era uma amostra de B: um `.CEV` de 4 amostras por ciclo andava de 4,17
+    em 4,17 ms, e o alinhamento escolhido ficava entre dois passos (17/11/2026).
+    Com `d` entre duas amostras de B, cada amostra de A pega a de B mais
+    próxima (sem interpolar). A seq. negativa de dois terminais não depende do
+    ângulo ENTRE os terminais (só de V2/I2 de cada lado e de módulos), então
+    não há fasor a girar.
+    """
+    validos = [p for p in (passo_a, passo_b) if p and p > 0]
+    return min(validos) if validos else 0.0
 
 
 def correlacao(a: Lado, b: Lado, d_centro: float) -> dict | None:
@@ -243,20 +257,22 @@ def alinhar(a: Lado, b: Lado, modo: str, manual: dict | None,
         d_manual, marcas = tb - ta, {"ta": ta, "tb": tb}
     else:
         if dm is not None:
-            d_manual = no_grid(dm, b.passo)
+            d_manual = no_grid(dm, passo_fino(a.passo, b.passo))
         if ta is not None or tb is not None:
             marcas = {"ta": ta, "tb": tb}
     usado = auto["d"] if (modo != "manual" or d_manual is None) else d_manual
     return {"auto": auto, "confere": confere, "manual": {"d": d_manual, "marcas": marcas},
             "modo": "manual" if modo == "manual" else "auto", "d": usado,
-            "passo_a": a.passo, "passo_b": b.passo, "ciclo": um}
+            "passo_a": a.passo, "passo_b": b.passo,
+            "passo": passo_fino(a.passo, b.passo), "ciclo": um}
 
 
-def deslocamento_do_painel(reg_b: Record, d_auto: float, pedido) -> dict:
+def deslocamento_do_painel(reg_b: Record, d_auto: float, pedido,
+                           reg_a: Record | None = None) -> dict:
     """O `d` do painel localizador: o da aba, ou o MANUAL escolhido no refino.
 
     `pedido` é o número (s) que a tela mandou — `None` quando o refino está no
-    automático. O manual cai na grade de B (`no_grid`), como no refino: o
+    automático. O manual cai no passo fino (`passo_fino`), como no refino: o
     painel e a janela usam o MESMO `d`, e o km dos dois é o mesmo. Um pedido
     que não é número finito é ignorado (vale o automático), e o painel não
     diz «alinhado à mão».
@@ -267,8 +283,10 @@ def deslocamento_do_painel(reg_b: Record, d_auto: float, pedido) -> dict:
         dm = None
     if dm is None or not math.isfinite(dm):
         return {"d": d_auto, "manual": False, "auto": d_auto}
-    t = reg_b.time
-    passo = float(np.median(np.diff(t))) if t.size > 1 else 1e-3
+    def passo_de(reg):
+        t = reg.time if reg is not None else np.empty(0)
+        return float(np.median(np.diff(t))) if t.size > 1 else 0.0
+    passo = passo_fino(passo_de(reg_a), passo_de(reg_b)) or 1e-3
     return {"d": no_grid(dm, passo), "manual": True, "auto": d_auto}
 
 

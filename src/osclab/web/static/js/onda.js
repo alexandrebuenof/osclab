@@ -13033,6 +13033,20 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     quadroRefino.remove();
     quadroRefino = null;
   }
+  // Fechar por FORA (clique no fundo, Esc aqui) passa pelo refino: com um
+  // alinhamento não aplicado ele pergunta antes (17/11/2026). Sem resposta
+  // dele (não carregou), fecha direto.
+  function pedirFecharRefino() {
+    const quadro = quadroRefino && quadroRefino.querySelector("iframe");
+    try {
+      if (quadro && quadro.contentWindow && quadro.contentDocument
+          && quadro.contentDocument.readyState === "complete") {
+        quadro.contentWindow.postMessage({ tipo: "refino-pedir-fechar" }, location.origin);
+        return;
+      }
+    } catch (_e) { /* sem acesso ao quadro: fecha direto */ }
+    fecharRefino();
+  }
   function abrirRefino() {
     const b = (outrosRegistros[0] || {}).sha;
     if (!b || !pacoteLoc) return;
@@ -13046,7 +13060,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     quadro.title = "Refinar · sequência negativa";
     quadro.addEventListener("load", () => { try { quadro.contentWindow.focus(); } catch (_e) { /* ok */ } });
     fundo.append(quadro);
-    fundo.addEventListener("pointerdown", (e) => { if (e.target === fundo) fecharRefino(); });
+    fundo.addEventListener("pointerdown", (e) => { if (e.target === fundo) pedirFecharRefino(); });
     document.body.append(fundo);
     quadroRefino = fundo;
   }
@@ -13056,7 +13070,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     else if (e.data.tipo === "refino-alinhamento") recalcularLoc();   // já gravado
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && quadroRefino) { e.stopImmediatePropagation(); fecharRefino(); }
+    if (e.key === "Escape" && quadroRefino) { e.stopImmediatePropagation(); pedirFecharRefino(); }
   }, true);
   function botaoRefinar() {
     const b = criar("button", "rf-botao-refinar", "refinar");

@@ -280,14 +280,16 @@ def montar(reg_a: Record, nome_a: str, reg_b: Record, nome_b: str, corpo: dict) 
         "manual": alin["manual"],
         "confere": None if cf is None else {"d": cf["d"], "discorda": cf["discorda"],
                                              "mistura": cf["mistura"]},
-        "passo_a": alin["passo_a"], "passo_b": alin["passo_b"], "ciclo": alin["ciclo"],
+        "passo_a": alin["passo_a"], "passo_b": alin["passo_b"], "passo": alin["passo"],
+        "ciclo": alin["ciclo"],
         "txt": {"usado": txt(d * 1000.0, 2), "menos_usado": txt(-d * 1000.0, 2),
                 "auto": txt(alin["auto"]["d"] * 1000.0, 2),
                 "relogio": (None if alin["auto"].get("relogio_ms") is None
                             else txt(alin["auto"]["relogio_ms"], 2)),
                 "confere": None if cf is None else txt(cf["d"] * 1000.0, 2),
                 "dif": None if cf is None else txt(cf["dif"] * 1000.0, 2),
-                "passo_a": txt(a.passo * 1000.0, 3), "passo_b": txt(b.passo * 1000.0, 3)},
+                "passo_a": txt(a.passo * 1000.0, 3), "passo_b": txt(b.passo * 1000.0, 3),
+                "passo": txt(alin["passo"] * 1000.0, 3)},
     }
 
     def descreve(ld: rf.Lado) -> dict:

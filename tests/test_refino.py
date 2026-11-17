@@ -565,3 +565,35 @@ def test_a_regra_da_curva_e_a_mesma_do_grafico_das_ondas():
     refino_js = (Path(prf.__file__).parents[1] / "web" / "static" / "js" / "refino.js"
                  ).read_text(encoding="utf-8")
     assert "s.suave" in refino_js and "bezierCurveTo" in refino_js
+
+
+# ---------------------------------------------------------------------------
+# 17/11/2026: passo fino e o «aplicar»
+# ---------------------------------------------------------------------------
+
+def test_o_manual_anda_uma_amostra_do_registro_MAIS_RAPIDO(simulacao):
+    """B de 4 amostras por ciclo ao lado de A de 20: o manual andava de 4,17 ms
+    (uma amostra de B) e o alinhamento escolhido ficava entre dois passos."""
+    a = rf.lado(_gravar(simulacao, "S", taxa=1200.0, seed=5), "A", "SE S")
+    b = rf.lado(_gravar(simulacao, "R", taxa=240.0, seed=6), "B", "SE R")
+    assert rf.passo_fino(a.passo, b.passo) == pytest.approx(1 / 1200.0)
+    pedido = 3.4 / 1200.0             # entre duas amostras de B
+    al = rf.alinhar(a, b, "manual", {"d": pedido})
+    assert al["passo"] == pytest.approx(1 / 1200.0)
+    assert al["d"] == pytest.approx(3 / 1200.0)
+    painel = rf.deslocamento_do_painel(b.registro, 0.0, pedido, a.registro)
+    assert painel["d"] == pytest.approx(al["d"])
+
+
+def test_mover_no_refino_e_previa_e_so_o_aplicar_grava():
+    """Mover B gravava na hora, sem nada dizer que o painel mudou: agora o
+    pedido de cada gesto não grava, e o «aplicar» é quem chama a rota."""
+    js = (paths.STATIC_DIR / "js" / "refino.js").read_text(encoding="utf-8")
+    pedir = js[js.index("async function pedir("):js.index("function animar(")]
+    assert "refino-alinhamento" not in pedir and "aplicar(" not in pedir
+    aplicar = js[js.index("async function aplicar("):js.index("let mouseT")]
+    assert "/refino-alinhamento" in aplicar
+    assert '"aplicar"' in js and "✓ aplicado" in js
+    # fechar com mudança pendente pergunta na barra, nunca por confirm()
+    assert "window.confirm" not in js and " confirm(" not in js.replace("`confirm()`", "")
+    assert "perguntandoAoFechar = true" in js

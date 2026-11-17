@@ -731,7 +731,7 @@ def create_app() -> Flask:
             else:
                 pedido_d = acervo.refino_gravado(sha, sha_outro)
             if pedido_d is not None:
-                escolha = refino_conta.deslocamento_do_painel(outro, d, pedido_d)
+                escolha = refino_conta.deslocamento_do_painel(outro, d, pedido_d, registro)
                 if escolha["manual"]:
                     d = escolha["d"]
                     alinhado_a_mao = {

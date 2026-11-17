@@ -20,10 +20,12 @@
  * cursores e, sem nada disso, fecha a janela.
  *
  * O deslocamento MANUAL escolhido aqui vale para o painel localizador
- * (decidido em 11/11/2026) e fica GRAVADO ao lado do registro: cada mudança
- * dele vai ao servidor (`/api/onda/<a>/refino-alinhamento`), e só depois de
- * gravada a oscilografia é avisada por `postMessage` («refino-alinhamento»)
- * para pedir a localização de novo. Voltar ao automático APAGA o gravado.
+ * (decidido em 11/11/2026) e fica GRAVADO ao lado do registro — mas só no
+ * botão «aplicar» (17/11/2026): mover é prévia. O «aplicar» manda ao servidor
+ * (`/api/onda/<a>/refino-alinhamento`), e só depois de gravada a oscilografia
+ * é avisada por `postMessage` («refino-alinhamento») para pedir a localização
+ * de novo. Fechar com mudança não aplicada pergunta na barra. Voltar ao
+ * automático e aplicar APAGA o gravado.
  * A janela abre no que estiver gravado (`data-manual`).
  */
 (() => {
@@ -60,14 +62,33 @@
   //: O último deslocamento gravado (null: nenhum, vale o automático;
   //: undefined: a primeira resposta ainda não veio).
   let avisado;
-  /** Grava o manual ao lado do registro (`null` apaga) e avisa o painel. */
-  async function avisarPainel() {
+  //: O «aplicado» acabou de acontecer: o botão diz «✓ aplicado» até o
+  //: próximo movimento.
+  let acabouDeAplicar = false;
+  //: A pergunta de fechar com mudança não aplicada está aberta.
+  let perguntandoAoFechar = false;
+  /** O deslocamento que a tela mostra agora, no formato do gravado. */
+  function dNaTela() {
     const al = pacote.alinhamento;
-    const d = al.modo === "manual" && al.manual.d != null ? al.d : null;
-    // A primeira resposta é o que JÁ está gravado (na grade deste B): abrir
-    // a janela não grava nada.
-    if (avisado === undefined) { avisado = isFinite(gravado) ? d : null; if (d === avisado) return; }
-    if (d === avisado || (d != null && avisado != null && Math.abs(d - avisado) < 1e-12)) return;
+    return al.modo === "manual" && al.manual.d != null ? al.d : null;
+  }
+  /** Há mudança na tela que ainda não foi aplicada ao painel? (17/11/2026:
+   * mover B era gravado na hora, sem nada dizer que o painel tinha mudado —
+   * agora mover é prévia, e só o «aplicar» grava.) */
+  function pendente() {
+    if (!pacote || avisado === undefined) return false;
+    const d = dNaTela();
+    if (d === null || avisado === null) return d !== avisado;
+    return Math.abs(d - avisado) >= 1e-12;
+  }
+  /** A primeira resposta é o que JÁ está gravado: abrir a janela não muda nada. */
+  function marcarGravado() {
+    if (avisado === undefined) avisado = isFinite(gravado) ? dNaTela() : null;
+  }
+  /** «aplicar»: grava o manual ao lado do registro (`null` apaga) e avisa o painel. */
+  async function aplicar() {
+    if (!pendente()) return true;
+    const d = dNaTela();
     const antes = avisado;
     avisado = d;
     try {
@@ -79,9 +100,12 @@
     } catch (e) {
       avisado = antes;
       $("rf-chaves").append(criar("span", "rf-aviso", `o alinhamento não foi gravado (${e.message})`));
-      return;
+      return false;
     }
     window.parent.postMessage({ tipo: "refino-alinhamento", b: shaB, d }, location.origin);
+    acabouDeAplicar = true;
+    barra();
+    return true;
   }
   let mouseT = null;
   let arrastoPx = 0;                    // o pan, enquanto a mão arrasta
@@ -134,9 +158,13 @@
         desenhar();
       }
       // B anda INTEIRO: as fases dele, corrente e tensão, deslizam juntas
-      if (dAntes != null && !semAnimar && Math.abs(pacote.alinhamento.d - dAntes) > 1e-9) animar(pacote.alinhamento.d - dAntes);
+      if (dAntes != null && Math.abs(pacote.alinhamento.d - dAntes) > 1e-9) {
+        acabouDeAplicar = false;
+        if (!semAnimar) animar(pacote.alinhamento.d - dAntes);
+        barra();
+      }
       semAnimar = false;
-      avisarPainel();
+      marcarGravado();
     } catch (e) {
       $("rf-chaves").replaceChildren(criar("span", "rf-aviso", `o servidor não respondeu (${e.message}) — reinicie o OscLab`));
     }
@@ -220,10 +248,10 @@
   function dicaDoAlinhamento() {
     const al = pacote.alinhamento, tx = al.txt, cf = al.confere;
     return [`B deslocado de ${tx.usado} ms (${al.modo === "auto" ? `automático, pelo ${al.auto.nome}` : `manual; o automático dava ${tx.auto} ms`}).`,
-      `Precisão: 1 amostra de B (${tx.passo_b} ms).`,
+      `Passo do manual: ${tx.passo} ms (uma amostra do registro mais rápido).`,
       tx.relogio ? `O relógio de B difere ${tx.relogio} ms do de A.` : "",
       cf ? `Correlação de |I2|: ${tx.confere} ms${cf.mistura ? " (não vale como conferência: um terminal é filtrado pelo relé)" : ""}.` : "",
-      "O deslocamento daqui é conferência: não muda o painel."].filter(Boolean).join("\n");
+      "Mover é prévia: o painel localizador só muda no «aplicar»."].filter(Boolean).join("\n");
   }
 
   // Move o registro INTEIRO de um terminal `dt` segundos para a DIREITA na
@@ -281,22 +309,54 @@
     desl.append(document.createTextNode(`${mover} deslocado de `),
       criar("b", null, `${mover === "B" ? tx.usado : tx.menos_usado} ms`));
     desl.title = dicaDoAlinhamento() + "\nArraste no gráfico para mover o terminal; o cursor se pega pela etiqueta numerada (ou teclas 1 e 2).";
-    const passo = mover === "B" ? al.passo_b : al.passo_a;
-    const txp = mover === "B" ? tx.passo_b : tx.passo_a;
+    // O passo é uma amostra do registro MAIS RÁPIDO (`refino.passo_fino`),
+    // mova-se A ou B (17/11/2026). Entre duas amostras do mais lento vale a
+    // amostra dele mais próxima — a seq. negativa não depende do ângulo
+    // entre os terminais.
+    const passo = al.passo, txp = tx.passo;
     g.append(gm, desl,
-      botao("−1 amostra", `${mover} uma amostra para a esquerda (${txp} ms).`, () => moverTerminal(mover, -passo)),
-      botao("+1 amostra", `${mover} uma amostra para a direita (${txp} ms).`, () => moverTerminal(mover, passo)),
+      botao("−1 amostra", `${mover} para a esquerda: ${txp} ms, uma amostra do registro mais rápido.`, () => moverTerminal(mover, -passo)),
+      botao("+1 amostra", `${mover} para a direita: ${txp} ms, uma amostra do registro mais rápido.`, () => moverTerminal(mover, passo)),
       botao(estado.armado ? `clique no início em ${estado.armado}` : "marcar início",
         "Clique no início da falta em A e depois em B (corrente ou tensão). B se desloca inteiro.",
         () => { estado.armado = estado.armado ? null : "A"; desenhar(); }, estado.armado ? "armado" : ""));
     return g;
   }
 
+  // «aplicar»: mover é PRÉVIA (o gráfico e o km daqui mudam, o painel não);
+  // só este botão grava e leva o deslocamento ao painel localizador. Aceso
+  // enquanto há mudança não aplicada; depois, «✓ aplicado» com o valor.
+  function botaoAplicar() {
+    const al = pacote.alinhamento, tx = al.txt;
+    if (pendente()) {
+      const qual = dNaTela() === null ? "o automático" : `B deslocado de ${tx.usado} ms`;
+      return botao("aplicar", `Grava ${qual} e leva ao painel localizador.`, () => aplicar(), "rf-aplicar aceso");
+    }
+    if (acabouDeAplicar) {
+      const qual = dNaTela() === null ? "automático" : `B deslocado de ${tx.usado} ms`;
+      const ok = criar("span", "rf-aplicado", `✓ aplicado: ${qual}`);
+      ok.title = "O painel localizador já usa este alinhamento.";
+      return ok;
+    }
+    const b = botao("aplicar", "Nada a aplicar: o painel já usa este alinhamento.", () => {}, "rf-aplicar");
+    b.disabled = true;
+    return b;
+  }
+
   function barra() {
     const cab = $("rf-chaves");
     cab.replaceChildren();
     if (!pacote) return;
-    cab.append(menuDaVista(), botaoSeq(), chaveDoAlinhamento());
+    cab.append(menuDaVista(), botaoSeq(), chaveDoAlinhamento(), botaoAplicar());
+    if (perguntandoAoFechar) {
+      const p = criar("span", "rf-pergunta", "O alinhamento não foi aplicado.");
+      p.append(
+        botao("aplicar e fechar", "Grava e leva ao painel, depois fecha.",
+          async () => { if (await aplicar()) { perguntandoAoFechar = false; fecharDeVez(); } }, "rf-aplicar aceso"),
+        botao("descartar", "Fecha sem mudar o painel.", () => { perguntandoAoFechar = false; fecharDeVez(); }),
+        botao("continuar", "Volta ao refino.", () => { perguntandoAoFechar = false; barra(); }));
+      cab.append(p);
+    }
   }
 
   // --- os gráficos -----------------------------------------------------------------
@@ -656,7 +716,17 @@
     }
   });
 
-  function fechar() { window.parent.postMessage({ tipo: "refino-fechar" }, location.origin); }
+  function fecharDeVez() { window.parent.postMessage({ tipo: "refino-fechar" }, location.origin); }
+  // Com mudança não aplicada, fechar pergunta — na própria barra, nunca por
+  // `confirm()` (diálogo do navegador trava a página).
+  function fechar() {
+    if (pendente()) { perguntandoAoFechar = true; barra(); return; }
+    fecharDeVez();
+  }
+  // A oscilografia pede para fechar (clique no fundo, Esc lá fora).
+  window.addEventListener("message", (e) => {
+    if (e.origin === location.origin && e.data && e.data.tipo === "refino-pedir-fechar") fechar();
+  });
   $("rf-fechar").addEventListener("click", fechar);
 
   // --- os números: o resultado, e V2/I2/ângulo de cada terminal ----------------
@@ -703,12 +773,22 @@
     const bl = criar("div", "rf-bloco");
     const h = criar("h3", null, "Seq. negativa · dois terminais");
     const outro = estado.s === "A" ? "B" : "A";
-    const de = criar("button", "rf-de-terminal", `a partir de ${estado.s} · ${pacote.nomes[estado.s]}`);
-    de.type = "button";
-    de.title = `Clique para contar a partir de ${outro} · ${pacote.nomes[outro]}.`;
-    de.addEventListener("click", () => { estado.s = outro; pedir(); });
-    h.append(de);
     bl.append(h);
+    // O km do cursor 1 em DESTAQUE, com o terminal de partida escrito por
+    // extenso (pedido dele, 17/11/2026): quem lê o número tem que saber de
+    // onde ele conta sem procurar.
+    const destaque = criar("div", "rf-km-destaque");
+    const tem = c1 && c1.km.km != null;
+    destaque.append(criar("span", "rf-km-num", tem ? `${c1.km.txt.km} km` : "— km"),
+      criar("span", "rf-km-pct", tem ? `${c1.km.txt.pct} % da linha · cursor 1` : "cursor 1"));
+    bl.append(destaque);
+    const de = criar("button", "rf-de-terminal");
+    de.type = "button";
+    de.append(document.createTextNode("medido a partir do terminal "),
+      criar("b", null, `${estado.s} · ${pacote.nomes[estado.s]}`));
+    de.title = `Clique para contar a partir do terminal ${outro} · ${pacote.nomes[outro]}.`;
+    de.addEventListener("click", () => { estado.s = outro; pedir(); });
+    bl.append(de);
     const tab = criar("table", "rf-tab rf-tab-resultado");
     const cab = criar("tr");
     cab.append(criar("th", null, ""), criar("th", "rf-c1", "cursor 1"), criar("th", "rf-c2", "cursor 2"));
