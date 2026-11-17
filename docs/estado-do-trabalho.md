@@ -40,7 +40,67 @@ que quebra ao abrir mostra a frase do leitor). Nenhum pedido passou de 800 ms; a
 **Para ele decidir** (detalhes e fotos no relatório local do ensaio): ver a lista
 «pendências do ensaio» logo abaixo.
 
-**Pendências do ensaio (15/11/2026), cada uma com alternativas:**
+**16/11/2026 — as pendências do ensaio, segunda passada (ramo `integracao-1411`,
+para revisão).** Corrigidos, cada um com teste (`tests/test_ensaio_tela.py` roda as
+funções do `onda.js` no Node; o resto em `test_cev`, `test_harmonicos`, `test_refino`):
+- **1.** CEV com MENOS amostras que `NUM_OF_CYC × SAM/CYC_A` ganha aviso («declara 720
+  amostras e o arquivo tem 717: faltam 3»). Só a falta avisa: medido nos 26 CEV das
+  pastas de teste, 21 batem exato (inclusive `60.125` × 8 = 481), o 487E grava UMA a
+  MAIS e só Braço Norte tem menos. `RESUMO_ATUAL` 7 → 8 (o aviso mora no resumo).
+- **3.** Comissionamento, conferência 6: folga de 1 amostra até 8 am/ciclo (CEV
+  decimado; Colíder passa). **Conferência 10** lê a distância por `faultloc/rele.py`
+  (o mesmo número do tracejado do localizador), não mais por regex própria; passa a
+  ver o `Z_BASED_LOCATION` do 411L e o `%` do MiCOM.
+- **4.** «platô» sai do lugar quando a etiqueta de um cursor o tapa: à esquerda do
+  colchete, senão à direita, senão só o colchete (`lugarDoPlato`).
+- **5.** «100 % da LT» vai para o lado da ponta em que a trajetória inteira menos passa
+  (`ladoLivreDoRotulo`; a trajetória toda, para o rótulo não pular com o cursor).
+- **6.** Plano alfa: «∠ I remoto» em linha própria — a célula cortava o ângulo.
+- **8.** O que arredonda a zero sai «0,0000», não «-0,0000» (`signDisplay: "negative"`
+  no `formatar` e no número do localizador).
+- **9.** O «—» do relé sem número: a `.lado` genérica é o grupo de botões (27 px de
+  altura); na legenda ela volta a ser texto, do tamanho do número.
+- **11.** Harmônicos: sinal sem fundamental (`fasor.tem_fundamental`, a guarda do THD)
+  vem com `sem_fundamental` e as barras dele não se desenham; o hover do «—» diz por quê.
+- **12.** «refinar»: com até 8 am/ciclo a onda é a curva de Catmull-Rom, como no
+  gráfico das ondas — o servidor manda `suave` por série (`plot/refino.SUAVIZAR_ATE`,
+  há teste que o compara com `AMOSTRAS_PARA_SUAVIZAR` do `onda.js`).
+- **2.** O LEIA-ME da pasta de testes (fora do repo): 14a vai até ≈ 12:11:05,578 (717
+  amostras), e as linhas do SER de 12:11:02,753 a 12:11:05,395 caem dentro; 11b: o
+  `106,70` do 411L É km (`LLR := 137,00`).
+
+`CONTRATO` não mudou: `sem_fundamental` e `suave` são campos A MAIS (servidor velho →
+a tela faz o de antes).
+
+**Para ele decidir** (com alternativas):
+- **A. Conferência 10 × Beira Rio (12b).** Agora que ela lê o `Z_BASED_LOCATION`, o
+  CEV do 411L de Beira Rio (`2.54(ME)`, igual ao `LLR := 2.54` mi: 100 % da linha)
+  DIVERGE: o nosso platô dá 175 % e oscila ±138 pontos. Linha de 2,54 mi, Z1MAG 0,06 Ω
+  secundário: a reatância do laço é ruído perto de zero, e o `(ME)` é o localizador
+  de MAIS DE UM TERMINAL do relé, que a nossa reatância de um terminal não reproduz.
+  (a) pular a conferência quando o relé marca `(ME)` — prós: compara igual com igual;
+  contras: é ler um sufixo da SEL; (b) pular linha curta demais (Z1 secundário abaixo
+  de N vezes a resolução) — universal, mas pede escolher N; (c) deixar divergir e
+  aceitar que o comissionamento reprova ali. Hoje: (c), sem decidir.
+- **B. (pendência 7) CLARO–IPÊ, seq. negativa 2T vazia.** É DADO: o gerador
+  (`Arquivos para OscLab/Amostras ficticias/gerar_amostras.py`) inventa as correntes e
+  tensões de cada terminal sozinhas (2.800 A ∠−78°, 1.150 A ∠−72°, afundamentos fixos),
+  sem rede que as amarre; a seq. negativa de dois terminais não fecha em ponto nenhum
+  (com d = 0, km de 15,6 a 42 sem platô). Os de um terminal dão 26,7 porque cada lado
+  é coerente consigo. (a) refazer o par com `tests/rede_de_falta.py` (a rede de
+  verdade dos testes); (b) deixar e tirar «seq. neg. 2T» do que o caso promete.
+- **C. (pendência 10) Ingeteam PL300** rotulado secundário com números de primário.
+  (a) campo «o arquivo está em primário» por registro (como a relação digitada);
+  (b) deixar. Não há regra universal que deduza isso sem palpite.
+- **D. (pendência 13) VRI «sem linha».** A linha ESTÁ na base (`206LT231`, LD CONFRESA
+  – VILA RICA, 102 km, Z1 12,59 + j48,33 Ω — a do LEIA-ME); o `.cfg` do P437/P139 não
+  tem nome de estação (só `P437-611-700`), então não há com que casar. (a) escolher a
+  linha à mão (o «parâmetros» já permite digitar); (b) casar pelo nome do ARQUIVO
+  (`VRI_…`) — seria palpite por nome, contra «o programa não adivinha linha».
+- **E. (pendência 1)** se o CEV com amostras a menos deve também RECUSAR o registro
+  (hoje avisa).
+
+**Pendências do ensaio (15/11/2026), cada uma com alternativas — a lista original; ver acima o que já se corrigiu:**
 1. CEV com linha estragada: o CEV não numera amostras, então se a linha estragada
    engoliu outra, o tempo depois dela anda uma amostra (o aviso diz). No Braço Norte o
    cabeçalho declara 180 ciclos (720) e há 717 linhas — pode ser isso. (a) deixar como
