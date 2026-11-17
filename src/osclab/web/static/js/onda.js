@@ -1062,6 +1062,10 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         // O tempo dispensa separador de milhar: `1043,2` cabe onde
         // `1.043,2` não cabe, e ninguém lê um instante como contagem.
         useGrouping: agrupar,
+        // O que ARREDONDA a zero sai «0,0000», não «-0,0000»: o sinal de
+        // um número que a tela escreve como zero não diz lado nenhum, e
+        // lido ao lado de um «0,0000» parece outra medida (ensaio 15/11).
+        signDisplay: "negative",
       });
       _formatadores.set(chave, f);
     }
@@ -7818,8 +7822,14 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     }
     base.textContent = formatar(lido.fundamental, lido.casas_fasor);
     base.classList.remove("vazio-valor");
-    if (lido.thd === null || lido.thd === undefined) vazio(thd);
-    else {
+    if (lido.thd === null || lido.thd === undefined) {
+      vazio(thd);
+      thd.title = lido.sem_fundamental
+        ? "Sem fundamental: a raia de 60 Hz é menor que um quarto do eficaz "
+          + "da janela — ruído, não sinal. Nem o THD nem as barras deste sinal "
+          + "se mostram: em % de quase zero elas seriam milhares de %."
+        : "";
+    } else {
       thd.textContent = `${formatar(lido.thd, 1)} %`;
       thd.classList.remove("vazio-valor");
       thd.title = "Raiz da soma dos quadrados das barras acima da "
@@ -7999,7 +8009,9 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       const v = valores ? valores[sinal.id] : null;
       if (!v || !v.harmonicos || !v.harmonicos.length) continue;
       const base = v.harmonicos[0];
-      if (!(base > 0)) continue;
+      //: Sem fundamental (o servidor decide: `fasor.tem_fundamental`), as
+      //: barras em % dela são ruído de milhares de % e achatariam as outras.
+      if (!(base > 0) || v.sem_fundamental) continue;
       //: As raias passam a ser indexadas pela ORDEM, e não pela posição: o
       //: índice 0 é a CONTÍNUA e o 1 é a fundamental. O servidor manda as duas
       //: coisas separadas (`continua` e `harmonicos`), porque são duas contas
@@ -10868,10 +10880,17 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       // ohms de distância um do outro: empurrar este rótulo para cima ou
       // para baixo é jogá-lo em cima do vizinho. Na altura da ponta ele cai
       // no meio da folga entre a Z1 e a Z2.
-      ctx.textAlign = "left";
+      // E do LADO em que a trajetória NÃO passa: numa falta perto do fim da
+      // linha ela desce justamente por ali, e o rótulo à direita da ponta
+      // ficava debaixo do traço medido (ensaio geral, 15/11/2026). Conta-se
+      // quanto da trajetória inteira (não só até o cursor: o rótulo não pode
+      // pular enquanto o cursor anda) cai na caixa de cada lado.
       ctx.textBaseline = "middle";
-      ctx.fillText("100 % da LT", X(zl * Math.cos(ang)) + 7,
-                   Y(zl * Math.sin(ang)));
+      const pontaX = X(zl * Math.cos(ang)), pontaY = Y(zl * Math.sin(ang));
+      const larguraLt = ctx.measureText("100 % da LT").width;
+      const ladoLt = ladoLivreDoRotulo(painel.pontos, X, Y, pontaX, pontaY, larguraLt, 7);
+      ctx.textAlign = ladoLt > 0 ? "left" : "right";
+      ctx.fillText("100 % da LT", pontaX + 7 * ladoLt, pontaY);
       if (meu.mtaZ) {
         const longe = (rMax - rMin) * 2;
         ctx.strokeStyle = token("--destaque");
@@ -13434,15 +13453,69 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         ctx.moveTo(a + 0.5, y0); ctx.lineTo(a + 0.5, yb); ctx.lineTo(z - 0.5, yb); ctx.lineTo(z - 0.5, y0);
         ctx.stroke();
         ctx.font = "600 11px ui-monospace, Consolas, monospace";
-        ctx.textAlign = "center";
         ctx.textBaseline = "bottom";
-        ctx.fillText("platô", (a + z) / 2, yb - 2);
+        const lugar = lugarDoPlato(ctx, emX, x0, x1, a, z);
+        if (lugar) {
+          ctx.textAlign = lugar.alinhar;
+          ctx.fillText("platô", lugar.x, yb - 2);
+        }
         ctx.restore();
       }
     }
     pintarEtiquetas(ctx, emX, x0, x1, y0);
     pintarRodapeDoTempo(ctx, emX, x0, x1, y1, ultimo);
     if (b._ladoLoc) pintarTabelaLoc(b._ladoLoc, p, pct, new Set());
+  }
+
+  /** Onde escrever «platô» sem cair debaixo da etiqueta numerada de um
+   *  cursor — as duas moram na mesma faixa acima da moldura, e com o cursor
+   *  no platô (o lugar natural de medir) o «1» tapava a palavra (ensaio
+   *  geral, 15/11/2026). No meio do colchete; se uma etiqueta o ocupa, à
+   *  esquerda dele; senão à direita; sem lugar livre, só o colchete. */
+  function lugarDoPlato(ctx, emX, x0, x1, a, z) {
+    const largura = ctx.measureText("platô").width;
+    const meia = ETIQUETA.largura / 2;
+    const ocupado = [];
+    cursores.forEach((t) => {
+      if (t === null) return;
+      const x = Math.round(emX(t)) + 0.5;
+      if (x < x0 - 1 || x > x1 + 1) return;
+      const centro = Math.min(Math.max(x, x0 + meia), x1 - meia);
+      ocupado.push([centro - meia - 3, centro + meia + 3]);
+    });
+    const livre = (e, d) => e >= x0 && d <= x1 && ocupado.every(([m, n]) => d <= m || e >= n);
+    const meio = (a + z) / 2;
+    if (livre(meio - largura / 2, meio + largura / 2)) return { x: meio, alinhar: "center" };
+    if (livre(a - 6 - largura, a - 6)) return { x: a - 6, alinhar: "right" };
+    if (livre(z + 6, z + 6 + largura)) return { x: z + 6, alinhar: "left" };
+    return null;
+  }
+
+  /** De que lado de um ponto (+1 direita, −1 esquerda) um rótulo de
+   *  `largura` px cruza MENOS a trajetória `pontos` ({r, x}). Cada segmento
+   *  é visto em cinco pontos — a 1 amostra por ponto, sobra. Empate fica à
+   *  direita, que era o lugar de sempre. */
+  function ladoLivreDoRotulo(pontos, X, Y, px, py, largura, folga) {
+    const caixa = (lado) => lado > 0
+      ? [px + folga - 2, px + folga + largura + 2] : [px - folga - largura - 2, px - folga + 2];
+    const dentro = ([e, d], x, y) => x >= e && x <= d && Math.abs(y - py) <= 7;
+    const contar = (lado) => {
+      const c = caixa(lado);
+      let n = 0;
+      let antes = null;
+      for (const q of pontos || []) {
+        if (q.r === null || q.x === null) { antes = null; continue; }
+        const x = X(q.r), y = Y(q.x);
+        if (antes) {
+          for (const f of [0, 0.25, 0.5, 0.75]) {
+            if (dentro(c, antes[0] + f * (x - antes[0]), antes[1] + f * (y - antes[1]))) n += 1;
+          }
+        } else if (dentro(c, x, y)) n += 1;
+        antes = [x, y];
+      }
+      return n;
+    };
+    return contar(-1) < contar(1) ? -1 : 1;
   }
 
   /** A tabelinha ao lado: o km de cada método nos cursores, como nos analógicos. */
@@ -13680,12 +13753,14 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
                           : `${formatar(tr.angulo[cabeca], 1, false)}°`));
     linha("I local (pu)", (tr) => num(tr.loc_pu[cabeca]),
           null, "Em pu da nominal do TC do terminal local.");
-    linha("I remoto (pu)", (tr) => (tr.rem_pu[cabeca] === null ? null
-          : `${formatar(tr.rem_pu[cabeca], 3)}`
-            + (tr.rem_ang[cabeca] === null ? ""
-               : ` ∠ ${formatar(tr.rem_ang[cabeca], 1, false)}°`)),
-          null, "Em pu da nominal do TC do terminal remoto; o ângulo é "
-                + "contado do I local do mesmo sinal.");
+    // Módulo e ângulo em LINHAS próprias: juntos na célula («0,173 ∠ 180,0°»)
+    // a coluna cortava o ângulo — «∠ 18…» se lia 18° ou 180° (ensaio geral,
+    // 15/11/2026). Cada número inteiro numa linha vale a altura que custa.
+    linha("I remoto (pu)", (tr) => num(tr.rem_pu[cabeca]),
+          null, "Em pu da nominal do TC do terminal remoto.");
+    linha("∠ I remoto", (tr) => (tr.rem_ang[cabeca] === null ? null
+          : `${formatar(tr.rem_ang[cabeca], 1, false)}°`),
+          null, "O ângulo do I remoto, contado do I local do mesmo sinal.");
     linha("decisão", (tr) => tr.decisao[cabeca] || null,
           (tr) => ({ restringe: "decisao-restringe", opera: "decisao-opera" })[
             tr.decisao[cabeca]] || "decisao-sem");
@@ -18778,7 +18853,8 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   const htmlLoc = texto => String(texto == null ? "" : texto)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const numLoc = (v, casas) => (v == null || !isFinite(v)) ? "—"
-    : Number(v).toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
+    : Number(v).toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas,
+                                          signDisplay: "negative" });
   /** Colunas de pixel DE VERDADE (ver o CLAUDE.md: pixel de CSS × devicePixelRatio). */
   const colunasLoc = (largura) => Math.max(100, Math.round(largura * (window.devicePixelRatio || 1)));
 

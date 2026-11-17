@@ -501,6 +501,20 @@ def regime_da_janela(janela: np.ndarray,
 LIMIAR_DE_REGIME = 0.30
 
 
+def tem_fundamental(eficazes: np.ndarray | None, rms: float) -> bool:
+    """Se a raia de 60 Hz da janela é medida e não ruído (`MINIMO_FUNDAMENTAL`).
+
+    É a mesma guarda do THD, e decide também se as BARRAS de um sinal se
+    desenham: em % de uma fundamental de 0,0001 A (o TC morto do 487E) o
+    ruído vira barras de 5.000 % e a escala do painel achata as fases sãs
+    (ensaio geral, 15/11/2026).
+    """
+    if eficazes is None or len(eficazes) == 0:
+        return False
+    base = float(eficazes[0])
+    return base > 0 and base >= MINIMO_FUNDAMENTAL * rms
+
+
 def distorcao_do_espectro(eficazes: np.ndarray,
                           rms: float | None = None) -> float | None:
     """O THD a partir das barras: `√(Σ h≥2) / h1`, em percentual.
@@ -519,7 +533,7 @@ def distorcao_do_espectro(eficazes: np.ndarray,
     base = float(eficazes[0])
     if base <= 0:
         return None
-    if rms is not None and not base >= MINIMO_FUNDAMENTAL * rms:
+    if rms is not None and not tem_fundamental(eficazes, rms):
         return None
     sobra = float(np.sqrt(np.sum(np.square(eficazes[1:]))))
     return 100.0 * sobra / base

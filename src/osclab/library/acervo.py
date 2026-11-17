@@ -287,7 +287,9 @@ def _principal(pasta: Path) -> Path | None:
 #: 7 em 15/11/2026 (ensaio geral): o leitor de CEV deixou de parar na linha
 #: estragada — um SEL-311C que tinha 330 amostras no resumo tem 717, e o
 #: cabeçalho da onda continuaria dizendo 330.
-RESUMO_ATUAL = 7
+#: 8 em 16/11/2026: o mesmo CEV passa a avisar que o cabeçalho declara 720
+#: amostras e vieram 717 — o aviso mora no resumo (`avisos`).
+RESUMO_ATUAL = 8
 
 
 def _so_o_numero(v: float) -> str:

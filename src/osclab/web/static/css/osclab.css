@@ -1169,6 +1169,14 @@ a.chave, .tema, .voltar, #exportar { text-decoration: none; }
   color: var(--suave);
   font-size: 10.5px;
 }
+/* A `.lado` genérica é o GRUPO DE BOTÕES (inline-flex, da altura de uma
+   chave); na legenda ela é uma etiqueta de texto. Sem isto o «—» do relé
+   sem número ficava numa caixa de 27 px, pequeno e no alto, lido como «‾»
+   (ensaio geral, 15/11/2026). */
+.legenda .lado {
+  display: inline;
+  height: auto;
+}
 
 /* Canal que o arquivo não deixou converter: avisa, não bloqueia. */
 .legenda .sem-relacao {
@@ -6457,7 +6465,7 @@ p.sem-logica {
   40%, 80% { transform: translateX(4px); } }
 .legenda li.pl-treme { animation: pl-tremor .35s ease-in-out; }
 .legenda li.pl-sem { opacity: .65; }
-.legenda li.pl-sem .lado { font-style: italic; }
+.legenda li.pl-sem .lado { font-style: italic; font-size: 12.5px; }
 .legenda .pl-campo { width: 7em; font: inherit; padding: 0 4px; background: var(--fundo);
   color: var(--tinta); border: 1px solid var(--destaque); border-radius: 3px; }
 .pl-aviso { margin: 0 0 6px; font-size: 12.5px; color: var(--suave); }

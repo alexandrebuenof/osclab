@@ -33,6 +33,18 @@ from osclab.plot import leitura as leitura_mod
 FASES = ("--fase-a", "--fase-b", "--fase-c")
 COR_DO_TERMINAL = {"A": "--refino-a", "B": "--refino-b"}
 NOME_DA_GRANDEZA = {"V": "tensões", "I": "correntes"}
+#: Até quantas amostras por ciclo a onda se desenha pela curva (Catmull-Rom)
+#: e não por retas — a MESMA regra do gráfico das ondas
+#: (`AMOSTRAS_PARA_SUAVIZAR` em `onda.js`; há teste que compara os dois).
+#: Um CEV de 4 por ciclo ligado por retas fica 29 % abaixo da senoide no meio
+#: de duas amostras, e no refino parecia outra onda (ensaio 15/11/2026).
+SUAVIZAR_ATE = 8
+
+
+def _suave(ld: rf.Lado, red: dict) -> bool:
+    """Se a série deste terminal se desenha pela curva: só amostra de
+    verdade (nunca mín./máx. de coluna) e taxa baixa — ver `SUAVIZAR_ATE`."""
+    return bool(red["amostras"]) and 0 < ld.por_ciclo <= SUAVIZAR_ATE
 
 
 def txt(x, casas: int | None = None) -> str:
@@ -112,7 +124,8 @@ def graficos(a: rf.Lado, b: rf.Lado, d: float, de: float, ate: float, colunas: i
             red = reduz(tela, [yy], colunas)
             saida.append({"terminal": ld.letra, "fase": f, "cor": cor(k),
                           "nome": nomes[k] + (f" ({ld.letra})" if vista == "mono" else ""),
-                          "t": red["t"], "onda": red["v"][0], "amostras": red["amostras"]})
+                          "t": red["t"], "onda": red["v"][0], "amostras": red["amostras"],
+                          "suave": _suave(ld, red)})
         return saida
 
     def de_seq(ld: rf.Lado, g: str, valores: list) -> dict:
@@ -128,7 +141,7 @@ def graficos(a: rf.Lado, b: rf.Lado, d: float, de: float, ate: float, colunas: i
         red = reduz(tela, [onda, env], colunas)
         return {"terminal": ld.letra, "nome": nome, "cor": COR_DO_TERMINAL[ld.letra],
                 "t": red["t"], "onda": red["v"][0], "env": red["v"][1],
-                "amostras": red["amostras"]}
+                "amostras": red["amostras"], "suave": _suave(ld, red)}
 
     saida = []
     if vista == "tri":

@@ -251,6 +251,26 @@ def _float(texto: str) -> float:
         return math.nan
 
 
+def _faltam_amostras(ciclos: str, por_ciclo: int, lidas: int) -> tuple[int] | None:
+    """`(declaradas,)` quando o arquivo tem MENOS amostras que o cabeçalho diz.
+
+    `NUM_OF_CYC × SAM/CYC_A` é a contagem que o relé promete. Medido nos 26
+    CEV das pastas de teste (16/11/2026): 21 batem exato — inclusive os de
+    ciclo fracionário (`60.125` × 8 = 481) —, o 487E grava UMA a MAIS
+    (60 × 8 = 480, 481 lidas), três fictícios não declaram, e só o SEL-311C
+    de Braço Norte, o da linha estragada, tem menos (720 declaradas, 717
+    lidas). Então só a FALTA vira aviso: a sobra de uma é do relé, e avisar
+    dela ensinaria a ignorar o triângulo.
+    """
+    try:
+        declaradas = round(float(str(ciclos).strip()) * por_ciclo)
+    except (ValueError, OverflowError):
+        return None
+    if por_ciclo <= 0 or declaradas <= lidas:
+        return None
+    return (declaradas,)
+
+
 def _inteiro(texto: str, padrao: int = 0) -> int:
     try:
         return int(float(texto))
@@ -411,6 +431,15 @@ class CevReader:
         n = len(amostras)
         por_ciclo = _inteiro(cabecalho.get("SAM/CYC_A", ""), 0)
         taxa = self._taxa(cabecalho, caminho)
+        faltam = _faltam_amostras(cabecalho.get("NUM_OF_CYC", ""), por_ciclo, n)
+        # A linha cortada no fim já tem aviso; este só entra quando falta MAIS
+        # do que ela — uma frase por problema.
+        if faltam and faltam[0] - n > cortadas:
+            avisos.append(
+                f"O cabeçalho declara {faltam[0]} amostras e o arquivo tem {n}: "
+                f"faltam {faltam[0] - n}. O tempo das que vieram pode estar "
+                f"deslocado a partir de onde elas sumiram."
+            )
 
         canais, dados, avisos_dos_canais = self._analogicos(
             colunas, cabecalho, identificacao, amostras

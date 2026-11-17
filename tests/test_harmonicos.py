@@ -9,6 +9,7 @@ espectro TEM que ser, dígito a dígito, a fundamental daquela mesma janela.
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -199,6 +200,16 @@ def test_sem_fundamental_que_sirva_de_denominador_o_THD_e_traco():
                        layout=layout)["espectro_entre"]["sinais"]
     assert entre["c0:instantaneo"]["thd"] is None
     assert entre["c1:instantaneo"]["thd"] is not None
+    # E as BARRAS: em % de 0,0001 A o ruído saía em barras de 5.000 % e a
+    # escala do painel achatava as fases sãs. O servidor diz `sem_fundamental`
+    # e a tela não desenha as barras desse sinal (`espectrosDoPainel`).
+    assert linha["c0:instantaneo"]["sem_fundamental"] is True
+    assert linha["c1:instantaneo"]["sem_fundamental"] is False
+    assert entre["c0:instantaneo"]["sem_fundamental"] is True
+    assert entre["c1:instantaneo"]["sem_fundamental"] is False
+    js = (Path(leitura.__file__).parents[1] / "web" / "static" / "js" / "onda.js"
+          ).read_text(encoding="utf-8")
+    assert "if (!(base > 0) || v.sem_fundamental) continue;" in js
 
 
 def test_a_leitura_traz_as_raias_so_para_quem_esta_num_painel_de_harmonicos():

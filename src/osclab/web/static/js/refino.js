@@ -393,17 +393,35 @@
     c.restore();
   }
 
-  function traco(c, G, emY, ts, vs, cor, larg, desl, amostras) {
+  function traco(c, G, emY, ts, vs, cor, larg, desl, amostras, suave) {
     if (!ts || !ts.length) return;
     c.strokeStyle = cor; c.lineWidth = larg; c.lineJoin = "round";
     c.beginPath();
-    let pena = false;
+    // `suave` é do servidor (`plot/refino.SUAVIZAR_ATE`): com poucas amostras
+    // por ciclo, a curva de Catmull-Rom — a mesma do gráfico das ondas
+    // (`tracar` em onda.js), como Bézier com controles a 1/6 do vizinho.
+    const pts = [];
+    const despejar = () => {
+      if (!pts.length) return;
+      c.moveTo(pts[0].x, pts[0].y);
+      if (!suave || pts.length < 3) {
+        for (let i = 1; i < pts.length; i++) c.lineTo(pts[i].x, pts[i].y);
+      } else {
+        for (let i = 0; i < pts.length - 1; i++) {
+          const p0 = pts[Math.max(i - 1, 0)], p1 = pts[i], p2 = pts[i + 1];
+          const p3 = pts[Math.min(i + 2, pts.length - 1)];
+          c.bezierCurveTo(p1.x + (p2.x - p0.x) / 6, p1.y + (p2.y - p0.y) / 6,
+                          p2.x - (p3.x - p1.x) / 6, p2.y - (p3.y - p1.y) / 6, p2.x, p2.y);
+        }
+      }
+      pts.length = 0;
+    };
     for (let i = 0; i < ts.length; i++) {
       const v = vs[i];
-      if (v === null || v === undefined) { pena = false; continue; }
-      const x = emX(G, ts[i]) + desl, y = emY(v);
-      if (!pena) { c.moveTo(x, y); pena = true; } else c.lineTo(x, y);
+      if (v === null || v === undefined) { despejar(); continue; }
+      pts.push({ x: emX(G, ts[i]) + desl, y: emY(v) });
     }
+    despejar();
     c.stroke();
     // VER AS AMOSTRAS: com o zoom deixando ≥ 6 px entre duas, um ponto em
     // cada — só quando a série não foi reduzida (cada ponto É amostra)
@@ -473,11 +491,11 @@
         const cor = token(s.cor);
         if (s.env) {
           c.globalAlpha = 0.55;
-          traco(c, G, emY, s.t, s.onda, cor, 1, desl, false);
+          traco(c, G, emY, s.t, s.onda, cor, 1, desl, false, s.suave);
           c.globalAlpha = 1;
-          traco(c, G, emY, s.t, s.env, cor, 2.2, desl, s.amostras);
+          traco(c, G, emY, s.t, s.env, cor, 2.2, desl, s.amostras, s.suave);
         } else {
-          traco(c, G, emY, s.t, s.onda, cor, 1.4, desl, s.amostras);
+          traco(c, G, emY, s.t, s.onda, cor, 1.4, desl, s.amostras, s.suave);
         }
       }
     }

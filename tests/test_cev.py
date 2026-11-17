@@ -218,10 +218,39 @@ def test_um_CEV_CORTADO_no_fim_avisa(tmp_path):
     assert any("cortado" in a for a in r.notes), r.notes
 
 
+def test_amostra_que_FALTA_contra_o_cabecalho_vira_aviso(tmp_path):
+    """`NUM_OF_CYC × SAM/CYC_A` é a contagem que o relé promete. O SEL-311C de
+    Braço Norte declara 720 e traz 717 (uma linha estragada e, ao que parece,
+    linhas engolidas): o tempo depois do buraco pode estar deslocado, e o
+    aviso diz quantas faltam. Sobra (o 487E grava uma a mais) não avisa."""
+    caminho = escrever_cev(tmp_path, por_ciclo=8, ciclos=4)
+    linhas = caminho.read_bytes().decode("latin-1").split("\r\n")
+    del linhas[7 + 10]
+    caminho.write_bytes("\r\n".join(linhas).encode("latin-1"))
+    r = registry.read(caminho)
+    assert r.n_samples == 31
+    assert any("declara 32 amostras" in a and "faltam 1" in a for a in r.notes), r.notes
+
+
+def test_amostra_que_SOBRA_contra_o_cabecalho_nao_avisa(tmp_path):
+    caminho = escrever_cev(tmp_path, por_ciclo=8, ciclos=4)
+    texto = caminho.read_bytes().decode("latin-1")
+    linhas = texto.split("\r\n")
+    nomes = [c.strip('"') for c in linhas[4].split(",")]
+    valores = linhas[5].split(",")
+    valores[nomes.index("NUM_OF_CYC")] = "3"
+    linhas[5] = ",".join(valores)
+    caminho.write_bytes("\r\n".join(linhas).encode("latin-1"))
+    r = registry.read(caminho)
+    assert r.n_samples == 32
+    assert not any("declara" in a for a in r.notes), r.notes
+
+
 def test_um_CEV_inteiro_nao_ganha_aviso_de_corte(tmp_path):
     for pc in (4, 8, 16):
         r = registry.read(escrever_cev(tmp_path, nome=f"x{pc}", por_ciclo=pc, ciclos=15))
-        assert not any("cortado" in a or "estragada" in a for a in r.notes), r.notes
+        assert not any("cortado" in a or "estragada" in a or "declara" in a
+                       for a in r.notes), r.notes
 
 
 def test_o_evento_que_o_rele_classificou_e_RELATO_e_nao_aviso(tmp_path):

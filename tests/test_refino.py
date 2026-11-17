@@ -533,3 +533,35 @@ def test_o_automatico_do_refino_e_o_do_alinhar_por_da_aba(par_tardio, criterio):
     pacote = prf.montar(a.registro, "A", b.registro, "B",
                                 {"alinhar": criterio, "colunas": 300})
     assert pacote["alinhamento"]["d"] == pytest.approx(esperado)
+
+
+def test_com_poucas_amostras_por_ciclo_a_onda_e_a_curva_do_grafico_das_ondas(simulacao):
+    """Ensaio geral (15/11/2026): o «refinar» ligava um CEV de 4 por ciclo com
+    RETAS — 29 % abaixo da senoide no meio de duas amostras —, enquanto o
+    gráfico das ondas do mesmo registro usava a curva. Agora o servidor diz
+    `suave` por série, pela MESMA regra (`SUAVIZAR_ATE` = a de `onda.js`), e
+    só sobre amostra de verdade (nunca sobre mín./máx. de coluna)."""
+    a = _gravar(simulacao, "S", taxa=240.0, seed=11)
+    b = _gravar(simulacao, "R", taxa=2000.0, seed=12, pre_s=0.075, erro_relogio_s=0.025)
+    perto = prf.montar(a, "SE S", b, "SE R", {"de": 0.08, "ate": 0.16, "colunas": 4000})
+    por_terminal = {g["terminal"]: g["series"] for g in perto["graficos"]}
+    assert all(s["suave"] for s in por_terminal["A"])           # 4 por ciclo
+    assert not any(s["suave"] for s in por_terminal["B"])       # 33 por ciclo
+    seq = prf.montar(a, "SE S", b, "SE R", {"de": 0.08, "ate": 0.16, "colunas": 4000,
+                                            "seq": True})
+    assert [g["series"][0]["suave"] for g in seq["graficos"]] == [True, False, True, False]
+    largo = prf.montar(a, "SE S", b, "SE R", {"colunas": 20})
+    assert not any(s.get("suave") for g in largo["graficos"] for s in g["series"]
+                   if not s["amostras"])
+
+
+def test_a_regra_da_curva_e_a_mesma_do_grafico_das_ondas():
+    import re
+    from pathlib import Path
+    js = (Path(prf.__file__).parents[1] / "web" / "static" / "js" / "onda.js").read_text(
+        encoding="utf-8")
+    achado = re.search(r"const AMOSTRAS_PARA_SUAVIZAR = (\d+);", js)
+    assert achado and int(achado.group(1)) == prf.SUAVIZAR_ATE
+    refino_js = (Path(prf.__file__).parents[1] / "web" / "static" / "js" / "refino.js"
+                 ).read_text(encoding="utf-8")
+    assert "s.suave" in refino_js and "bezierCurveTo" in refino_js
