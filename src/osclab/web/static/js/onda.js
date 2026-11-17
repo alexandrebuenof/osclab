@@ -17637,7 +17637,11 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       const item = criar("span", "sinal-da-barra");
       const cor = criar("i");
       cor.style.background = corDoSinal(sinal, painel);
-      item.append(cor, criar("span", null, sinal.sinal || sinal.nome || ""));
+      item.append(cor);
+      // O selo do IED, como na legenda do gráfico grande (17/11/2026).
+      const selo = seloDoIed(sinal.ied);
+      if (selo) item.append(selo);
+      item.append(criar("span", null, sinal.sinal || sinal.nome || ""));
       b.legenda.append(item);
     }
 

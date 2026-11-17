@@ -4712,6 +4712,9 @@ html.dif-aberta { --calc-largura: 460px; }
   border-radius: 2px;
 }
 
+/* o selo do IED já tem o vão do `gap` da linha */
+.sinal-da-barra .selo-ied { margin-right: 0; }
+
 /* O «Tab» só aparece com mais de um analógico na tela: uma tecla anunciada
    que não leva a lugar nenhum é pior que tecla nenhuma. */
 .dica-da-barra {
