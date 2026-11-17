@@ -589,7 +589,61 @@ def _ciclo_s(registro: Record) -> float:
 FRACAO_DO_FIM = 0.5
 
 
-def fim_da_falta(term: Terminal) -> float | None:
+def _modulo_das_fases(term: Terminal) -> np.ndarray | None:
+    """O módulo da corrente das fases com defeito (o maior delas), amostra a
+    amostra. `fmax` ignora o NaN do primeiro ciclo sem o aviso do `nanmax`."""
+    v, i = term.veredito, term.i
+    if v is None or i is None or not v.fases:
+        return None
+    return np.fmax.reduce(np.vstack([np.abs(i[f]) for f in v.fases]), axis=0)
+
+
+def inicio_da_falta(term: Terminal) -> float | None:
+    """O instante em que a CORRENTE DA FALTA começa, em segundos do registro.
+
+    Quase sempre é o início do veredito. A exceção é o religamento sobre a
+    falta (LT A_ FLORESTA, 16/11/2026): o registro começa com a linha
+    desligada, o veredito marca o FECHAMENTO do disjuntor — as fases sãs
+    passam a levar carga — e a fase em falta só salta um ciclo depois. Com o
+    início no fechamento, a corrente da falta ainda estava subindo quando
+    `fim_da_falta` a comparava com a pré-falta, a falta «acabava» 22 ms
+    depois de começar, e não sobrava platô para método nenhum.
+
+    A contradição é o critério, não um palpite: só se corrige quando a falta
+    achada a partir do início do veredito ACABA ANTES do pico da corrente da
+    própria falta. Aí o início passa a ser o salto da fase em falta — a
+    amostra em que o módulo cruza a metade do caminho até o pico, menos meio
+    ciclo (o fasor de um ciclo sobe em rampa: no meio dela, a janela está
+    pela metade dentro da falta). Nunca antes do início do veredito.
+    """
+    v = term.veredito
+    if v is None or v.instante is None:
+        return None
+    t = term.registro.time
+    base = float(t[v.instante])
+    modulo = _modulo_das_fases(term)
+    fim = fim_da_falta(term, base)
+    if modulo is None or fim is None:
+        return base
+    ate = float(t[v.fim]) if v.fim is not None and v.fim < t.size else float(t[-1])
+    onde = np.nonzero((t >= base) & (t <= ate) & np.isfinite(modulo))[0]
+    if onde.size == 0:
+        return base
+    k_pico = int(onde[np.argmax(modulo[onde])])
+    if fim >= float(t[k_pico]):
+        return base       # a falta achada contém o pico: nada a corrigir
+    ciclo = _ciclo_s(term.registro)
+    antes = modulo[(t >= base - 2 * ciclo) & (t < base - ciclo)]
+    antes = antes[np.isfinite(antes)]
+    piso = float(np.median(antes)) if antes.size else 0.0
+    meio = piso + 0.5 * (float(modulo[k_pico]) - piso)
+    subida = onde[(onde <= k_pico) & (modulo[onde] >= meio)]
+    if subida.size == 0:
+        return base
+    return max(base, float(t[subida[0]]) - 0.5 * ciclo)
+
+
+def fim_da_falta(term: Terminal, inicio: float | None = None) -> float | None:
     """O instante em que a FALTA acaba, em segundos do registro, ou `None`.
 
     Não é a abertura do disjuntor: quem eliminou a falta pode ter sido o OUTRO
@@ -603,15 +657,17 @@ def fim_da_falta(term: Terminal) -> float | None:
     o começo da falta é a mediana do ciclo que começa 1,25 ciclo depois dele
     (a janela do fasor já cheia). A falta acaba na primeira amostra, depois
     disso, abaixo do meio do caminho entre os dois.
+
+    `inicio` (segundos) vence o do veredito: é o de `inicio_da_falta`.
     """
-    v, i = term.veredito, term.i
-    if v is None or v.instante is None or i is None or not v.fases:
+    v = term.veredito
+    modulo = _modulo_das_fases(term)
+    if v is None or v.instante is None or modulo is None:
         return None
     t = term.registro.time
     ciclo = _ciclo_s(term.registro)
-    inicio = float(t[v.instante])
-    # `fmax` ignora o NaN do primeiro ciclo sem o aviso que o `nanmax` dá.
-    modulo = np.fmax.reduce(np.vstack([np.abs(i[f]) for f in v.fases]), axis=0)
+    if inicio is None:
+        inicio = float(t[v.instante])
 
     def mediana(de: float, ate: float) -> float | None:
         trecho = modulo[(t >= de) & (t < ate)]
@@ -642,8 +698,8 @@ def _plato(term: Terminal) -> tuple[float, float] | None:
         return None
     t = term.registro.time
     ciclo = _ciclo_s(term.registro)
-    inicio = float(t[v.instante])
-    candidatos = [x for x in (fim_da_falta(term),
+    inicio = inicio_da_falta(term)
+    candidatos = [x for x in (fim_da_falta(term, inicio),
                               float(t[v.fim]) if v.fim is not None and v.fim < t.size else None)
                   if x is not None and x > inicio + ciclo]
     fim = min(candidatos) if candidatos else float(t[-1])
@@ -772,7 +828,11 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
         pacote["aviso"] = f"IED B: {term_b.aviso}"
 
     ciclo = _ciclo_s(reg_a)
-    inicio = float(t_a[v.instante])
+    # O início da CORRENTE da falta (no religamento sobre a falta, depois do
+    # fechamento que o veredito marca). A pré-falta do Takagi e do direcional
+    # continua a do veredito (`_pre`): com a linha morta antes do fechamento,
+    # ela é corrente zero, o que é verdade.
+    inicio = inicio_da_falta(term_a)
     plato_a = _plato(term_a)
     tem_b = term_b is not None and term_b.v is not None and term_b.i is not None
     idx_b = _mais_proximas(term_b.registro.time, t_a + d) if tem_b else None
@@ -785,7 +845,7 @@ def _preparar(term_a: Terminal, term_b: Terminal | None, d: float, linha: dict |
             t0, t1 = max(plato[0], plato_b[0] - d), min(plato[1], plato_b[1] - d)
             plato = (t0, t1) if t1 > t0 else None
     abre_a = None if v.fim is None else float(t_a[min(v.fim, t_a.size - 1)])
-    fim_falta = fim_da_falta(term_a)
+    fim_falta = fim_da_falta(term_a, inicio)
     pacote["eventos"] = {"inicio": inicio, "plato": list(plato) if plato else None,
                          "abre_a": abre_a, "fim_falta": fim_falta,
                          "assentado": _assentado(term_a, inicio, abre_a, fim_falta)}
