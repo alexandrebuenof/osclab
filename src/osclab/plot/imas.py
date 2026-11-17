@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from osclab import progresso
 from osclab.dsp import fasor
 from osclab.formats.base import Record, lembrado_do_registro
 from osclab.plot import digitais
@@ -270,19 +271,33 @@ def _inicio_da_perturbacao(registro: Record) -> int | None:
     if por_ciclo < 2 or por_ciclo * 2 >= registro.n_samples:
         return None
 
-    d = np.abs(dados[:, por_ciclo:] - dados[:, :-por_ciclo])
-    if d.shape[1] < AMOSTRAS_SEGUIDAS:
+    if dados.shape[1] - por_ciclo < AMOSTRAS_SEGUIDAS:
         return None
 
-    ruido = np.median(d, axis=1)
-    # O piso evita disparar na poeira do conversor A/D de um canal quieto, onde
-    # a mediana do ruído é zero e qualquer coisa seria "cinco vezes" ela.
-    piso = np.maximum(ruido * VEZES_O_RUIDO,
-                      np.max(np.abs(dados), axis=1) * PISO_DO_CANAL)
-
+    # Canal a canal (15/11/2026): a matriz inteira de `d`, mais a cópia que a
+    # mediana faz e o `|dados|`, eram três matrizes do tamanho do registro de
+    # uma vez. A conta de cada canal é a mesma, e a resposta também.
+    # O maior |x| do canal já foi achado ao abrir (`presenca.extremos_do_canal`,
+    # lembrado pela matriz).
+    from osclab.analysis import presenca
     primeiro = None
-    for canal in range(d.shape[0]):
-        onde = _primeira_sequencia(d[canal] > piso[canal], AMOSTRAS_SEGUIDAS)
+    for canal in range(dados.shape[0]):
+        # Canal a canal é o passo da barra de abertura (`osclab.progresso`).
+        progresso.avancar(canal, dados.shape[0])
+        linha = dados[canal]
+        d = np.subtract(linha[por_ciclo:], linha[:-por_ciclo])
+        np.abs(d, out=d)
+        acima = np.empty(d.shape, dtype=bool)
+        ruido = np.median(d)
+        extremos = presenca.extremos_do_canal(registro, canal)
+        maior = extremos.pico if extremos.todos_finitos else np.max(np.abs(linha))
+        # O piso evita disparar na poeira do conversor A/D de um canal quieto,
+        # onde a mediana do ruído é zero e qualquer coisa seria "cinco vezes" ela.
+        piso = np.maximum(ruido * VEZES_O_RUIDO, maior * PISO_DO_CANAL)
+        np.greater(d, piso, out=acima)
+        del d
+        onde = _primeira_sequencia(acima, AMOSTRAS_SEGUIDAS)
+        del acima
         if onde is None:
             continue
         # `d[k]` compara a amostra `k + por_ciclo` com a `k`: o degrau aparece

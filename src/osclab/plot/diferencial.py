@@ -602,18 +602,23 @@ def resolver(registro: Record, lidos: dict, manuais: dict, fab: str,
 def _conferir(id_, campo, campos, relacoes) -> tuple[str, dict | None]:
     """`(motivo, sugestão)`: o que não fecha com o registro, ou `("", None)`."""
     valor = campo["valor"]
+
+    def br(x, formato="g"):
+        # Vírgula decimal, como o resto da tela: `1.5` se lê mil e quinhentos.
+        return format(x, formato).replace(".", ",")
+
     if campo["tipo"] == "num":
         minimo, maximo = campo["minimo"], campo["maximo"]
         if id_ in ("pct2", "pct5") and valor == 0:
             return "", None
         if valor < minimo or valor > maximo:
-            return (f"fora da faixa usual ({minimo:g} a {maximo:g} "
+            return (f"fora da faixa usual ({br(minimo)} a {br(maximo)} "
                     f"{campo['unidade']})".replace(" )", ")"), None)
     if id_ in ("rtc1", "rtc2") and relacoes[id_] > 0:
         declarada = relacoes[id_]
         if abs(valor / declarada - 1.0) > TOLERANCIA_DO_RTC:
-            return (f"o arquivo declara a relação {declarada:g}",
-                    {"valor": declarada, "texto": f"usar {declarada:g} (do arquivo)"})
+            return (f"o arquivo declara a relação {br(declarada)}",
+                    {"valor": declarada, "texto": f"usar {br(declarada)} (do arquivo)"})
     if id_ in ("tap1", "tap2"):
         lado = id_[-1]
         calculado = tap_calculado(
@@ -621,9 +626,9 @@ def _conferir(id_, campo, campos, relacoes) -> tuple[str, dict | None]:
             campos["rtc" + lado]["valor"], campos["con" + lado]["valor"])
         if calculado and abs(valor / calculado - 1.0) > TOLERANCIA_DO_TAP:
             return (f"difere {100 * (valor / calculado - 1):+.0f} % do calculado "
-                    f"por Potência nominal, V nominal e RTC ({calculado:.3g} A)",
+                    f"por Potência nominal, V nominal e RTC ({br(calculado, '.3g')} A)",
                     {"valor": round(calculado, 4),
-                     "texto": f"usar {calculado:.3g} (calculado)"})
+                     "texto": f"usar {br(calculado, '.3g')} (calculado)"})
     return "", None
 
 
@@ -883,6 +888,18 @@ def decidir(iop, lim, h2, h5, valor) -> np.ndarray:
         default=RESTRINGE)
 
 
+def rotulos_dos_eixos(eixos: dict) -> dict:
+    """Os números das QUATRO divisões de cada eixo, escritos como a tela os
+    mostra: exatos, com vírgula decimal.
+
+    A tela arredondava para uma casa, e num eixo de 0 a 1 o quarto virava
+    «0,3» — escrito logo ABAIXO da linha do pickup de 0,30 (ensaio geral,
+    15/11/2026). A marca do eixo é número e sai daqui, como as das ondas.
+    """
+    return {nome: [f"{round(eixo * k / 4, 6):g}".replace(".", ",") for k in range(5)]
+            for nome, eixo in eixos.items()}
+
+
 def _redondo(maximo: float) -> float:
     """O degrau «bonito» logo acima de `maximo` (1; 1,5; 2; 2,5; 3; 4; 5; 6; 8)."""
     if not (maximo > 0) or not math.isfinite(maximo):
@@ -962,6 +979,7 @@ def previa(valores: dict | None) -> dict:
         "irt": _arredondar(irt),
         "iop": _arredondar(iop),
         "eixos": {"irt": eixo_irt, "iop": eixo_iop},
+        "rotulos_dos_eixos": rotulos_dos_eixos({"irt": eixo_irt, "iop": eixo_iop}),
         "marcas": {"pickup": v["pickup"], "slp1": v["slp1"], "bp1": bp1,
                    "bp2": bp2, "slp2": slp2, "u87": v["u87"]},
         "exemplo": [x for x in exemplo if x in usados],
@@ -1005,6 +1023,7 @@ def montar(registro: Record, painel, ajustes: dict | None = None) -> dict:
         "equacoes": {"iop": "", "irt": ""},
         "curva": {"irt": [], "iop": []},
         "eixos": {"irt": 1.0, "iop": 1.0},
+        "rotulos_dos_eixos": rotulos_dos_eixos({"irt": 1.0, "iop": 1.0}),
         "marcas": {},
         "pontos": {"n": [], "t": []},
         "passo": 1,
@@ -1042,9 +1061,13 @@ def montar(registro: Record, painel, ajustes: dict | None = None) -> dict:
                           "o que se desenhar é estudo, não o que o relé fez.")
 
     if lado1 is None or lado2 is None:
-        pacote["falta"] = ("Este registro tem uma trinca de corrente só: o "
-                           "diferencial precisa da corrente dos DOIS lados do "
-                           "trafo.")
+        # Sem trinca nenhuma (um registro só de digitais), dizer «uma só»
+        # afirmava uma corrente que o arquivo não tem (ensaio geral).
+        pacote["falta"] = (("Este registro não tem nenhuma trinca de corrente"
+                            if lado1 is None else
+                            "Este registro tem uma trinca de corrente só")
+                           + ": o diferencial precisa da corrente dos DOIS "
+                             "lados do trafo.")
         return pacote
     if pacote["faltam"]:
         return pacote
@@ -1092,6 +1115,7 @@ def montar(registro: Record, painel, ajustes: dict | None = None) -> dict:
         "pronto": True,
         "curva": {"irt": _arredondar(curva_irt), "iop": _arredondar(curva_iop)},
         "eixos": {"irt": eixo_irt, "iop": eixo_iop},
+        "rotulos_dos_eixos": rotulos_dos_eixos({"irt": eixo_irt, "iop": eixo_iop}),
         "marcas": {"bp1": bp1, "bp2": bp2, "u87": valor["u87"],
                    "pickup": valor["pickup"]},
         "passo": int(passo),

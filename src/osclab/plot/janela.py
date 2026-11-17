@@ -46,7 +46,7 @@ from osclab.plot.conversao import LADOS
 
 #: Versão do formato do pacote da janela. Sobe quando a tela passa a depender
 #: de um campo novo. Ver o comentário em `montar`.
-CONTRATO = 33
+CONTRATO = 34
 
 
 def montar(registro: Record, *, de: float | None = None, ate: float | None = None,
@@ -290,14 +290,10 @@ def montar(registro: Record, *, de: float | None = None, ate: float | None = Non
                        "base": c.base,
                        "canais": [int(x) for x in c.abc]}
                       for c in conjuntos.de_registro(registro)],
-        # Onde mora a energia de cada LINHA do catálogo, para a barrinha do
-        # menu: `{linha: [60 Hz, harmônicos, contínua]}`, frações somando 1.
-        # Linha sem onda com que medir não entra, e a tela não desenha barra.
-        # Ver `catalogo.energia_das_linhas` — e repare que é MEDIDO, não
-        # herdado do veredito de `filtering`. Lembrada no registro
-        # (`catalogo.energia`): é do registro inteiro.
-        "energia": {k: [round(f, 4) for f in v] for k, v in
-                    catalogo.energia(registro, lado, contas).items()},
+        # A ENERGIA de cada linha do catálogo (a barrinha do «+ sinal») NÃO
+        # vai aqui desde 14/11/2026: é a conta mais cara da abertura (3,4 s
+        # de 11 s num registro de 12 × 1 M amostras) e só o «+ sinal» a
+        # mostra. A tela a pede quando o abre — ver `energia`, abaixo.
         # Os digitais do REGISTRO — a lista inteira, para a busca. Quais estão
         # na tela é assunto de cada painel.
         "digitais_disponiveis": [{"indice": r.indice, "nome": r.nome,
@@ -322,7 +318,32 @@ def montar(registro: Record, *, de: float | None = None, ate: float | None = Non
 #: lista de todos os digitais (3968 num SEL-411L, 430 kB de JSON) e o
 #: catálogo de sinais. Iam inteiros em todo pedido de janela — em cada entalhe
 #: da roda, em cada arrasto (12/11/2026). Ver `sem_repetir`.
-ESTATICOS = ("catalogo", "digitais_disponiveis", "energia")
+ESTATICOS = ("catalogo", "digitais_disponiveis")
+
+
+def energia(registro: Record, *, lado: str = "arquivo",
+            contas: list | None = None) -> dict:
+    """Onde mora a energia de cada LINHA do catálogo, para a barrinha do
+    «+ sinal»: `{linha: [60 Hz, harmônicos, contínua]}`, frações somando 1.
+
+    Linha sem onda com que medir não entra, e a tela não desenha barra. Ver
+    `catalogo.energia_das_linhas` — e repare que é MEDIDO, não herdado do
+    veredito de `filtering`. Lembrada no registro (`catalogo.energia`): é do
+    registro inteiro.
+
+    **Fora do pacote da janela** (14/11/2026): ia em todo pacote e era feita
+    ao ABRIR o registro — ~30 % da abertura num registro de ondas viajantes,
+    para uma barra que só aparece quando alguém abre o «+ sinal». Hoje a tela
+    a pede ali (`/api/onda/<sha>/energia`); com o mesmo `lado` e as mesmas
+    `contas` da janela, o número é o MESMO de antes (há teste). O `lado`
+    «arquivo» se resolve como em `montar`.
+    """
+    if lado not in LADOS:
+        lado = "arquivo"
+    if lado == "arquivo":
+        lado = conversao.lado_natural(registro)
+    return {k: [round(f, 4) for f in v] for k, v in
+            catalogo.energia(registro, lado, contas).items()}
 
 
 def sem_repetir(pacote: dict, selo_da_tela: str | None) -> dict:

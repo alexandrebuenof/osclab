@@ -1,5 +1,218 @@
 # Onde o trabalho está
 
+**15/11/2026 — ENSAIO GERAL da 1.0.0 e caça de bugs em casos extremos (ramo do agente,
+para revisão):** servidor de ensaio à parte (acervo no scratchpad, base de linhas
+copiada), os 30 casos de `Oscilografias para testes 1.0` enviados pela rota do acervo e
+percorridos no Chrome sem janela (abrir; roda, arrasto, Shift+faixa, botão direito,
+cursores 1/2, setas, ímã, filtro, primário/secundário, «+ sinal» com a energia; cada
+gráfico que o caso pede; duplo clique no localizador, «parâmetros», «? métodos»,
+«refinar», calculadora, eventos com «+ arquivo»), mais 30 SINTÉTICOS de casos extremos
+(`tests/fabrica.py`: órfão, taxa múltipla, nrates = 0, acento cp1252/UTF-8, sem
+pré-falta, 50 Hz, canal sem unidade, trinca incompleta, só digitais, um canal, um ciclo,
+meio ciclo, UMA amostra, 2013 ASCII/BINARY/BINARY32/FLOAT32, CEV dos dois dialetos a
+4/8/16, `.dat` truncado/vazio, `.cfg` lixo/cortado, CEV cortado/soma errada/sem disparo,
+taxa zero, ASCII sujo) e gestos absurdos pela API (zoom 1e9, andar 1e6, cursor NaN,
+colunas negativas, todo tipo de painel vazio). **Nenhuma exceção de JavaScript, nenhum
+4xx/5xx inesperado, nenhum NaN/Infinity no JSON, nenhum «carregando» eterno** (registro
+que quebra ao abrir mostra a frase do leitor). Nenhum pedido passou de 800 ms; abrir
+≈ 0,4–1,0 s de servidor (o 487E de 5760 digitais é o mais lento).
+**Defeitos achados e corrigidos (cada um com teste que falha antes):**
+- CEV com UMA linha estragada no meio parava a leitura ali, sem aviso: o SEL-311C do
+  caso 14a (Braço Norte) abria com 330 das 717 amostras — a falta «acabava» em 1,37 s.
+  Agora a linha estragada vira amostra em branco (como o `.dat` ASCII), o resto segue, e
+  há aviso; CEV cortado no fim também avisa (`formats/cev.py`, `tests/test_cev.py`).
+  `RESUMO_ATUAL` 6 → 7, para o `meta.json` gravado pelo leitor antigo (330 amostras)
+  se refazer sozinho (`tests/test_acervo.py`).
+- Diferencial 87T: as divisões do eixo com uma casa — o quarto de 1 pu saía «0,3», logo
+  abaixo da linha do pickup de 0,30; a prévia escrevia 0,375 como «0,38». Os números
+  vêm agora do Python (`diferencial.rotulos_dos_eixos`).
+- Ponto decimal em texto de tela: «636.2 A», «± 90.01°» (plano alfa), «0.1 a 1.5 pu»
+  e «usar 2.09» (ajustes do 87T), e na tira da onda «959.693 Hz · 15.99/ciclo» ao lado
+  de «TP 7.920 : 66». Agora vírgula (filtro `decimal` no template).
+- Registro só de digitais: o diferencial e o plano alfa diziam «tem uma trinca de
+  corrente só» e «Um lado só». Agora «não tem nenhuma trinca de corrente».
+- Relação 1:1 (SEL-311C «Export By Event», caso 15): o acervo já a lia como FALTA de
+  relação, mas `conversao.relacao` dividia por 1 e a tela mostrava 648 A e 25 kV
+  primários em «secundário», sem aviso. Agora 1:1 não converte e o canal ganha a
+  etiqueta «prim.» (`tests/test_plot.py`; a digitada continua valendo).
+- Painel de harmônicos: TC sem corrente (0,0001 A) com «THD 6.371,2 %». A guarda de
+  `fasor.MINIMO_FUNDAMENTAL` (a da DC % da tabelinha) passa a valer ali: THD «—».
+**Para ele decidir** (detalhes e fotos no relatório local do ensaio): ver a lista
+«pendências do ensaio» logo abaixo.
+
+**16/11/2026 — as pendências do ensaio, segunda passada (ramo `integracao-1411`,
+para revisão).** Corrigidos, cada um com teste (`tests/test_ensaio_tela.py` roda as
+funções do `onda.js` no Node; o resto em `test_cev`, `test_harmonicos`, `test_refino`):
+- **1.** CEV com MENOS amostras que `NUM_OF_CYC × SAM/CYC_A` ganha aviso («declara 720
+  amostras e o arquivo tem 717: faltam 3»). Só a falta avisa: medido nos 26 CEV das
+  pastas de teste, 21 batem exato (inclusive `60.125` × 8 = 481), o 487E grava UMA a
+  MAIS e só Braço Norte tem menos. `RESUMO_ATUAL` 7 → 8 (o aviso mora no resumo).
+- **3.** Comissionamento, conferência 6: folga de 1 amostra até 8 am/ciclo (CEV
+  decimado; Colíder passa). **Conferência 10** lê a distância por `faultloc/rele.py`
+  (o mesmo número do tracejado do localizador), não mais por regex própria; passa a
+  ver o `Z_BASED_LOCATION` do 411L e o `%` do MiCOM.
+- **4.** «platô» sai do lugar quando a etiqueta de um cursor o tapa: à esquerda do
+  colchete, senão à direita, senão só o colchete (`lugarDoPlato`).
+- **5.** «100 % da LT» vai para o lado da ponta em que a trajetória inteira menos passa
+  (`ladoLivreDoRotulo`; a trajetória toda, para o rótulo não pular com o cursor).
+- **6.** Plano alfa: «∠ I remoto» em linha própria — a célula cortava o ângulo.
+- **8.** O que arredonda a zero sai «0,0000», não «-0,0000» (`signDisplay: "negative"`
+  no `formatar` e no número do localizador).
+- **9.** O «—» do relé sem número: a `.lado` genérica é o grupo de botões (27 px de
+  altura); na legenda ela volta a ser texto, do tamanho do número.
+- **11.** Harmônicos: sinal sem fundamental (`fasor.tem_fundamental`, a guarda do THD)
+  vem com `sem_fundamental` e as barras dele não se desenham; o hover do «—» diz por quê.
+- **12.** «refinar»: com até 8 am/ciclo a onda é a curva de Catmull-Rom, como no
+  gráfico das ondas — o servidor manda `suave` por série (`plot/refino.SUAVIZAR_ATE`,
+  há teste que o compara com `AMOSTRAS_PARA_SUAVIZAR` do `onda.js`).
+- **2.** O LEIA-ME da pasta de testes (fora do repo): 14a vai até ≈ 12:11:05,578 (717
+  amostras), e as linhas do SER de 12:11:02,753 a 12:11:05,395 caem dentro; 11b: o
+  `106,70` do 411L É km (`LLR := 137,00`).
+
+`CONTRATO` não mudou: `sem_fundamental` e `suave` são campos A MAIS (servidor velho →
+a tela faz o de antes).
+
+**Para ele decidir** (com alternativas):
+- **A. Conferência 10 × Beira Rio (12b).** Agora que ela lê o `Z_BASED_LOCATION`, o
+  CEV do 411L de Beira Rio (`2.54(ME)`, igual ao `LLR := 2.54` mi: 100 % da linha)
+  DIVERGE: o nosso platô dá 175 % e oscila ±138 pontos. Linha de 2,54 mi, Z1MAG 0,06 Ω
+  secundário: a reatância do laço é ruído perto de zero, e o `(ME)` é o localizador
+  de MAIS DE UM TERMINAL do relé, que a nossa reatância de um terminal não reproduz.
+  (a) pular a conferência quando o relé marca `(ME)` — prós: compara igual com igual;
+  contras: é ler um sufixo da SEL; (b) pular linha curta demais (Z1 secundário abaixo
+  de N vezes a resolução) — universal, mas pede escolher N; (c) deixar divergir e
+  aceitar que o comissionamento reprova ali. Hoje: (c), sem decidir.
+- **B. (pendência 7) CLARO–IPÊ, seq. negativa 2T vazia.** É DADO: o gerador
+  (`Arquivos para OscLab/Amostras ficticias/gerar_amostras.py`) inventa as correntes e
+  tensões de cada terminal sozinhas (2.800 A ∠−78°, 1.150 A ∠−72°, afundamentos fixos),
+  sem rede que as amarre; a seq. negativa de dois terminais não fecha em ponto nenhum
+  (com d = 0, km de 15,6 a 42 sem platô). Os de um terminal dão 26,7 porque cada lado
+  é coerente consigo. (a) refazer o par com `tests/rede_de_falta.py` (a rede de
+  verdade dos testes); (b) deixar e tirar «seq. neg. 2T» do que o caso promete.
+- **C. (pendência 10) Ingeteam PL300** rotulado secundário com números de primário.
+  (a) campo «o arquivo está em primário» por registro (como a relação digitada);
+  (b) deixar. Não há regra universal que deduza isso sem palpite.
+- **D. (pendência 13) VRI «sem linha».** A linha ESTÁ na base (`206LT231`, LD CONFRESA
+  – VILA RICA, 102 km, Z1 12,59 + j48,33 Ω — a do LEIA-ME); o `.cfg` do P437/P139 não
+  tem nome de estação (só `P437-611-700`), então não há com que casar. (a) escolher a
+  linha à mão (o «parâmetros» já permite digitar); (b) casar pelo nome do ARQUIVO
+  (`VRI_…`) — seria palpite por nome, contra «o programa não adivinha linha».
+- **E. (pendência 1)** se o CEV com amostras a menos deve também RECUSAR o registro
+  (hoje avisa).
+
+**Pendências do ensaio (15/11/2026), cada uma com alternativas — a lista original; ver acima o que já se corrigiu:**
+1. CEV com linha estragada: o CEV não numera amostras, então se a linha estragada
+   engoliu outra, o tempo depois dela anda uma amostra (o aviso diz). No Braço Norte o
+   cabeçalho declara 180 ciclos (720) e há 717 linhas — pode ser isso. (a) deixar como
+   está; (b) avisar também quando `NUM_OF_CYC × SAM/CYC_A` não bate com o lido (em todos
+   os outros CEV do banco bate exato); (c) recusar o registro.
+2. O LEIA-ME do caso 14a diz «a gravação vai de 12:11:02,594 a 12:11:03,965» — era o
+   corte do defeito acima; agora vai até ≈ 12:11:05,58. Atualizar o LEIA-ME.
+3. `test_comissionamento` contra o banco do 1.0 (`OSCLAB_AMOSTRAS`): a conferência 6 (hora
+   do TRIP × digital) diverge em 1 amostra no CEV de Colíder (4 am/ciclo: carimbo em
+   137,32 amostras, o TRIP muda na 137, o teste espera a 138). Não é desta rodada — é
+   convenção da conferência num CEV decimado: (a) tolerância de 1 amostra abaixo de
+   8 am/ciclo; (b) arredondar o carimbo em vez de subir; (c) manter e investigar o relé.
+4. Localizador: a etiqueta «1» do cursor cai em cima da palavra «platô» quando o cursor
+   está no platô (fotos 11a). (a) «platô» à esquerda do colchete; (b) esconder «platô»
+   com cursor dentro; (c) etiqueta do cursor abaixo da moldura nesse painel.
+5. Plano de impedância: o rótulo «100 % da LT» fica sobre a trajetória (11b).
+   (a) rótulo do lado oposto ao da trajetória; (b) só no hover.
+6. Plano alfa: a célula «I remoto (pu)» corta o ângulo («0,173 ∠ 18…» — 18° ou 180°?).
+   (a) linha própria «∠ I remoto»; (b) coluna mais larga; (c) duas linhas na célula.
+7. Par fictício CLARO–IPÊ (17a): a seq. negativa 2T sai vazia («nenhum valor no platô»)
+   com 26,70/26,74/26,69 km nos outros métodos (esperado 26,2). Conferir se é o
+   esperado com o CEV de 8 am/ciclo e o alinhamento de ± 45° do plano alfa.
+8. Tabelinha escreve «-0,0000» (zero negativo) para valores que arredondam a zero.
+   (a) tirar o sinal quando o arredondado é zero; (b) manter (diz o lado).
+9. Legenda do localizador sem número do relé: o «—» sai pequeno e alto («‾»), pela
+   classe `lado`. (a) traço na altura do texto; (b) escrever «sem número».
+10. Ingeteam PL300 (05a): o LEIA-ME diz «10 analógicos em secundário», mas os números
+   (~112 kV de pico, 250 A) só fecham em PRIMÁRIO de 138 kV; sem relação no arquivo o
+   programa os rotula «secundário» e não converte — correto pela regra, mas o rótulo
+   engana. (a) campo para dizer «o arquivo está em primário»; (b) deixar.
+11. Harmônicos com um sinal sem fundamental (o TC morto do 487E): o THD virou «—», mas
+   as BARRAS dele continuam em % de 0,0001 A e a escala vai a 5.000 %, achatando as
+   fases sãs. (a) não desenhar as barras desse sinal e dizer «sem fundamental»;
+   (b) escala pelos sinais que têm fundamental; (c) deixar.
+12. O «refinar» desenha a onda de um CEV de 4 am/ciclo com RETAS entre as amostras,
+   enquanto o gráfico das ondas usa a curva (Catmull-Rom) abaixo de 8 am/ciclo.
+   (a) a mesma curva no refino; (b) deixar — lá os pontos das amostras é que importam.
+13. Caso 11a (VRI): «sem linha» — a base copiada não casou a LT CON–VRI; números do
+   localizador só aparecem digitando a linha. Conferir se a linha está na base.
+**15/11/2026 — ABRIR registro gigante mais rápido, mesmos números (ramo do agente,
+para revisão, em cima da barra de progresso e da energia sob demanda):** a MESMA
+fundamental (e o mesmo RMS) de cada canal era calculada três vezes ao abrir — no
+diagnóstico bruto × filtrado, na presença de sinal e nas trincas. Agora o diagnóstico
+deixa o resumo de cada canal (pico da fundamental, maior fundamental/RMS) guardado pela
+MATRIZ de amostras (`base.lembrado_da_matriz`: o registro corrigido pelo acervo é outro
+`Record` com a mesma matriz), e os extremos de cada canal (maior |x|, mínimo, finitos)
+são achados uma vez (`presenca.extremos_do_canal`). A conta das envoltórias foi
+reescrita sem vetores temporários (soma acumulada e soma da janela no lugar, giro da DFT
+uma vez por trecho, início da perturbação canal a canal). **Nada mudou de resultado,
+bit a bit**: curvas (fundamental, RMS, 60 Hz, DC, fasores, nos cinco estimadores),
+vereditos, presença, trincas, início, prefixos k, catálogo e primeira janela, nos 73
+registros de teste e em 13 sintéticos com os casos difíceis. float32 foi medido e
+recusado: a distorção do diagnóstico de um sinal filtrado vira 0 em float32.
+
+| sintético (rota da janela, `imas=-` como a tela abre) | abrir antes | abrir depois | pico de memória |
+|---|---|---|---|
+| ondas viajantes, 12 × 1 M | 7,8 s | 2,2 s | 408 → 288 MB |
+| ondas viajantes, 6 × 3 M | 11,2 s | 3,4 s | 745 → 576 MB |
+| tamanho SEL-411L (24 an. × 24 k, 3968 dig.) | 1,08 s | 0,90 s | 221 → 221 MB |
+
+Por etapa (1 M × 12): bruto × filtrado 2,7 → 1,4 s; presença 1,7 → 0,05 s; trincas
+2,2 → 0 s; início 0,6 → 0,34 s. A barra foi recalibrada (ler 7 %, bruto × filtrado
+60 %, contas 28 %). `CONTRATO` não mudou. **O que sobrou:** o diagnóstico continua sendo
+a fundamental + RMS de cada canal inteiro (~60 % de abrir); o início da perturbação
+(mediana de `|x[n] − x[n−N]|`) e os digitais do SEL-411L (leitura do arquivo, 0,55 s)
+são o resto.
+
+**14/11/2026 — a ENERGIA do catálogo saiu da abertura (ramo do agente, para revisão,
+em cima da barra de progresso):** pedido aprovado por ele. A barrinha de energia do
+«+ sinal» (60 Hz · harmônicos · contínua, `catalogo.energia`) era a conta mais cara de
+abrir um registro gigante e só o «+ sinal» analógico a mostra (a barra e a linha
+«energia» da engrenagem do cartão — nenhum bloco, interruptor, «ocultar nulos» ou
+picotando depende dela). Agora a tela a pede quando o «+ sinal» abre
+(`/api/onda/<sha>/energia` → `janela.energia`): o catálogo abre na hora, as barrinhas
+entram quando a conta chega (mantendo busca e rolagem), e num registro gigante a
+primeira vez mostra a barra de progresso dentro do catálogo («energia dos sinais»).
+Reabrir não pede de novo. O número é o MESMO de antes (teste de igualdade; e os JSON
+dos três sintéticos abaixo, antes × depois, são idênticos byte a byte). `CONTRATO`
+33 → 34 (o pacote perdeu `energia`). Pesos da barra de abertura refeitos sem ela.
+
+| sintético (rota da janela, processo) | abrir antes | abrir depois | 1º «+ sinal» (energia) | de novo |
+|---|---|---|---|---|
+| ondas viajantes, 12 × 1 M | 10,95 s | 8,26 s | 3,45 s | 2 ms |
+| ondas viajantes, 6 × 3 M | 17,67 s | 11,72 s | 5,12 s | 2 ms |
+| tamanho SEL-411L (24 an. × 24 k, 3968 dig.) | 1,19 s | 1,07 s | 0,05 s | 2 ms |
+
+**Para ele decidir:** (1) a barra de progresso no catálogo entra como uma linha nova
+abaixo do «Agrupar por» e some no fim — a lista desce e sobe uma linha; preferir que
+ela fique no lugar de algo, ou só um «medindo…» discreto?; (2) até a conta chegar os
+cartões ficam sem barrinha — mostrar um traço vazio no lugar?
+
+**14/11/2026 — barra de PROGRESSO ao abrir uma oscilografia (ramo do agente, para
+revisão):** pedido dele: «quando estamos abrindo uma oscilografia, apareça uma barra com
+o progresso». No lugar do «Carregando o registro…» parado, uma linha: trilho, nome curto
+da etapa, porcentagem. O progresso é do SERVIDOR (`src/osclab/progresso.py`): o pedido da
+janela leva `abertura=<token>` e a tela pergunta `/api/abertura/<token>` a cada 150 ms
+enquanto ele está em voo; só aparece depois de 300 ms. Etapas e peso medido num
+sintético de ondas viajantes (12 canais × 1 M amostras, 11 s para abrir): ler o arquivo
+1 % (0,13 s) · bruto × filtrado 21 % (2,4 s, canal a canal) · canais e grupos ~0 % ·
+contas do registro 72 % (presença 1,6 s, trincas 2,1 s, início 0,6 s, energia 3,4 s; cada
+uma anda canal a canal ou linha a linha, e a etapa diz qual conta está rodando) ·
+primeiro desenho ~5 % (0,5 s). Medida a cada 150 ms, a barra anda quase em linha reta
+com o tempo (0 % → 93 % em 11 s, e 100 % no fim). Vale também para «+ adicionar
+oscilografia» (a barra vai na tira dos IEDs, sem apagar os gráficos). Gesto sobre registro
+aberto nunca tem barra. De passagem: `acervo.ler` ganhou trava por registro — dois
+pedidos que abriam o mesmo registro novo ao mesmo tempo o liam duas vezes. `CONTRATO`
+não mudou (o pacote da janela é o mesmo). **Para ele decidir:** (1) mostrar a
+porcentagem ao lado da etapa, ou só a barra e a etapa; (2) a etapa «bruto × filtrado» e
+«trincas» são nomes técnicos — trocar por outro texto?; (3) os 300 ms antes de aparecer;
+(4) onde a barra fica no «+ adicionar oscilografia» (hoje no alto da tira dos IEDs).
+Fotos: `tests/test_abertura_navegador.py` com `OSCLAB_FOTOS=<pasta>`.
+
 **12/11/2026 — navegação LEVE e gestos que se compõem (ramo do agente, para revisão):**
 «meio travado nas oscilografias maiores como a de Alto Boa Vista»; depois: ondas
 viajantes (milhões de amostras), 487E, registros longos, duas pesadas na aba. Medido em

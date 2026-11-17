@@ -67,7 +67,7 @@ from dataclasses import asdict, dataclass, field, fields, replace
 from datetime import datetime
 from pathlib import Path
 
-from osclab import paths
+from osclab import paths, progresso
 from osclab.formats import registry
 from osclab.formats import relacoes as relacoes_mod
 from osclab.formats.base import FormatError, Record
@@ -284,7 +284,12 @@ def _principal(pasta: Path) -> Path | None:
 #: 4 em 21/10/2026: a falta evolutiva (`falta_inicial`).
 #: 5 em 22/10/2026: o modelo do SIPROTEC 5 («nº de série»).
 #: 6 em 22/10/2026: o trip (`trip_sinal`, `trip_ms`), o raio do selo.
-RESUMO_ATUAL = 6
+#: 7 em 15/11/2026 (ensaio geral): o leitor de CEV deixou de parar na linha
+#: estragada — um SEL-311C que tinha 330 amostras no resumo tem 717, e o
+#: cabeçalho da onda continuaria dizendo 330.
+#: 8 em 16/11/2026: o mesmo CEV passa a avisar que o cabeçalho declara 720
+#: amostras e vieram 717 — o aviso mora no resumo (`avisos`).
+RESUMO_ATUAL = 8
 
 
 def _so_o_numero(v: float) -> str:
@@ -800,6 +805,8 @@ def caminho_principal(sha: str) -> Path | None:
 _ABERTOS_NO_MAXIMO = 4
 _abertos: OrderedDict = OrderedDict()
 _trava_dos_abertos = threading.Lock()
+#: Uma trava por registro sendo lido (ver `ler`).
+_travas_de_leitura: dict = {}
 
 
 def _carimbo(pasta: Path) -> tuple:
@@ -831,19 +838,56 @@ def ler(sha: str) -> Record:
         raise FormatError("Este registro não está no acervo.")
     pasta = caminho.parent
     chave = (str(pasta), sha)
+    achado = _ja_aberto(chave, pasta)
+    if achado is not None:
+        progresso.lido(sha)
+        return achado
+    # Uma trava POR REGISTRO (14/11/2026): dois pedidos que chegam juntos para
+    # o mesmo registro novo (a janela e o painel localizador, depois de
+    # «+ adicionar oscilografia») o liam duas vezes, com o dobro da memória.
+    # O segundo espera o primeiro e recebe o mesmo objeto; o progresso que ele
+    # acompanha é o da leitura do outro (`progresso.lendo`, guardada por sha).
+    with _trava_dos_abertos:
+        trava = _travas_de_leitura.setdefault(chave, threading.Lock())
+    with trava:
+        achado = _ja_aberto(chave, pasta)
+        if achado is not None:
+            progresso.lido(sha)
+            return achado
+        carimbo = _carimbo(pasta)
+        with progresso.lendo(sha):
+            registro = registry.read(caminho)
+            progresso.etapa("canais")
+            registro = _com_vinculos(registro, sha)
+        with _trava_dos_abertos:
+            _abertos[chave] = (carimbo, registro)
+            _abertos.move_to_end(chave)
+            while len(_abertos) > _ABERTOS_NO_MAXIMO:
+                _abertos.popitem(last=False)
+    return registro
+
+
+def _ja_aberto(chave: tuple, pasta: Path) -> Record | None:
+    """O registro guardado em `_abertos`, se a pasta não mudou desde então."""
     carimbo = _carimbo(pasta)
     with _trava_dos_abertos:
         achado = _abertos.get(chave)
         if achado is not None and achado[0] == carimbo:
             _abertos.move_to_end(chave)
             return achado[1]
-    registro = _com_vinculos(registry.read(caminho), sha)
-    with _trava_dos_abertos:
-        _abertos[chave] = (carimbo, registro)
-        _abertos.move_to_end(chave)
-        while len(_abertos) > _ABERTOS_NO_MAXIMO:
-            _abertos.popitem(last=False)
-    return registro
+    return None
+
+
+def esta_aberto(sha: str) -> bool:
+    """O registro já está aberto na memória (abrir de novo não custa nada)?
+
+    É o que decide se um pedido de janela é uma ABERTURA, com barra de
+    progresso, ou um gesto sobre um registro que já está na tela.
+    """
+    caminho = caminho_principal(sha)
+    if caminho is None:
+        return False
+    return _ja_aberto((str(caminho.parent), sha), caminho.parent) is not None
 
 
 # ---------------------------------------------------------------------------

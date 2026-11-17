@@ -477,6 +477,23 @@ def test_sem_relacao_declarada_nao_inventa(tmp_path):
     assert canal["lado"] == "secundario"
 
 
+def test_relacao_1_para_1_NAO_e_relacao(tmp_path):
+    """Ensaio geral (15/11/2026), SEL-311C «Export By Event»: todo canal em
+    primário com `1,1`. O acervo e `relacoes.declarada_no_arquivo` já liam 1:1
+    como FALTA de relação, mas a conversão dividia por 1 — e a tela mostrava
+    648 A e 25 kV em «secundário», sem o aviso de canal sem relação."""
+    cfg = escrever_comtrade(tmp_path, na=1, n=64)
+    texto = cfg.read_text(encoding="utf-8").replace(
+        "1,IAW,A,,A,0.01,0,0,-32767,32767,600.0,5.0,S",
+        "1,IAW,A,,A,0.01,0,0,-32767,32767,1,1,P")
+    cfg.write_text(texto, encoding="utf-8")
+    registro = registry.read(cfg)
+    assert conversao.relacao(registro.analog_channels[0]) == 0
+    canal = _montar(registro, lado="secundario")["paineis"][0]["sinais"][0]
+    assert canal["convertido"] is False
+    assert canal["lado"] == "primario"
+
+
 # ---------------------------------------------------------------------------
 # Navegação: zoom, arrasto e volta ao inteiro
 # ---------------------------------------------------------------------------

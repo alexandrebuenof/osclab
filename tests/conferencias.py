@@ -985,6 +985,14 @@ TRIP = "6 hora do TRIP × digital"
 
 #: O carimbo do relé tem resolução de milissegundo.
 RESOLUCAO_DO_CARIMBO = 0.001     # s
+#: Num `.CEV` DECIMADO (até 8 amostras por ciclo) o relé decidiu o trip na
+#: taxa de dentro dele (16 por ciclo ou mais) e só depois guardou uma amostra
+#: a cada duas ou quatro: o digital aparece na amostra gravada mais perto do
+#: instante, que pode ser a de ANTES do carimbo. Medido em Colíder (4 por
+#: ciclo): carimbo a 137,32 amostras, o `TRIP` muda na 137. Uma amostra de
+#: folga ali; acima de 8 por ciclo, nenhuma.
+DECIMADO_ATE = 8
+FOLGA_NO_DECIMADO = 1            # amostras
 
 
 def carimbos_de_trip(caminho: Path, registro: Record) -> dict[str, float]:
@@ -1045,6 +1053,8 @@ def trip(caminho: Path, registro: Record) -> list[Linha]:
     de_trip = [c.index for c in registro.status_channels
                if c.name.strip().upper().startswith("TRIP")]
     tempo = registro.time
+    por_ciclo = registro.base_rate_hz / (registro.line_frequency or 60.0)
+    folga = FOLGA_NO_DECIMADO if por_ciclo <= DECIMADO_ATE + 1e-9 else 0
     saida = []
     for nome, segundos in carimbos.items():
         cedo = int(np.searchsorted(tempo, segundos - RESOLUCAO_DO_CARIMBO, "left"))
@@ -1069,7 +1079,7 @@ def trip(caminho: Path, registro: Record) -> list[Linha]:
                  if mudou[i, acerto if acerto is not None else perto]]
         saida.append(julgar(
             TRIP, nome, esperada, acerto if acerto is not None else perto, erro,
-            "amostras", 0,
+            "amostras", folga,
             f"carimbo a {segundos * registro.base_rate_hz:.2f} amostras; {quem}"
             + (f": {', '.join(nomes[:4])}" if nomes else "")))
     return saida
@@ -1318,11 +1328,13 @@ _NUMERO = r"([-+]?\d+(?:\.\d+)?)"
 
 
 def resumo_da_falta(caminho: Path) -> dict:
-    """O que o relé escreveu sobre a falta, lido AQUI e não pelo leitor.
+    """O que o relé escreveu sobre a falta, além da distância.
 
-    `{evento, local, pu, z, angulo, rf, correntes}` com o que houver. O
-    `.CEV` CSV tem o resumo nas linhas 4 e 5; o do 321 é texto; o COMTRADE o
-    traz no `.HDR` irmão.
+    `{evento, pu, z, angulo, rf, correntes}` com o que houver. O `.CEV` CSV
+    tem o resumo nas linhas 4 e 5; o do 321 é texto; o COMTRADE o traz no
+    `.HDR` irmão. **A distância não sai daqui**: é a do programa
+    (`faultloc/rele.py`, o tracejado do localizador), lida em `distancia` —
+    uma leitura só nos dois lugares, e a conferência prende a da tela.
     """
     caminho = Path(caminho)
     saida: dict = {}
@@ -1335,9 +1347,9 @@ def resumo_da_falta(caminho: Path) -> dict:
         return v if math.isfinite(v) else None
 
     def do_texto(texto: str) -> None:
-        m = re.search(r"Event:\s*([A-Z0-9]+(?: T)?)\s+Location:\s*" + _NUMERO, texto)
+        m = re.search(r"Event:\s*([A-Z0-9]+(?: T)?)\s+Location:", texto)
         if m:
-            saida["evento"], saida["local"] = m.group(1), float(m.group(2))
+            saida["evento"] = m.group(1)
         for chave, rotulo in (("z", "Fault Location Impedance"),
                               ("angulo", "Fault Location Angle"),
                               ("pu", "Per-Unit of Line Length"),
@@ -1354,7 +1366,6 @@ def resumo_da_falta(caminho: Path) -> dict:
                            (v.strip() for v in next(csv.reader(io.StringIO(linhas[5])))),
                            strict=False))
             saida["evento"] = cab.get("EVENT")
-            saida["local"] = num(cab.get("LOCATION"))
             for chave, campo in (("pu", "PER_UNIT_LL"), ("z", "FLT_LOC_Z"),
                                  ("angulo", "FLT_LOC_ANG"), ("rf", "FLT_R")):
                 if num(cab.get(campo)) is not None:
@@ -1416,11 +1427,14 @@ def distancia(caminho: Path, registro: Record) -> list[Linha]:
     A trajetória é a do painel (`impedancia.montar`), com os ajustes do
     próprio arquivo, levada a ohm SECUNDÁRIO — a base do `Z1MAG` do relé.
     """
+    from osclab.faultloc import rele as rele_mod
     from osclab.formats import ajustes as ajustes_mod
     from osclab.plot import impedancia, paineis
 
     resumo = resumo_da_falta(caminho)
-    if resumo.get("local") is None and resumo.get("pu") is None:
+    lido = rele_mod.do_registro(Path(caminho).parent, _arquivos_irmaos(caminho))
+    local = lido if isinstance(lido, rele_mod.DoRele) else None
+    if local is None and resumo.get("pu") is None:
         return [nao_se_aplica(DISTANCIA, "o relé não localizou a falta")]
     lacos = lacos_do_evento(resumo.get("evento"))
     if not lacos:
@@ -1435,6 +1449,8 @@ def distancia(caminho: Path, registro: Record) -> list[Linha]:
     x1 = z1 * math.sin(math.radians(angulo1))
     if resumo.get("pu") is not None:
         m_rele = resumo["pu"]
+    elif local.percentual is not None:
+        m_rele = local.percentual / 100.0
     else:
         # O 411L escreve o comprimento em `LLR`; o `LL` dele é o de fábrica.
         comprimento = None
@@ -1446,7 +1462,9 @@ def distancia(caminho: Path, registro: Record) -> list[Linha]:
                 continue
         if not comprimento:
             return [nao_se_aplica(DISTANCIA, "o arquivo não traz o comprimento (LL)")]
-        m_rele = resumo["local"] / comprimento
+        # O número do relé está na unidade do ajuste LL (é o que a SEL
+        # escreve); `local.km` só difere quando ele vem marcado `(mi)`.
+        m_rele = local.valor / comprimento
     if not FAIXA_DA_LINHA[0] <= m_rele <= FAIXA_DA_LINHA[1]:
         return [nao_se_aplica(DISTANCIA, f"o relé localizou fora da linha ({m_rele:+.2f} pu)")]
 

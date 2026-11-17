@@ -48,12 +48,26 @@ def _maximo_do_grupo(registro: Record, canais, lado: str) -> float:
     """O maior valor absoluto do grupo no registro INTEIRO, já convertido."""
     maior = 0.0
     for canal in canais:
-        bruto = registro.analog[canal.index]
-        convertido, _, _ = conversao.converter(bruto, canal, lado)
-        finitos = convertido[np.isfinite(convertido)]
-        if finitos.size:
-            maior = max(maior, float(np.abs(finitos).max()))
+        pico = _maior_finito(registro, canal, lado)
+        if pico is not None:
+            maior = max(maior, pico)
     return maior
+
+
+def _maior_finito(registro: Record, canal, lado: str) -> float | None:
+    """O maior |x| finito do canal no `lado` pedido; `None` sem amostra finita.
+
+    Sem conversão (o lado do arquivo), é o que `presenca.extremos_do_canal`
+    já achou e lembra pela matriz (15/11/2026): a mesma passada pela linha
+    inteira deixa de ser feita uma vez por pergunta.
+    """
+    bruto = registro.analog[canal.index]
+    convertido, _, _ = conversao.converter(bruto, canal, lado)
+    if convertido is bruto:
+        from osclab.analysis import presenca
+        return presenca.extremos_do_canal(registro, canal.index).pico_finito
+    finitos = convertido[np.isfinite(convertido)]
+    return float(np.abs(finitos).max()) if finitos.size else None
 
 
 def do_grupo(registro: Record, canais, unidade: str,
@@ -126,12 +140,9 @@ def _potencia_do_registro(registro: Record, lado: str) -> tuple[float, str] | No
         fator, base = fator_do_prefixo(canal.unit)
         if base.upper() not in PREFIXAVEIS:
             continue
-        bruto = registro.analog[canal.index]
-        convertido, _, _ = conversao.converter(bruto, canal, lado)
-        finitos = convertido[np.isfinite(convertido)]
-        if not finitos.size:
+        pico = _maior_finito(registro, canal, lado)
+        if pico is None:
             continue
-        pico = float(np.abs(finitos).max())
         antes = por_grandeza.get(base.upper(), (0.0, 1.0))
         if pico * fator > antes[0] * antes[1]:
             por_grandeza[base.upper()] = (pico, fator)

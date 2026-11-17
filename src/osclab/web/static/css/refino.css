@@ -33,6 +33,14 @@ body.refino { margin: 0; padding: 0; background: var(--pagina-lisa); color: var(
 .rf-desl b { font: 600 13px var(--mono); color: var(--tinta); }
 .rf-alerta { color: var(--atencao); font-size: 14px; border: 0; background: none; cursor: pointer; padding: 0 4px; }
 .rf-aviso { color: var(--ruim); }
+/* «aplicar»: aceso com mudança não aplicada; apagado sem nada a aplicar;
+   depois, «✓ aplicado» com o valor (17/11/2026). */
+.rf-aplicar { margin-left: 6px; }
+.rf-aplicar:disabled { opacity: .45; cursor: default; }
+.rf-aplicar:disabled:hover { border-color: var(--borda); color: var(--tinta); }
+.rf-aplicado { margin-left: 6px; font-size: 12px; color: var(--bom); font-weight: 600; }
+.rf-pergunta { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px;
+  padding: 2px 8px; font-size: 12px; color: var(--tinta); border: 1px solid var(--atencao); }
 /* o menu «vista ▾» */
 .rf-menu { position: relative; display: inline-flex; align-items: center; }
 .rf-menu-lista { position: absolute; top: 28px; left: 0; z-index: 20; min-width: 210px; display: flex;
@@ -65,8 +73,14 @@ body.refino main.rf-corpo { display: flex; gap: 12px; padding: 10px 14px; flex: 
 .rf-bloco h3 { margin: 0; padding: 4px 8px; font: 600 12px var(--sans); color: var(--titulo);
   border-bottom: 1px solid var(--linha); display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .rf-bloco h3 small { font-weight: 400; color: var(--suave); }
-.rf-de-terminal { border: 0; background: none; color: var(--destaque); font: 11px var(--sans); cursor: pointer;
-  padding: 0; text-decoration: underline dotted; text-underline-offset: 3px; }
+.rf-de-terminal { border: 0; background: none; color: var(--tinta); font: 11.5px var(--sans); cursor: pointer;
+  padding: 0 8px 6px; text-align: left; display: block; width: 100%; }
+.rf-de-terminal b { color: var(--destaque); font-weight: 600; text-decoration: underline dotted;
+  text-underline-offset: 3px; }
+/* o km do cursor 1 em destaque (17/11/2026) */
+.rf-km-destaque { display: flex; align-items: baseline; gap: 10px; padding: 8px 8px 2px; }
+.rf-km-num { font: 600 26px var(--mono); color: var(--loc-seqneg, var(--titulo)); }
+.rf-km-pct { font-size: 12px; color: var(--suave); }
 .rf-de-terminal:hover { color: var(--titulo); }
 .rf-tab { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
 .rf-tab th, .rf-tab td { padding: 3px 7px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

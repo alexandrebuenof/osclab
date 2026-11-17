@@ -9,6 +9,7 @@ espectro TEM que ser, dígito a dígito, a fundamental daquela mesma janela.
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -179,6 +180,36 @@ def _leitura(registro, layout, t=None):
     if t is None:
         t = float(registro.time[-1])
     return leitura.em(registro, [(t, 0, 0.0), (None, 0, 0.0)], layout=layout)
+
+
+def test_sem_fundamental_que_sirva_de_denominador_o_THD_e_traco():
+    """Ensaio geral (15/11/2026), SEL-487E: um TC sem corrente (0,0001 A de
+    fundamental, o resto é ruído do conversor) saía com «THD 6.371,2 %». É a
+    regra de `fasor.MINIMO_FUNDAMENTAL` — a mesma da DC % e da distorção da
+    tabelinha: abaixo de ¼ do eficaz da janela, a janela não é um sinal de
+    60 Hz e o percentual dela é `None` (traço). Vale no cursor e no trecho."""
+    r = trifasico()
+    ruido = np.random.default_rng(7).normal(0.0, 0.05, r.n_samples)
+    r.analog = r.analog.copy()
+    r.analog[0] = ruido
+    layout = [arranjo.harmonicos(["c0:instantaneo", "c1:instantaneo"])]
+    linha = _leitura(r, layout)["cursores"][0]["sinais"]
+    assert linha["c0:instantaneo"]["thd"] is None
+    assert linha["c1:instantaneo"]["thd"] is not None      # a fase sã continua
+    entre = leitura.em(r, [(float(r.time[0]), 0, 0.0), (float(r.time[-1]), 0, 0.0)],
+                       layout=layout)["espectro_entre"]["sinais"]
+    assert entre["c0:instantaneo"]["thd"] is None
+    assert entre["c1:instantaneo"]["thd"] is not None
+    # E as BARRAS: em % de 0,0001 A o ruído saía em barras de 5.000 % e a
+    # escala do painel achatava as fases sãs. O servidor diz `sem_fundamental`
+    # e a tela não desenha as barras desse sinal (`espectrosDoPainel`).
+    assert linha["c0:instantaneo"]["sem_fundamental"] is True
+    assert linha["c1:instantaneo"]["sem_fundamental"] is False
+    assert entre["c0:instantaneo"]["sem_fundamental"] is True
+    assert entre["c1:instantaneo"]["sem_fundamental"] is False
+    js = (Path(leitura.__file__).parents[1] / "web" / "static" / "js" / "onda.js"
+          ).read_text(encoding="utf-8")
+    assert "if (!(base > 0) || v.sem_fundamental) continue;" in js
 
 
 def test_a_leitura_traz_as_raias_so_para_quem_esta_num_painel_de_harmonicos():

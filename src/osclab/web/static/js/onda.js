@@ -85,7 +85,7 @@
   //: navegador recarrega o `.js` sozinho: quem troca de versão sem reiniciar
   //: fica com tela nova e servidor velho, e o resultado é uma tela que mostra
   //: coisas que não fazem sentido sem dar erro nenhum. Já custou três rodadas.
-  const CONTRATO = 33;
+  const CONTRATO = 34;
 
   //: A margem de cima abriga a etiqueta numerada dos cursores, que fica FORA da
   //: área de desenho: por dentro ela tapa o pico da onda — e o pico é
@@ -1062,6 +1062,10 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         // O tempo dispensa separador de milhar: `1043,2` cabe onde
         // `1.043,2` não cabe, e ninguém lê um instante como contagem.
         useGrouping: agrupar,
+        // O que ARREDONDA a zero sai «0,0000», não «-0,0000»: o sinal de
+        // um número que a tela escreve como zero não diz lado nenhum, e
+        // lido ao lado de um «0,0000» parece outra medida (ensaio 15/11).
+        signDisplay: "negative",
       });
       _formatadores.set(chave, f);
     }
@@ -1139,6 +1143,156 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     }
   }
 
+  // --- a barra de progresso da ABERTURA (14/11/2026) ---------------------
+  //
+  // Abrir um registro grande leva segundos (ondas viajantes: 12 a 36 s), e o
+  // «Carregando o registro…» parado não dizia se o programa andava. O pedido
+  // da janela leva um TOKEN; enquanto ele está em voo, a tela pergunta a
+  // `/api/abertura/<token>` onde a abertura está. Quem diz a etapa e a
+  // fração é o SERVIDOR (`osclab/progresso.py`), que só abre uma abertura se
+  // algum registro do pedido ainda não estiver aberto — gesto não tem barra.
+  // A tela só pinta: a barra, o nome curto da etapa e a porcentagem.
+
+  //: Abaixo disto a barra não aparece: registro que abre depressa não pisca.
+  const ESPERA_DA_BARRA_MS = 300;
+  //: De quanto em quanto a tela pergunta, enquanto a barra está na tela.
+  const PASSO_DA_BARRA_MS = 150;
+
+  /** Este pedido pode ABRIR registro? Na primeira janela, ou quando a aba
+   *  ganhou um registro que a última janela ainda não trazia. */
+  function pedidoQueAbre() {
+    if (!dados) return true;
+    const ja = new Set((dados.ieds || []).map((f) => f.sha));
+    return outrosRegistros.some((x) => !ja.has(x.sha));
+  }
+
+  /** Acompanha a abertura `token`; devolve `{ parar }`, a chamar quando o
+   *  pedido da janela terminar (deu certo ou não). */
+  function acompanharAbertura(token, lugar) {
+    let vivo = true;
+    let relogio = null;
+    let caixa = null;
+    const montar = () => {
+      const el = criar("div", "abertura");
+      el.setAttribute("role", "progressbar");
+      el.setAttribute("aria-valuemin", "0");
+      el.setAttribute("aria-valuemax", "100");
+      const trilho = criar("span", "abertura-trilho");
+      trilho.append(criar("span", "abertura-feito"));
+      el.append(trilho, criar("span", "abertura-etapa"), criar("span", "abertura-pct"));
+      // Sem nada desenhado, a barra toma o lugar do «Carregando…» (e leva
+      // `.vazio`: o tratador de erro global continua sabendo que a tela não
+      // desenhou). Com a tela cheia — «+ adicionar oscilografia» —, ela vai
+      // na tira dos IEDs, onde o registro novo vai aparecer. Com `lugar` (a
+      // energia do «+ sinal»), ela vai dentro dele.
+      if (lugar) {
+        el.classList.add("abertura-no-catalogo");
+        lugar.append(el);
+      } else if (!blocos.length) {
+        el.classList.add("vazio");
+        area.replaceChildren(el);
+      } else {
+        const tira = document.getElementById("tira-dos-ieds");
+        el.classList.add("abertura-na-tira");
+        (tira || area).prepend(el);
+        if (tira) tira.hidden = false;
+      }
+      return el;
+    };
+    const pintar = (e) => {
+      caixa = caixa || montar();
+      const pct = Math.round(100 * Math.min(Math.max(e.fracao || 0, 0), 1));
+      caixa.querySelector(".abertura-feito").style.width = `${pct}%`;
+      caixa.querySelector(".abertura-etapa").textContent = e.erro
+        ? `Não consegui abrir: ${e.erro}` : (e.rotulo || "");
+      caixa.querySelector(".abertura-pct").textContent = e.erro ? "" : `${pct} %`;
+      caixa.classList.toggle("com-erro", !!e.erro);
+      caixa.setAttribute("aria-valuenow", String(pct));
+      caixa.title = lugar
+        ? "Medindo onde está a energia de cada sinal, no registro inteiro. "
+          + "É feito uma vez por registro, na primeira vez que esta janela abre."
+        : e.registros > 1
+        ? `Abrindo ${e.registros} oscilografias desta aba.` : "Abrindo a oscilografia.";
+    };
+    const perguntar = async () => {
+      if (!vivo) return;
+      try {
+        const r = await fetch(`/api/abertura/${encodeURIComponent(token)}`);
+        const e = r.ok ? await r.json() : null;
+        if (vivo && e && e.ativa) pintar(e);
+      } catch (_e) {
+        // Sem resposta, não se inventa progresso: quem diz o erro é o
+        // pedido da janela, que falha junto (`avisarDaFalha`).
+      }
+      if (vivo) relogio = setTimeout(perguntar, PASSO_DA_BARRA_MS);
+    };
+    relogio = setTimeout(perguntar, ESPERA_DA_BARRA_MS);
+    return {
+      parar() {
+        vivo = false;
+        clearTimeout(relogio);
+        if (caixa && caixa.isConnected) caixa.remove();
+      },
+    };
+  }
+
+  // --- a ENERGIA do «+ sinal», pedida quando ele abre (14/11/2026) --------
+  //
+  // A barrinha de onde está a energia de cada sinal (60 Hz, harmônicos,
+  // contínua) é do registro INTEIRO e era a conta mais cara da abertura —
+  // 3,4 s de 11 s num registro de 12 × 1 M amostras —, para uma barra que só
+  // o «+ sinal» mostra. Saiu do pacote da janela: a tela a pede ao abrir o
+  // catálogo (`/api/onda/<sha>/energia`, com o mesmo lado, estimador e
+  // contas da janela) e a guarda enquanto o catálogo for o mesmo. O
+  // catálogo abre na hora; as barras entram quando a conta chega, e num
+  // registro gigante a primeira vez mostra a barra de progresso.
+
+  //: A última energia recebida, com a chave do que ela vale.
+  let energiaGuardada = { chave: null, valor: null };
+  //: O pedido em voo, para duas aberturas seguidas não pedirem duas vezes.
+  let energiaEmVoo = null;
+
+  /** O que muda a energia: o catálogo (o selo dele, que já muda com contas,
+   *  trincas e vínculos), o lado e o estimador. */
+  function chaveDaEnergia() {
+    return [dados ? dados.estaticos : "", lado || "", filtroEscolhido,
+            JSON.stringify(contas || [])].join("|");
+  }
+
+  /** A energia que vale para o catálogo de agora, ou `null` se não chegou. */
+  function energiaDoCatalogo() {
+    return energiaGuardada.chave === chaveDaEnergia() ? energiaGuardada.valor : null;
+  }
+
+  /** Pede a energia (uma vez por chave); a barra de progresso vai em `lugar`. */
+  function pedirEnergia(lugar) {
+    const chave = chaveDaEnergia();
+    if (energiaEmVoo && energiaEmVoo.chave === chave) return energiaEmVoo.promessa;
+    const p = new URLSearchParams();
+    if (lado) p.set("lado", lado);
+    if (filtroEscolhido !== FILTROS[0][0]) p.set("estimador", filtroEscolhido);
+    const token = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+    p.set("abertura", token);
+    const barra = acompanharAbertura(token, lugar);
+    const promessa = (async () => {
+      try {
+        const r = await fetch(`/api/onda/${sha}/energia?${p}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contas }),
+        });
+        const e = r.ok ? await r.json() : null;
+        if (e && e.energia) energiaGuardada = { chave, valor: e.energia };
+        return energiaDoCatalogo();
+      } finally {
+        barra.parar();
+        if (energiaEmVoo && energiaEmVoo.chave === chave) energiaEmVoo = null;
+      }
+    })();
+    energiaEmVoo = { chave, promessa };
+    return promessa;
+  }
+
   async function carregarAgora(gesto = {}) {
     // Resposta mais VELHA que a última aplicada é descartada: com o servidor
     // lento, um pedido de antes que chegasse depois punha de volta a janela
@@ -1165,6 +1319,13 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     if (estaticos) p.set("estaticos", estaticos.selo);
     const pontos = pontosDasOndas();
     p.set("imas", pontos);
+    // O token da barra de progresso, só no pedido que pode abrir registro.
+    let barra = null;
+    if (pedidoQueAbre()) {
+      const token = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+      p.set("abertura", token);
+      barra = acompanharAbertura(token);
+    }
 
     try {
       const r = await fetch(`/api/onda/${sha}?${p}`, pedidoComLayout());
@@ -1185,7 +1346,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       } else if (chegou.estaticos) {
         estaticos = { selo: chegou.estaticos, campos: {} };
         for (const k of Object.keys(chegou)) {
-          if (k === "catalogo" || k === "digitais_disponiveis" || k === "energia") {
+          if (k === "catalogo" || k === "digitais_disponiveis") {
             estaticos.campos[k] = chegou[k];
           }
         }
@@ -1226,6 +1387,10 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       }));
     } catch (erro) {
       avisarDaFalha(erro);
+    } finally {
+      // Terminou, dando certo ou não: a barra sai (o desenho, ou a mensagem
+      // de erro, já tomou o lugar dela). Barra parada para sempre, nunca.
+      if (barra) barra.parar();
     }
   }
 
@@ -3898,8 +4063,9 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
                   // usuário. Ver `catalogo.Sinal.dominio`.
                   dominio: x.dominio || "",
                   // A partição de energia desta linha, quando foi possível
-                  // medir: `[60 Hz, harmônicos, contínua]`.
-                  energia: (dados.energia || {})[x.linha || x.nome] || null,
+                  // medir: `[60 Hz, harmônicos, contínua]`. Chega depois do
+                  // catálogo abrir (`pedirEnergia`); até lá, sem barra.
+                  energia: (energiaDoCatalogo() || {})[x.linha || x.nome] || null,
                   sem_sinal: false, contas: new Map() };
         porChave.set(chave, linha);
       }
@@ -5424,6 +5590,19 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     fecharAoClicarFora(janelinha);
     janelinha.showModal();
     campo.focus();
+    // A energia das barrinhas é pedida AGORA, e não na abertura do registro
+    // (ver `pedirEnergia`). A lista já está na tela; quando a conta chega, ela
+    // é refeita no lugar — com a busca, o modo e a rolagem de antes.
+    if (!energiaDoCatalogo()) {
+      pedirEnergia(barra).then((valor) => {
+        if (!valor || !janelinha.open) return;
+        const rolagem = lista.scrollTop;
+        desenharLista();
+        lista.scrollTop = rolagem;
+      }).catch(() => {
+        // Sem energia, o catálogo continua servindo: só fica sem as barras.
+      });
+    }
   }
 
   /** Os grupos trifásicos do registro: quais três canais formam cada um.
@@ -6868,14 +7047,18 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
    */
   const AMOSTRAS_PARA_SUAVIZAR = 8;
 
-  function suavizavel() {
-    return !!dados && !dados.reduzido
-        && (dados.amostras_da_janela_do_fasor || 0) > 0
-        && dados.amostras_da_janela_do_fasor <= AMOSTRAS_PARA_SUAVIZAR;
+  // Por SINAL: o de outro IED traz a taxa e a redução DELE (`varios.py`) —
+  // um `.CEV` de 4 amostras por ciclo ao lado de um registro de 16 saía em
+  // retas, pontudo, porque a decisão era a do IED A (17/11/2026).
+  function suavizavel(sinal) {
+    const fonte = sinal && sinal.amostras_da_janela_do_fasor !== undefined ? sinal : dados;
+    return !!fonte && !fonte.reduzido
+        && (fonte.amostras_da_janela_do_fasor || 0) > 0
+        && fonte.amostras_da_janela_do_fasor <= AMOSTRAS_PARA_SUAVIZAR;
   }
 
-  function tracar(ctx, serie, tempo, emX, paraY) {
-    const suave = suavizavel();
+  function tracar(ctx, serie, tempo, emX, paraY, sinal) {
+    const suave = suavizavel(sinal);
     const pts = [];
     const despejar = () => {
       if (!pts.length) return;
@@ -7643,8 +7826,14 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     }
     base.textContent = formatar(lido.fundamental, lido.casas_fasor);
     base.classList.remove("vazio-valor");
-    if (lido.thd === null || lido.thd === undefined) vazio(thd);
-    else {
+    if (lido.thd === null || lido.thd === undefined) {
+      vazio(thd);
+      thd.title = lido.sem_fundamental
+        ? "Sem fundamental: a raia de 60 Hz é menor que um quarto do eficaz "
+          + "da janela — ruído, não sinal. Nem o THD nem as barras deste sinal "
+          + "se mostram: em % de quase zero elas seriam milhares de %."
+        : "";
+    } else {
       thd.textContent = `${formatar(lido.thd, 1)} %`;
       thd.classList.remove("vazio-valor");
       thd.title = "Raiz da soma dos quadrados das barras acima da "
@@ -7824,7 +8013,9 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       const v = valores ? valores[sinal.id] : null;
       if (!v || !v.harmonicos || !v.harmonicos.length) continue;
       const base = v.harmonicos[0];
-      if (!(base > 0)) continue;
+      //: Sem fundamental (o servidor decide: `fasor.tem_fundamental`), as
+      //: barras em % dela são ruído de milhares de % e achatariam as outras.
+      if (!(base > 0) || v.sem_fundamental) continue;
       //: As raias passam a ser indexadas pela ORDEM, e não pela posição: o
       //: índice 0 é a CONTÍNUA e o 1 é a fundamental. O servidor manda as duas
       //: coisas separadas (`continua` e `harmonicos`), porque são duas contas
@@ -10693,10 +10884,17 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       // ohms de distância um do outro: empurrar este rótulo para cima ou
       // para baixo é jogá-lo em cima do vizinho. Na altura da ponta ele cai
       // no meio da folga entre a Z1 e a Z2.
-      ctx.textAlign = "left";
+      // E do LADO em que a trajetória NÃO passa: numa falta perto do fim da
+      // linha ela desce justamente por ali, e o rótulo à direita da ponta
+      // ficava debaixo do traço medido (ensaio geral, 15/11/2026). Conta-se
+      // quanto da trajetória inteira (não só até o cursor: o rótulo não pode
+      // pular enquanto o cursor anda) cai na caixa de cada lado.
       ctx.textBaseline = "middle";
-      ctx.fillText("100 % da LT", X(zl * Math.cos(ang)) + 7,
-                   Y(zl * Math.sin(ang)));
+      const pontaX = X(zl * Math.cos(ang)), pontaY = Y(zl * Math.sin(ang));
+      const larguraLt = ctx.measureText("100 % da LT").width;
+      const ladoLt = ladoLivreDoRotulo(painel.pontos, X, Y, pontaX, pontaY, larguraLt, 7);
+      ctx.textAlign = ladoLt > 0 ? "left" : "right";
+      ctx.fillText("100 % da LT", pontaX + 7 * ladoLt, pontaY);
       if (meu.mtaZ) {
         const longe = (rMax - rMin) * 2;
         ctx.strokeStyle = token("--destaque");
@@ -12835,6 +13033,20 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     quadroRefino.remove();
     quadroRefino = null;
   }
+  // Fechar por FORA (clique no fundo, Esc aqui) passa pelo refino: com um
+  // alinhamento não aplicado ele pergunta antes (17/11/2026). Sem resposta
+  // dele (não carregou), fecha direto.
+  function pedirFecharRefino() {
+    const quadro = quadroRefino && quadroRefino.querySelector("iframe");
+    try {
+      if (quadro && quadro.contentWindow && quadro.contentDocument
+          && quadro.contentDocument.readyState === "complete") {
+        quadro.contentWindow.postMessage({ tipo: "refino-pedir-fechar" }, location.origin);
+        return;
+      }
+    } catch (_e) { /* sem acesso ao quadro: fecha direto */ }
+    fecharRefino();
+  }
   function abrirRefino() {
     const b = (outrosRegistros[0] || {}).sha;
     if (!b || !pacoteLoc) return;
@@ -12848,7 +13060,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     quadro.title = "Refinar · sequência negativa";
     quadro.addEventListener("load", () => { try { quadro.contentWindow.focus(); } catch (_e) { /* ok */ } });
     fundo.append(quadro);
-    fundo.addEventListener("pointerdown", (e) => { if (e.target === fundo) fecharRefino(); });
+    fundo.addEventListener("pointerdown", (e) => { if (e.target === fundo) pedirFecharRefino(); });
     document.body.append(fundo);
     quadroRefino = fundo;
   }
@@ -12858,7 +13070,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     else if (e.data.tipo === "refino-alinhamento") recalcularLoc();   // já gravado
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && quadroRefino) { e.stopImmediatePropagation(); fecharRefino(); }
+    if (e.key === "Escape" && quadroRefino) { e.stopImmediatePropagation(); pedirFecharRefino(); }
   }, true);
   function botaoRefinar() {
     const b = criar("button", "rf-botao-refinar", "refinar");
@@ -13259,15 +13471,69 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         ctx.moveTo(a + 0.5, y0); ctx.lineTo(a + 0.5, yb); ctx.lineTo(z - 0.5, yb); ctx.lineTo(z - 0.5, y0);
         ctx.stroke();
         ctx.font = "600 11px ui-monospace, Consolas, monospace";
-        ctx.textAlign = "center";
         ctx.textBaseline = "bottom";
-        ctx.fillText("platô", (a + z) / 2, yb - 2);
+        const lugar = lugarDoPlato(ctx, emX, x0, x1, a, z);
+        if (lugar) {
+          ctx.textAlign = lugar.alinhar;
+          ctx.fillText("platô", lugar.x, yb - 2);
+        }
         ctx.restore();
       }
     }
     pintarEtiquetas(ctx, emX, x0, x1, y0);
     pintarRodapeDoTempo(ctx, emX, x0, x1, y1, ultimo);
     if (b._ladoLoc) pintarTabelaLoc(b._ladoLoc, p, pct, new Set());
+  }
+
+  /** Onde escrever «platô» sem cair debaixo da etiqueta numerada de um
+   *  cursor — as duas moram na mesma faixa acima da moldura, e com o cursor
+   *  no platô (o lugar natural de medir) o «1» tapava a palavra (ensaio
+   *  geral, 15/11/2026). No meio do colchete; se uma etiqueta o ocupa, à
+   *  esquerda dele; senão à direita; sem lugar livre, só o colchete. */
+  function lugarDoPlato(ctx, emX, x0, x1, a, z) {
+    const largura = ctx.measureText("platô").width;
+    const meia = ETIQUETA.largura / 2;
+    const ocupado = [];
+    cursores.forEach((t) => {
+      if (t === null) return;
+      const x = Math.round(emX(t)) + 0.5;
+      if (x < x0 - 1 || x > x1 + 1) return;
+      const centro = Math.min(Math.max(x, x0 + meia), x1 - meia);
+      ocupado.push([centro - meia - 3, centro + meia + 3]);
+    });
+    const livre = (e, d) => e >= x0 && d <= x1 && ocupado.every(([m, n]) => d <= m || e >= n);
+    const meio = (a + z) / 2;
+    if (livre(meio - largura / 2, meio + largura / 2)) return { x: meio, alinhar: "center" };
+    if (livre(a - 6 - largura, a - 6)) return { x: a - 6, alinhar: "right" };
+    if (livre(z + 6, z + 6 + largura)) return { x: z + 6, alinhar: "left" };
+    return null;
+  }
+
+  /** De que lado de um ponto (+1 direita, −1 esquerda) um rótulo de
+   *  `largura` px cruza MENOS a trajetória `pontos` ({r, x}). Cada segmento
+   *  é visto em cinco pontos — a 1 amostra por ponto, sobra. Empate fica à
+   *  direita, que era o lugar de sempre. */
+  function ladoLivreDoRotulo(pontos, X, Y, px, py, largura, folga) {
+    const caixa = (lado) => lado > 0
+      ? [px + folga - 2, px + folga + largura + 2] : [px - folga - largura - 2, px - folga + 2];
+    const dentro = ([e, d], x, y) => x >= e && x <= d && Math.abs(y - py) <= 7;
+    const contar = (lado) => {
+      const c = caixa(lado);
+      let n = 0;
+      let antes = null;
+      for (const q of pontos || []) {
+        if (q.r === null || q.x === null) { antes = null; continue; }
+        const x = X(q.r), y = Y(q.x);
+        if (antes) {
+          for (const f of [0, 0.25, 0.5, 0.75]) {
+            if (dentro(c, antes[0] + f * (x - antes[0]), antes[1] + f * (y - antes[1]))) n += 1;
+          }
+        } else if (dentro(c, x, y)) n += 1;
+        antes = [x, y];
+      }
+      return n;
+    };
+    return contar(-1) < contar(1) ? -1 : 1;
   }
 
   /** A tabelinha ao lado: o km de cada método nos cursores, como nos analógicos. */
@@ -13505,12 +13771,14 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
                           : `${formatar(tr.angulo[cabeca], 1, false)}°`));
     linha("I local (pu)", (tr) => num(tr.loc_pu[cabeca]),
           null, "Em pu da nominal do TC do terminal local.");
-    linha("I remoto (pu)", (tr) => (tr.rem_pu[cabeca] === null ? null
-          : `${formatar(tr.rem_pu[cabeca], 3)}`
-            + (tr.rem_ang[cabeca] === null ? ""
-               : ` ∠ ${formatar(tr.rem_ang[cabeca], 1, false)}°`)),
-          null, "Em pu da nominal do TC do terminal remoto; o ângulo é "
-                + "contado do I local do mesmo sinal.");
+    // Módulo e ângulo em LINHAS próprias: juntos na célula («0,173 ∠ 180,0°»)
+    // a coluna cortava o ângulo — «∠ 18…» se lia 18° ou 180° (ensaio geral,
+    // 15/11/2026). Cada número inteiro numa linha vale a altura que custa.
+    linha("I remoto (pu)", (tr) => num(tr.rem_pu[cabeca]),
+          null, "Em pu da nominal do TC do terminal remoto.");
+    linha("∠ I remoto", (tr) => (tr.rem_ang[cabeca] === null ? null
+          : `${formatar(tr.rem_ang[cabeca], 1, false)}°`),
+          null, "O ângulo do I remoto, contado do I local do mesmo sinal.");
     linha("decisão", (tr) => tr.decisao[cabeca] || null,
           (tr) => ({ restringe: "decisao-restringe", opera: "decisao-opera" })[
             tr.decisao[cabeca]] || "decisao-sem");
@@ -13712,10 +13980,12 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     q.append(svgDoTrafo87(150, 64, true));
     const t = criar("div");
     const g = painel.lado1;
-    const titulo = criar("b", null, `Um lado só${g ? ` — ${g.rotulo}` : ""}`);
+    // Sem trinca NENHUMA (registro só de digitais) não há «um lado» nem
+    // «esta trinca» para olhar: o texto afirmaria uma corrente que não existe.
+    const titulo = criar("b", null, g ? `Um lado só — ${g.rotulo}` : "Sem trinca de corrente");
     if (g) titulo.title = g.nome;            // o radical só no hover
-    t.append(titulo, criar("p", null, painel.falta),
-             criar("p", "apagado-87", "Para olhar a corrente desta trinca, um gráfico analógico serve."));
+    t.append(titulo, criar("p", null, painel.falta));
+    if (g) t.append(criar("p", "apagado-87", "Para olhar a corrente desta trinca, um gráfico analógico serve."));
     q.append(t);
     return q;
   }
@@ -14262,9 +14532,11 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       ctx.stroke();
       ctx.globalAlpha = apagado ? 0.6 : 1;
       ctx.textAlign = "center"; ctx.textBaseline = "top";
-      ctx.fillText(textoDoNumero87(+vx.toFixed(2)), X(vx), y0 + 4);
+      // O número da divisão vem pronto do Python (`rotulos_dos_eixos`): com
+      // duas casas daqui, 0,375 virava «0,38».
+      ctx.fillText(p.rotulos_dos_eixos.irt[k], X(vx), y0 + 4);
       ctx.textAlign = "right"; ctx.textBaseline = "middle";
-      ctx.fillText(textoDoNumero87(+vy.toFixed(2)), x0 - 5, Y(vy));
+      ctx.fillText(p.rotulos_dos_eixos.iop[k], x0 - 5, Y(vy));
     }
 
     // A curva: cheia com tudo dado; tracejada onde entra valor de desenho.
@@ -14406,10 +14678,13 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       ctx.globalAlpha = 1;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(formatar(vx, vx % 1 ? 1 : 0), X(vx), y0 + 5);
+      // O número da divisão vem pronto do Python (`rotulos_dos_eixos`): com
+      // uma casa daqui, o quarto de 1 pu saía «0,3», escrito logo abaixo da
+      // linha do pickup de 0,30.
+      ctx.fillText(painel.rotulos_dos_eixos.irt[k], X(vx), y0 + 5);
       ctx.textAlign = "right";
       ctx.textBaseline = "middle";
-      ctx.fillText(formatar(vy, vy % 1 ? 1 : 0), x0 - 6, Y(vy));
+      ctx.fillText(painel.rotulos_dos_eixos.iop[k], x0 - 6, Y(vy));
     }
 
     // A curva da característica.
@@ -15616,7 +15891,11 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
    * acontecido. O botão fica aceso e preso porque é esse o estado do sinal —
    * tendo sido o relé quem o pôs assim.
    */
-  const filtroTravado = () => !!dados && dados.filtragem === "filtrado";
+  // Com mais de um IED, trava só se TODOS vierem filtrados: um `.CEV` filtrado
+  // ao lado de um COMTRADE bruto deixa o botão livre, e o servidor filtra só o
+  // bruto (`sinais.aplicavel`, registro a registro) — 17/11/2026.
+  const filtroTravado = () => !!dados && dados.filtragem === "filtrado"
+    && (dados.ieds || []).every((f) => !f.filtragem || f.filtragem === "filtrado");
 
   /** Liga e desliga o ímã. Fica guardado: quem analisa com ele aceso costuma
    * querer o mesmo na próxima oscilografia. */
@@ -16694,15 +16973,19 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
                   * (pista.y1 - pista.y0)
               : emYdir)
           : emYp;
-        if (ctx.globalAlpha === 1 && !suavizavel()) {
-          tracarEmPedacos(ctx, sinal.serie, tempo, emX, paraY);
+        // Sinal de outro IED tem o SEU vetor de tempo, já no eixo da aba
+        // (`varios._sinais_de`): desenhá-lo nos instantes do A espremia a
+        // onda e ignorava o alinhamento (17/11/2026).
+        const seuTempo = sinal.tempo || tempo;
+        if (ctx.globalAlpha === 1 && !suavizavel(sinal)) {
+          tracarEmPedacos(ctx, sinal.serie, seuTempo, emX, paraY);
         } else {
           ctx.beginPath();
-          tracar(ctx, sinal.serie, tempo, emX, paraY);
+          tracar(ctx, sinal.serie, seuTempo, emX, paraY, sinal);
           ctx.stroke();
         }
         if (pontosDeAmostra) {
-          pintarAmostras(ctx, sinal.serie, tempo, emX, paraY, x0, x1);
+          pintarAmostras(ctx, sinal.serie, seuTempo, emX, paraY, x0, x1);
         }
         ctx.restore();
       }
@@ -17445,7 +17728,7 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     for (const sinal of painel.sinais) {
       ctx.strokeStyle = corDoSinal(sinal, painel);
       ctx.beginPath();
-      tracar(ctx, sinal.serie, sinal.tempo || dados.tempo, emX, escala(sinal.eixo));
+      tracar(ctx, sinal.serie, sinal.tempo || dados.tempo, emX, escala(sinal.eixo), sinal);
       ctx.stroke();
     }
 
@@ -18596,7 +18879,8 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
   const htmlLoc = texto => String(texto == null ? "" : texto)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const numLoc = (v, casas) => (v == null || !isFinite(v)) ? "—"
-    : Number(v).toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
+    : Number(v).toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas,
+                                          signDisplay: "negative" });
   /** Colunas de pixel DE VERDADE (ver o CLAUDE.md: pixel de CSS × devicePixelRatio). */
   const colunasLoc = (largura) => Math.max(100, Math.round(largura * (window.devicePixelRatio || 1)));
 

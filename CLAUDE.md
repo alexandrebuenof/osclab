@@ -147,6 +147,7 @@ osclab/
 ├── config/                config.ini.example é versionado; config.ini NÃO
 ├── src/osclab/
 │   ├── paths.py           TODO caminho sai daqui
+│   ├── progresso.py       a barra de progresso de abrir um registro
 │   ├── version.py         comparação de versões
 │   ├── formats/           um leitor por formato; base.py é o contrato
 │   ├── dsp/               fasor.py: DFT de um ciclo, RMS, DC, THD
@@ -221,7 +222,8 @@ osclab/
   Um 0/1 por coluna eram 2,1 MB de JSON por pedido num SEL-411L.
 - **Conta do REGISTRO INTEIRO é lembrada no registro, nunca refeita por
   gesto** *(12/11/2026)*. O custo de um pedido de janela ou de cursor tem de
-  ser da janela. Presença de sinal, trincas, energia do catálogo, início da
+  ser da janela. Presença de sinal, trincas, energia do catálogo (pedida só
+  pelo «+ sinal», ver abaixo), início da
   perturbação, prefixo k, transições dos digitais: `base.lembrado_do_registro`
   (os `mesmos` são as matrizes e as tuplas de canais; a impressão barata das
   amostras vai nos `iguais`). Conta nova que lê o registro todo e não depende
@@ -242,7 +244,46 @@ osclab/
   60 Hz, DC, componentes, contas) e os picos/zeros pedidos são contas sobre
   a janela inteira — guardá-las do registro todo seria 8 bytes por amostra
   por sinal (96 MB num registro de 12 × 1 M). Abrir é O(registro) uma vez:
-  diagnóstico bruto × filtrado, presença, energia do catálogo.
+  diagnóstico bruto × filtrado, presença, trincas, início da perturbação.
+- **Abrir mede a fundamental de cada canal UMA vez** *(15/11/2026)*. O
+  diagnóstico bruto × filtrado, a presença de sinal e as trincas mediam a
+  MESMA fundamental (e o mesmo RMS) de cada canal — 36 num registro de 12
+  canais, 2/3 do tempo de abrir. O diagnóstico roda dentro do leitor, ANTES
+  de o acervo trocar o `Record` pelo corrigido (outro objeto, a mesma
+  matriz), por isso a medida é lembrada pela MATRIZ de amostras
+  (`base.lembrado_da_matriz`, chave com canal, trecho, janela, estimador e
+  `impressao_da_linha`): `presenca.resumo_do_canal` (pico da fundamental e
+  maior fundamental/RMS) e `presenca.extremos_do_canal` (maior |x|, mínimo,
+  algum/todos finitos — presença, trincas, prefixo k, início). Guarda-se o
+  NÚMERO, nunca a curva. E a conta é escrita sem vetores temporários
+  (`media_do_ciclo` e `fasores` no lugar, o giro da DFT uma vez por trecho em
+  `envoltoria.mesmo_giro`, o início canal a canal) — **as mesmas operações,
+  na mesma ordem: o resultado é o mesmo BIT A BIT**, conferido nas curvas
+  dos cinco estimadores, vereditos, presença, trincas, início, prefixos,
+  catálogo e primeira janela em todos os registros de teste. **float32 NÃO**:
+  a distorção do diagnóstico é `√(r² − f²)/f`, e em float32 os 0,001 % de um
+  sinal filtrado com ruído de quantização viram 0 — a separação de 500× do
+  veredito depende do float64. Abrir: 12 × 1 M 7,8 → 2,2 s (pico 408 →
+  288 MB); 6 × 3 M 11,2 → 3,4 s (745 → 576 MB). Teste:
+  `tests/test_leveza.py` (uma fundamental por canal; o lembrado igual ao
+  feito do zero). Os pesos da barra (`progresso.PESOS`) foram medidos de
+  novo: o diagnóstico é hoje ~60 % de abrir.
+- **O que só UM lugar da tela mostra não se conta ao ABRIR**
+  *(14/11/2026)*. A energia do catálogo (a barrinha 60 Hz · harmônicos ·
+  contínua do «+ sinal», `catalogo.energia`) era 3,4 s dos 11 s de abrir um
+  registro de 12 × 1 M amostras, e só o «+ sinal» analógico a mostra (barra
+  e linha «energia» da engrenagem do cartão; nada mais a lê — nem bloco,
+  nem interruptor, nem «ocultar sinais nulos»). Saiu do pacote da janela:
+  a tela a pede ao abrir o «+ sinal» (`/api/onda/<sha>/energia` →
+  `janela.energia`, com o mesmo lado, estimador e contas da janela; mesmo
+  número de antes, há teste), o catálogo abre na hora e as barrinhas entram
+  quando a conta chega — sem perder busca nem rolagem. A tela guarda a
+  resposta pelo selo do catálogo + lado + estimador + contas
+  (`chaveDaEnergia`); o servidor a lembra no registro, como antes. Num
+  registro gigante a primeira vez mostra a barra de progresso DENTRO do
+  catálogo (`progresso.abrindo(..., contas=SO_A_ENERGIA)`: a barra inteira
+  é dela). Abrir não a calcula: `tests/test_leveza.py`; o fluxo na tela:
+  `tests/test_energia_navegador.py`.
 - **O gráfico é um PAINEL, e a lista de painéis é da TELA.** Um painel é
   `{id, tipo, nome, sinais, medida}` (ver `plot/paineis.py`): a tela manda a
   lista inteira no corpo do pedido e o servidor desenha o que veio, na ordem em
@@ -349,6 +390,24 @@ osclab/
   deslocava o zoom). A roda vale durante o arrasto da oscilografia. Teste:
   `tests/test_navegacao_navegador.py`, com `combinacoes.mjs` — a janela final
   é a composição dos gestos, conferida gesto a gesto.
+- **Abrir registro tem barra de PROGRESSO, e ela é VERDADEIRA**
+  *(14/11/2026)*. O pedido da janela que pode abrir registro (a primeira, ou
+  a de um registro novo na aba) leva `abertura=<token>`; enquanto ele está em
+  voo a tela pergunta a `/api/abertura/<token>` a cada 150 ms. Quem diz a
+  etapa (ler · bruto × filtrado · canais e grupos · contas do registro ·
+  primeiro desenho) e a fração é o SERVIDOR (`osclab/progresso.py`): o
+  leitor, o diagnóstico e as contas do registro inteiro (`base.lembrado`)
+  anunciam o passo, canal a canal; os pesos das etapas são medidos; a fração
+  só cresce. Só vira abertura se algum registro do pedido NÃO estiver aberto
+  (`acervo.esta_aberto`) — gesto nunca tem barra —, e a barra só aparece
+  depois de 300 ms (o rápido não pisca). Erro vira estado de erro, e a barra
+  sai quando o pedido termina, dando certo ou não: barra parada para sempre
+  é o «carregando eterno» de novo. Sem nada desenhado ela toma o lugar do
+  «Carregando…» (com `.vazio`, para o tratador de erro global); com a tela
+  cheia («+ adicionar oscilografia») vai na tira dos IEDs. `acervo.ler` tem
+  uma trava POR REGISTRO: dois pedidos que abrem o mesmo o leem uma vez, e
+  quem espera acompanha a leitura do outro (ela é guardada por sha). Testes:
+  `tests/test_progresso.py`, `tests/test_abertura_navegador.py`.
 - **Traço reto é riscado em PEDAÇOS de 32 vértices** (`tracarEmPedacos`,
   junta e ponta redondas: o mesmo desenho). O navegador contorna uma linha de
   1,4 px com 2600 vértices (mín./máx. de 1300 colunas) de uma vez, e o
@@ -1007,6 +1066,17 @@ Três consequências para quem programa isto:
   renomear um GRÁFICO gravava o apelido do REGISTRO em disco. Hoje são
   `editarNomeDoPainel` e `editarNomeDoRegistro`, e há teste que recusa
   `function` repetida no nível do IIFE de qualquer `.js`.
+- **Número escrito em TEXTO pelo Python sai com vírgula decimal** *(ensaio geral,
+  15/11/2026)*. Rodapé, hover e tira montados com `f"{x:.2f}"` saíam «636.2 A»,
+  «± 90.01°», «959.693 Hz» — e em português o ponto é o MILHAR (`TP 7.920 : 66`
+  na mesma tira). Use `.replace(".", ",")` (há `br` em `faultloc/equacoes.py`, `_br`
+  em `plot/alfa.py`, o filtro `decimal` nos templates) ou mande o número e deixe a
+  tela formatar. Marcação de eixo também é número: sai pronta do Python
+  (`diferencial.rotulos_dos_eixos`), nunca arredondada na tela.
+- **Linha estragada no meio do CEV não encerra a leitura** *(15/11/2026)*. O leitor
+  parava nela: um SEL-311C do parque abria com 330 das 717 amostras, sem aviso. Ela
+  vira amostra em branco (como no `.dat` ASCII) e há aviso; a estragada no fim é
+  arquivo cortado, e também avisa.
 - **Toda rota POST lê o corpo por `_corpo()`**, que devolve sempre um
   dicionário. `request.get_json(silent=True) or {}` deixava passar `[1, 2]`
   e `"x"`, e o `.get` seguinte virava erro 500. Número da URL passa por
@@ -1262,6 +1332,7 @@ Três consequências para quem programa isto:
 | **0.9** | **Rodada de 12/11/2026.** **Ajustes do diferencial em gaveta** (variante 10: unifilar do trafo, característica ao vivo, origem de cada número na moldura); **«? métodos» com as equações desenhadas** (variante 06, métodos à esquerda com o km, «neste registro» como conta); **relação de TC/TP digitada** por grupo ou canal, gravada com o registro; **alinhamento manual do refino gravado**; eixo ambíguo sem título; engrenagem em todo gráfico, roda do localizador proporcional; correções da caça de bugs | **feito** — `0.9.0` |
 | 0.9+ | Correções de uso: digital que **picota** (mais de 20 mudanças até o fim do registro) sai do gráfico padrão e fica no «+ sinal», bloco «picotando»; **roda do localizador** com um pedido por vez e resposta velha descartada, e o resumo dos digitais feito uma vez por registro (janela de 1,08 s → 0,17 s no SEL-411L); seletores de trinca só com «G1» | **feito** — `0.9.1` |
 | 0.9++ | **Navegação leve**: contas do registro inteiro guardadas por registro, pirâmide de mín/máx (o gesto custa pelas colunas da tela, não pelas amostras), tiras digitais pelas transições, pacote sem repetir catálogo; fila de gestos (roda, arrasto, setas e combinações não se perdem nem voltam); digitais em bits (abrir o SEL-411L: 368 → 53 MB). Roda no ABV 240 → 52 ms; 3 M amostras 21,7 s → 0,10 s. **Duplo clique no localizador** amplia a região da falta em todos os gráficos; picotando com limite 20 (leva o fator de potência da medição) | **feito** — `0.9.2` |
+| 0.9+++ | **Correções de bugs.** Ensaio da 1.0.0 (nove pendências de tela e de leitura, abertura com a fundamental medida uma vez por canal). Localizador: **religamento sobre a falta** localiza (o início passa ao salto da fase em falta quando a falta achada acabava antes do pico dela); a seq. negativa tenta a regra da falta curta quando os platôs dos dois terminais não se cruzam. **Duas oscilografias**: o IED B desenhado no tempo DELE (antes saía espremido no tempo do A e o «alinhar» não mudava a tela), suavizado pela taxa dele, e o filtro só trava com todos filtrados (filtra só o bruto). **Refino**: «aplicar» (mover é prévia; fechar com mudança pergunta), passo de uma amostra do registro mais rápido, km da seq. negativa em destaque com o terminal de partida | **feito** — `0.9.3` |
 | 0.5 | Bruto/filtrado, descontinuidade, alinhamento | |
 | 0.6 | Localização de faltas (um e dois terminais) | |
 | 0.7 | Mini relatório | |

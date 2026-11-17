@@ -251,6 +251,26 @@ def _float(texto: str) -> float:
         return math.nan
 
 
+def _faltam_amostras(ciclos: str, por_ciclo: int, lidas: int) -> tuple[int] | None:
+    """`(declaradas,)` quando o arquivo tem MENOS amostras que o cabeçalho diz.
+
+    `NUM_OF_CYC × SAM/CYC_A` é a contagem que o relé promete. Medido nos 26
+    CEV das pastas de teste (16/11/2026): 21 batem exato — inclusive os de
+    ciclo fracionário (`60.125` × 8 = 481) —, o 487E grava UMA a MAIS
+    (60 × 8 = 480, 481 lidas), três fictícios não declaram, e só o SEL-311C
+    de Braço Norte, o da linha estragada, tem menos (720 declaradas, 717
+    lidas). Então só a FALTA vira aviso: a sobra de uma é do relé, e avisar
+    dela ensinaria a ignorar o triângulo.
+    """
+    try:
+        declaradas = round(float(str(ciclos).strip()) * por_ciclo)
+    except (ValueError, OverflowError):
+        return None
+    if por_ciclo <= 0 or declaradas <= lidas:
+        return None
+    return (declaradas,)
+
+
 def _inteiro(texto: str, padrao: int = 0) -> int:
     try:
         return int(float(texto))
@@ -382,7 +402,8 @@ class CevReader:
             )
 
         avisos: list[str] = []
-        amostras, tiras, disparo_em, erradas = self._ler_amostras(linhas, colunas)
+        amostras, tiras, disparo_em, erradas, estragadas, cortadas = (
+            self._ler_amostras(linhas, colunas))
         if not amostras:
             raise FormatError(
                 f"{caminho.name} tem cabecalho de CEV mas nenhuma amostra."
@@ -392,10 +413,33 @@ class CevReader:
                 f"Soma de verificação não bateu em {erradas} linha(s) — o "
                 f"arquivo pode ter sido alterado depois de sair do relé."
             )
+        if estragadas:
+            # O CEV não numera as amostras: se a linha estragada engoliu outra
+            # inteira, o tempo depois dela anda uma amostra. Dizer isso é o que
+            # separa a amostra em branco de um palpite.
+            avisos.append(
+                f"{estragadas} linha(s) de amostra vieram estragadas e ficaram "
+                f"em branco; se uma delas engoliu outra, o tempo depois dela "
+                f"pode estar deslocado."
+            )
+        if cortadas:
+            avisos.append(
+                "O arquivo parece cortado: a última linha de amostra acaba no "
+                "meio e ficou de fora. A cópia do relé terminou?"
+            )
 
         n = len(amostras)
         por_ciclo = _inteiro(cabecalho.get("SAM/CYC_A", ""), 0)
         taxa = self._taxa(cabecalho, caminho)
+        faltam = _faltam_amostras(cabecalho.get("NUM_OF_CYC", ""), por_ciclo, n)
+        # A linha cortada no fim já tem aviso; este só entra quando falta MAIS
+        # do que ela — uma frase por problema.
+        if faltam and faltam[0] - n > cortadas:
+            avisos.append(
+                f"O cabeçalho declara {faltam[0]} amostras e o arquivo tem {n}: "
+                f"faltam {faltam[0] - n}. O tempo das que vieram pode estar "
+                f"deslocado a partir de onde elas sumiram."
+            )
 
         canais, dados, avisos_dos_canais = self._analogicos(
             colunas, cabecalho, identificacao, amostras
@@ -464,8 +508,10 @@ class CevReader:
     @staticmethod
     def _ler_amostras(
         linhas: list[str], colunas: _Colunas
-    ) -> tuple[list[list[str]], list[str], int | None, int]:
-        """As linhas de amostra, a tira de digitais de cada uma e onde disparou.
+    ) -> tuple[list[list[str]], list[str], int | None, int, int, int]:
+        """As linhas de amostra, a tira de digitais de cada uma e onde disparou;
+        e quantas vieram com soma errada, quantas vieram ESTRAGADAS (ficaram em
+        branco) e quantas estragadas sobraram no FIM (o arquivo foi cortado).
 
         Para no marcador `SETTINGS`: dali para baixo o arquivo traz os ajustes
         do relé num campo só, com quebras de linha dentro, e não é mais CSV.
@@ -474,6 +520,13 @@ class CevReader:
         tiras: list[str] = []
         disparo_em: int | None = None
         erradas = 0
+        # Linha ESTRAGADA (campos de menos ou de mais) não encerra a leitura:
+        # o leitor parava nela, e num SEL-311C do parque ficaram 330 das 717
+        # amostras, sem aviso (ensaio geral, 15/11/2026). Ela vira amostra em
+        # BRANCO — como no `.dat` ASCII, `comtrade._ler_ascii` — quando há
+        # linha boa depois dela; sem nenhuma depois, o arquivo foi cortado.
+        pendentes = 0
+        estragadas = 0
 
         for linha in linhas[7:]:
             if not linha.strip():
@@ -482,7 +535,14 @@ class CevReader:
             if campos and campos[0].strip().strip('"').upper() == _FIM_DOS_DADOS:
                 break
             if len(campos) != colunas.total:
-                break
+                pendentes += 1
+                continue
+            for _ in range(pendentes):
+                amostras.append([""] * colunas.total)
+                if colunas.digitais is not None:
+                    tiras.append("")
+            estragadas += pendentes
+            pendentes = 0
             if not _confere(linha, campos):
                 erradas += 1
             if (colunas.trigger is not None
@@ -493,7 +553,7 @@ class CevReader:
             if colunas.digitais is not None:
                 tiras.append(campos[colunas.digitais])
 
-        return amostras, tiras, disparo_em, erradas
+        return amostras, tiras, disparo_em, erradas, estragadas, pendentes
 
     @staticmethod
     def _taxa(cabecalho: dict[str, str], caminho: Path) -> float:

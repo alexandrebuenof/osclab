@@ -18,7 +18,7 @@ import numpy as np
 
 from osclab.analysis import presenca
 from osclab.formats import conjuntos, registry
-from osclab.plot import catalogo, digitais, imas, janela, serie, unidades
+from osclab.plot import catalogo, digitais, imas, janela, leitura, serie, unidades
 from tests.fabrica import escrever_comtrade
 
 
@@ -46,7 +46,7 @@ def test_as_contas_do_registro_inteiro_sao_feitas_uma_vez(tmp_path, monkeypatch)
     contas = {nome: _contar(monkeypatch, modulo, nome) for modulo, nome in (
         (presenca, "_alternados"), (presenca, "_sem_sinal"), (conjuntos, "_medir_ondas"),
         (imas, "_inicio_da_perturbacao"), (digitais, "_trocas"), (digitais, "_resumos"),
-        (unidades, "_por_unidade"), (catalogo, "energia_das_linhas"))}
+        (unidades, "_por_unidade"))}
     primeiro = janela.montar(r, colunas=600)
     for zoom in (0.5, 0.25):
         meio = (primeiro["de"] + primeiro["ate"]) / 2
@@ -54,6 +54,42 @@ def test_as_contas_do_registro_inteiro_sao_feitas_uma_vez(tmp_path, monkeypatch)
     janela.montar(r, colunas=600, filtro=True)
     for nome, c in contas.items():
         assert c["n"] == 1, f"{nome} foi feita {c['n']} vezes em quatro pedidos"
+
+
+def test_abrir_nao_calcula_a_energia_do_catalogo(tmp_path, monkeypatch):
+    """A energia (a barrinha do «+ sinal») era ~30 % da abertura de um registro
+    gigante. Desde 14/11/2026 nem a janela nem a leitura do cursor a fazem: só
+    `janela.energia`, que a tela pede ao abrir o «+ sinal» — e uma vez só."""
+    r = _registro(tmp_path)
+    c = _contar(monkeypatch, catalogo, "energia_das_linhas")
+    primeiro = janela.montar(r, colunas=600)
+    assert "energia" not in primeiro
+    janela.montar(r, colunas=600, filtro=True, de=0.2, ate=0.9)
+    leitura.em(r, [(0.5, 0, 0.0), (None, 0, 0.0)])
+    assert c["n"] == 0
+    for _ in range(3):
+        janela.energia(r)
+    assert c["n"] == 1
+
+
+def test_a_energia_pedida_e_a_mesma_de_quando_ia_no_pacote(tmp_path):
+    """`janela.energia` dá EXATAMENTE o campo `energia` que o pacote da janela
+    levava até 13/11/2026 — a mesma conta, com o lado resolvido igual e as
+    contas do usuário dentro."""
+    from osclab.plot import contas as contas_mod
+    from osclab.plot import conversao
+    r = _registro(tmp_path)
+    contas = contas_mod.de_json([{"id": "x1", "nome": "SOMA",
+                                  "expressao": "[IAW] + [IBW]"}])
+    for lado, natural in (("arquivo", conversao.lado_natural(r)),
+                          ("primario", "primario"), ("secundario", "secundario")):
+        for cs in (None, contas):
+            antes = {k: [round(f, 4) for f in v] for k, v in
+                     catalogo.energia(r, natural, cs).items()}
+            r.__dict__.pop("_lembrados", None)
+            assert janela.energia(r, lado=lado, contas=cs) == antes
+            assert antes
+    assert "SOMA" in janela.energia(r, contas=contas)
 
 
 def test_lembrar_nao_muda_a_resposta(tmp_path):
@@ -154,3 +190,83 @@ def test_desempacotar_um_byte_por_bit_da_os_mesmos_bits():
         novo = comtrade._desempacotar_digitais(palavras, n_status)
         assert novo.dtype == np.int8 and novo.shape == (n_status, 321)
         np.testing.assert_array_equal(novo, antigo.astype(np.int8))
+
+
+# ---------------------------------------------------------------------------
+# Abrir: a fundamental de cada canal medida UMA vez (15/11/2026)
+# ---------------------------------------------------------------------------
+
+def _sujo(tmp_path):
+    """Um sintético com rede suja (bruto), falta no meio, trinca morta,
+    magnitude e um buraco de NaN — o que a abertura mede de verdade."""
+    import dataclasses
+
+    from osclab.analysis import filtragem
+    base = _registro(tmp_path, na=9)
+    a = base.analog.copy()
+    n = a.shape[1]
+    t = np.arange(n) / base.base_rate_hz
+    gerador = np.random.default_rng(3)
+    a += 2.0 * np.sin(2 * np.pi * 180 * t) + gerador.normal(0, 0.05, a.shape)
+    a[:3, n // 2:] *= 5
+    a[6:9] = 0.4 + gerador.normal(0, 0.003, (3, n))
+    a[3] = np.abs(a[3]) + 50
+    a[4, 100:130] = np.nan
+    return filtragem.aplicar(dataclasses.replace(base, analog=a))
+
+
+def _medidas(r):
+    return (str(r.filtering), presenca.alternados(r), presenca.sem_sinal(r),
+            conjuntos._ondas(r), imas.inicio_da_perturbacao(r),
+            repr(unidades.por_unidade(r, "arquivo")))
+
+
+def test_abrir_mede_a_fundamental_de_cada_canal_uma_vez(tmp_path, monkeypatch):
+    """O diagnóstico bruto × filtrado, a presença de sinal e as trincas mediam
+    a MESMA fundamental de cada canal: três por canal. O diagnóstico deixa o
+    resumo guardado pela matriz, e o registro corrigido pelo acervo (outro
+    `Record`, a mesma matriz) o lê."""
+    import dataclasses
+
+    from osclab.dsp import envoltoria
+    c = _contar(monkeypatch, envoltoria, "fundamental")
+    r = _registro(tmp_path, na=9)
+    assert c["n"] == 9
+    corrigido = dataclasses.replace(r, analog_channels=tuple(r.analog_channels))
+    presenca.alternados(corrigido)
+    presenca.sem_sinal(corrigido)
+    conjuntos._ondas(corrigido)
+    assert c["n"] == 9
+
+
+def test_o_resumo_guardado_e_o_mesmo_do_feito_do_zero(tmp_path):
+    """O que sai com os resumos e os extremos lembrados pela matriz é
+    idêntico ao feito do zero, sobre uma CÓPIA da matriz (sem lembrado)."""
+    import dataclasses
+    r = _sujo(tmp_path)
+    assert str(r.filtering) == "bruto"
+    lembrado = _medidas(r)
+    zero = dataclasses.replace(r, analog=r.analog.copy())
+    assert _medidas(zero) == lembrado
+    assert lembrado[4] is not None and lembrado[2]
+
+
+def test_alterar_a_matriz_no_lugar_refaz_o_resumo(tmp_path):
+    r = _sujo(tmp_path)
+    por_ciclo = r.base_rate_hz / r.line_frequency
+    antes = presenca.resumo_do_canal(r, 0, por_ciclo)
+    r.analog[0, :] *= 3.0
+    depois = presenca.resumo_do_canal(r, 0, por_ciclo)
+    assert depois.maior_fundamental != antes.maior_fundamental
+
+
+def test_o_mesmo_giro_nao_muda_a_fundamental():
+    from osclab.dsp import envoltoria
+    gerador = np.random.default_rng(5)
+    x = gerador.normal(0, 1, (3, 5000))
+    for n in (20.0, 2000.0 / 60.0):
+        soltos = [envoltoria.fundamental(x[k], n) for k in range(3)]
+        with envoltoria.mesmo_giro():
+            juntos = [envoltoria.fundamental(x[k], n) for k in range(3)]
+        for a, b in zip(soltos, juntos, strict=True):
+            assert a.tobytes() == b.tobytes()

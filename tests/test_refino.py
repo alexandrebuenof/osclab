@@ -533,3 +533,67 @@ def test_o_automatico_do_refino_e_o_do_alinhar_por_da_aba(par_tardio, criterio):
     pacote = prf.montar(a.registro, "A", b.registro, "B",
                                 {"alinhar": criterio, "colunas": 300})
     assert pacote["alinhamento"]["d"] == pytest.approx(esperado)
+
+
+def test_com_poucas_amostras_por_ciclo_a_onda_e_a_curva_do_grafico_das_ondas(simulacao):
+    """Ensaio geral (15/11/2026): o «refinar» ligava um CEV de 4 por ciclo com
+    RETAS — 29 % abaixo da senoide no meio de duas amostras —, enquanto o
+    gráfico das ondas do mesmo registro usava a curva. Agora o servidor diz
+    `suave` por série, pela MESMA regra (`SUAVIZAR_ATE` = a de `onda.js`), e
+    só sobre amostra de verdade (nunca sobre mín./máx. de coluna)."""
+    a = _gravar(simulacao, "S", taxa=240.0, seed=11)
+    b = _gravar(simulacao, "R", taxa=2000.0, seed=12, pre_s=0.075, erro_relogio_s=0.025)
+    perto = prf.montar(a, "SE S", b, "SE R", {"de": 0.08, "ate": 0.16, "colunas": 4000})
+    por_terminal = {g["terminal"]: g["series"] for g in perto["graficos"]}
+    assert all(s["suave"] for s in por_terminal["A"])           # 4 por ciclo
+    assert not any(s["suave"] for s in por_terminal["B"])       # 33 por ciclo
+    seq = prf.montar(a, "SE S", b, "SE R", {"de": 0.08, "ate": 0.16, "colunas": 4000,
+                                            "seq": True})
+    assert [g["series"][0]["suave"] for g in seq["graficos"]] == [True, False, True, False]
+    largo = prf.montar(a, "SE S", b, "SE R", {"colunas": 20})
+    assert not any(s.get("suave") for g in largo["graficos"] for s in g["series"]
+                   if not s["amostras"])
+
+
+def test_a_regra_da_curva_e_a_mesma_do_grafico_das_ondas():
+    import re
+    from pathlib import Path
+    js = (Path(prf.__file__).parents[1] / "web" / "static" / "js" / "onda.js").read_text(
+        encoding="utf-8")
+    achado = re.search(r"const AMOSTRAS_PARA_SUAVIZAR = (\d+);", js)
+    assert achado and int(achado.group(1)) == prf.SUAVIZAR_ATE
+    refino_js = (Path(prf.__file__).parents[1] / "web" / "static" / "js" / "refino.js"
+                 ).read_text(encoding="utf-8")
+    assert "s.suave" in refino_js and "bezierCurveTo" in refino_js
+
+
+# ---------------------------------------------------------------------------
+# 17/11/2026: passo fino e o «aplicar»
+# ---------------------------------------------------------------------------
+
+def test_o_manual_anda_uma_amostra_do_registro_MAIS_RAPIDO(simulacao):
+    """B de 4 amostras por ciclo ao lado de A de 20: o manual andava de 4,17 ms
+    (uma amostra de B) e o alinhamento escolhido ficava entre dois passos."""
+    a = rf.lado(_gravar(simulacao, "S", taxa=1200.0, seed=5), "A", "SE S")
+    b = rf.lado(_gravar(simulacao, "R", taxa=240.0, seed=6), "B", "SE R")
+    assert rf.passo_fino(a.passo, b.passo) == pytest.approx(1 / 1200.0)
+    pedido = 3.4 / 1200.0             # entre duas amostras de B
+    al = rf.alinhar(a, b, "manual", {"d": pedido})
+    assert al["passo"] == pytest.approx(1 / 1200.0)
+    assert al["d"] == pytest.approx(3 / 1200.0)
+    painel = rf.deslocamento_do_painel(b.registro, 0.0, pedido, a.registro)
+    assert painel["d"] == pytest.approx(al["d"])
+
+
+def test_mover_no_refino_e_previa_e_so_o_aplicar_grava():
+    """Mover B gravava na hora, sem nada dizer que o painel mudou: agora o
+    pedido de cada gesto não grava, e o «aplicar» é quem chama a rota."""
+    js = (paths.STATIC_DIR / "js" / "refino.js").read_text(encoding="utf-8")
+    pedir = js[js.index("async function pedir("):js.index("function animar(")]
+    assert "refino-alinhamento" not in pedir and "aplicar(" not in pedir
+    aplicar = js[js.index("async function aplicar("):js.index("let mouseT")]
+    assert "/refino-alinhamento" in aplicar
+    assert '"aplicar"' in js and "✓ aplicado" in js
+    # fechar com mudança pendente pergunta na barra, nunca por confirm()
+    assert "window.confirm" not in js and " confirm(" not in js.replace("`confirm()`", "")
+    assert "perguntandoAoFechar = true" in js

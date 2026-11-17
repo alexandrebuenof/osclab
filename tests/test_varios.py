@@ -265,3 +265,26 @@ def test_o_titulo_do_eixo_e_refeito_depois_de_juntar_os_IEDs():
     so_b = paineis.Painel(id="p1", tipo=paineis.ANALOGICO, nome="",
                           sinais=("B|c0:instantaneo",))
     assert _pacote([so_b])["paineis"][0]["titulo_do_eixo"] == "A"
+
+
+def test_cada_sinal_do_B_traz_a_taxa_DELE_para_o_desenho():
+    """Um `.CEV` de 4 amostras por ciclo ao lado de um registro de 16 saía em
+    retas, pontudo: a decisão de suavizar era a do IED A (17/11/2026)."""
+    p = _pacote()
+    do_b = [s for painel in p["paineis"] if painel["tipo"] == paineis.ANALOGICO
+            for s in painel["sinais"] if s.get("ied") == "B"]
+    assert do_b
+    assert all(s["amostras_da_janela_do_fasor"] == 17 for s in do_b)   # 1000 Hz
+    assert p["amostras_da_janela_do_fasor"] == 33                       # 2000 Hz
+    assert all("reduzido" in s for s in do_b)
+    assert [f["filtragem"] for f in p["ieds"]] == [str(A.filtering), str(B.filtering)]
+
+
+def test_a_tela_desenha_o_sinal_do_B_no_tempo_DELE():
+    """O traço analógico usava o vetor de tempo do A para todo sinal: o B
+    saía espremido e o «alinhar» não mudava nada na tela (17/11/2026)."""
+    from pathlib import Path
+    js = (Path(varios.__file__).parents[1] / "web" / "static" / "js" / "onda.js").read_text(
+        encoding="utf-8")
+    assert "const seuTempo = sinal.tempo || tempo;" in js
+    assert "tracarEmPedacos(ctx, sinal.serie, seuTempo," in js

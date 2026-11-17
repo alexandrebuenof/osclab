@@ -205,6 +205,12 @@ def _arredondar(valores: np.ndarray) -> list:
             for v in np.asarray(valores, dtype=np.float64).tolist()]
 
 
+def _br(valor: float, formato: str = "g") -> str:
+    """O número como a tela escreve: vírgula decimal. `636.2 A` no rodapé se
+    lia como seiscentos e trinta e seis MIL (ensaio geral, 15/11/2026)."""
+    return format(valor, formato).replace(".", ",")
+
+
 def _angulo(z: np.ndarray) -> np.ndarray:
     """O ângulo em graus, em (−180, 180], com NaN onde `z` não existe."""
     a = np.degrees(np.angle(z))
@@ -333,8 +339,10 @@ def montar(registro: Record, painel, outros: list | None = None,
     remoto = escolher(getattr(painel, "remoto", "") or "",
                       _chave(local[0], local[1]) if local else "", bool(outros))
     if local is None or remoto is None:
-        pacote["falta"] = ("Este registro tem uma trinca de corrente só: o "
-                           "plano alfa precisa da corrente do OUTRO terminal. "
+        pacote["falta"] = (("Este registro não tem nenhuma trinca de corrente"
+                            if local is None else
+                            "Este registro tem uma trinca de corrente só")
+                           + ": o plano alfa precisa da corrente do OUTRO terminal. "
                            "Ponha o registro do outro terminal nesta aba, em "
                            "«+ adicionar oscilografia».")
         if local is not None:
@@ -424,7 +432,7 @@ def montar(registro: Record, painel, outros: list | None = None,
     rodape = [
         f"local {pacote['local']['rotulo']} — {canais_de(local)}",
         f"remoto {pacote['remoto']['rotulo']} — {canais_de(remoto)}",
-        f"1 pu: {base_l:.4g} A no local ({origem_l}) · {base_r:.4g} A no "
+        f"1 pu: {_br(base_l, '.4g')} A no local ({origem_l}) · {_br(base_r, '.4g')} A no "
         f"remoto ({origem_r})",
         _rodape_da_regiao(r87, r87_origem, r87_var, ang87, ang87_origem, ang87_var),
         f"sem ponto onde a corrente do denominador fica abaixo de "
@@ -440,8 +448,8 @@ def montar(registro: Record, painel, outros: list | None = None,
     if entre:
         if refino.get("aplicado"):
             rodape.insert(0, f"ângulo entre os dois registros refinado pela "
-                          f"pré-falta: girado {refino['correcao_graus']:+.1f}°, "
-                          f"resíduo ± {refino['residuo_graus']:.1f}° — supõe a "
+                          f"pré-falta: girado {_br(refino['correcao_graus'], '+.1f')}°, "
+                          f"resíduo ± {_br(refino['residuo_graus'], '.1f')}° — supõe a "
                           "carga atravessando a linha")
         elif incerteza is None:
             outros_regs = [reg for letra, _, reg, _ in (local, remoto) if letra != "A"]
@@ -454,7 +462,7 @@ def montar(registro: Record, painel, outros: list | None = None,
                                            "sincronizado")
                           + ". Use «refinar pela pré-falta».")
         else:
-            rodape.insert(0, f"ângulo entre os dois registros: ± {incerteza:.2f}°")
+            rodape.insert(0, f"ângulo entre os dois registros: ± {_br(incerteza, '.2f')}°")
             # Relógios travados não bastam entre FABRICANTES diferentes: o
             # atraso do filtro de entrada de cada relé pode não estar
             # compensado no COMTRADE.
@@ -486,10 +494,10 @@ def _rodape_da_regiao(r87, r_origem, r_var, ang87, a_origem, a_var) -> str:
     """De onde saiu a região de restrição, sem depender do hover."""
     def um(nome, valor, origem, variavel, sufixo=""):
         if origem == "lido":
-            return f"{variavel} {valor:g}{sufixo} (do relé)"
+            return f"{variavel} {_br(valor)}{sufixo} (do relé)"
         if origem == "digitado":
-            return f"{nome} {valor:g}{sufixo} (digitado)"
-        return f"{nome} {valor:g}{sufixo} (típico da SEL — o arquivo não traz)"
+            return f"{nome} {_br(valor)}{sufixo} (digitado)"
+        return f"{nome} {_br(valor)}{sufixo} (típico da SEL — o arquivo não traz)"
     return (um("raio", r87, r_origem, r_var) + " · "
             + um("abertura", ang87, a_origem, a_var, "°")
             + "; mude na engrenagem")
