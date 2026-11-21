@@ -177,6 +177,30 @@ def deslocamento(base: Record, outro: Record, modo: str,
             "aviso_curto": _aviso_curto(usado, relogio)}
 
 
+def relogio_curto(ms: float | None) -> str:
+    """A diferença de relógio CURTA e com sinal, para caber numa célula:
+    «+25,2 ms», «−2,35 s», «+12 min 5 s», «−3 h 12 min», «−5 d 2 h»,
+    «−26,8 anos». O por extenso (`texto_do_relogio`) vai no hover."""
+    if ms is None or not math.isfinite(ms):
+        return "—"
+    sinal = "−" if ms < 0 else "+"
+    a = abs(ms)
+    s = a / 1000.0
+    if a < 1000.0:
+        corpo = f"{a:.1f} ms"
+    elif s < 60.0:
+        corpo = f"{s:.2f} s"
+    elif s < 3600.0:
+        corpo = f"{int(s // 60)} min {int(s % 60)} s"
+    elif s < 86400.0:
+        corpo = f"{int(s // 3600)} h {int(s % 3600 // 60)} min"
+    elif s < 365.25 * 86400.0:
+        corpo = f"{int(s // 86400)} d {int(s % 86400 // 3600)} h"
+    else:
+        corpo = f"{s / (365.25 * 86400.0):.1f} anos"
+    return sinal + corpo.replace(".", ",")
+
+
 def _aviso_curto(usado: str | None, relogio_ms: float | None) -> str:
     """O que fica À VISTA na tira; o `_aviso` inteiro vai no hover
     (informação limpa: diagnóstico no hover, não em faixa)."""

@@ -90,10 +90,10 @@ await espera(700);
 await foto("abertura-segundo-registro-escuro.png");
 confere(await avaliar(`document.querySelectorAll('section.grafico').length > 0`),
   "+ oscilografia: os gráficos continuam na tela enquanto o outro abre");
-await avaliar(`(async () => { await window.__esperar(() => !document.querySelector('.abertura') && document.querySelectorAll('.linha-do-ied').length === 2, 30000); await window.__ocioso(); return 1; })()`);
+await avaliar(`(async () => { await window.__esperar(() => !document.querySelector('.abertura') && document.querySelectorAll('.tabela-do-cabecalho tbody tr').length === 2, 30000); await window.__ocioso(); return 1; })()`);
 const t = await barra();
 confere(t.pcts.length >= 2 && crescente(t.pcts), `+ oscilografia: a barra avança (${t.pcts.join(" → ")})`);
-confere(await avaliar(`!document.querySelector('.abertura') && document.querySelectorAll('.linha-do-ied').length === 2`),
+confere(await avaliar(`!document.querySelector('.abertura') && document.querySelectorAll('.tabela-do-cabecalho tbody tr').length === 2`),
   "+ oscilografia: a barra some e o segundo IED entra");
 
 // 5. Um gesto sobre registro aberto não mostra barra (o servidor não abre abertura).

@@ -341,10 +341,17 @@ def montar_janela(base: Record, outros: list, *, alinhar: str, montar,
     return pacote
 
 
+def ficha_sozinha(registro: Record, apelido: str, sha: str) -> dict:
+    """A ficha do único registro da aba (o cabeçalho com um IED só)."""
+    return _ficha("A", registro, apelido, sha, None)
+
+
 def _ficha(letra: str, registro: Record, apelido: str, sha: str, desl,
            manual: float | None = None) -> dict:
     """A linha do IED na tira de fatos."""
-    taxas = sorted({round(t.taxa_hz) for t in registro.trechos if t.taxa_hz > 0})
+    # Três casas, não inteiro: 959,693 Hz (GE 850 sem taxa declarada) virava
+    # «960 Hz» no cabeçalho (21/11/2026).
+    taxas = sorted({round(t.taxa_hz, 3) for t in registro.trechos if t.taxa_hz > 0})
     ficha = {
         "letra": letra,
         "sha": sha,

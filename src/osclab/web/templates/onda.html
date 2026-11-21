@@ -182,85 +182,12 @@
       virar um paragrafo. O rotulo fica DEITADO e nao empilhado: empilhado ele
       dobrava a altura da tira, e nas fichas com botao (os canais sem sinal)
       partia o conteudo em duas alturas. #}
+  {#- Os FATOS do registro (amostras, taxa, canais, TC/TP, modelo, falta,
+      formato, disparo, relógio) saíram daqui em 21/11/2026: moram na TABELA
+      do cabeçalho, uma linha por IED, que o `onda.js` monta com o que o
+      `plot/cabecalho.py` manda (variante 22 da maquete `maquete/cabecalho`).
+      Ficaram as três fichas do JavaScript, que dizem do estado da tela. #}
   <section class="tira">
-    <span class="fi"><span class="rot">amostras</span
-      ><span class="val">{{ item.n_amostras|milhar }}</span></span>
-    <span class="fi"><span class="rot">taxa</span
-      ><span class="val">{{ item.taxa_hz|decimal }} Hz · {{ item.amostras_por_ciclo|decimal('%.2f') }}/ciclo</span></span>
-    <span class="fi"><span class="rot">canais</span
-      ><span class="val">{{ item.n_analogicos }} analóg. · {{ item.n_digitais }} digitais</span></span>
-    {#- TC e TP sao de CADA canal, nao do arquivo: so' aparecem quando todos os
-        canais daquela grandeza declaram a mesma relacao. Ver `_relacao`. #}
-    {#- Com mais de uma relação, uma ficha por EQUIPAMENTO: o nome que o relé
-        dá a ele no rótulo, a relação no valor. Nunca TC emparelhado com TP —
-        ver `acervo.relacoes_por_equipamento`. #}
-    {% if relacoes %}
-    {% for r in relacoes %}<span class="fi" title="{{ r.tipo }} {{ r.relacao }} — canais: {{ r.canais|join(', ') }}"><span class="rot">{{ r.equipamento }}</span
-      ><span class="val">{{ r.tipo }} {{ r.relacao }}</span></span>
-    {% endfor %}
-    {% else %}
-    {% if item.relacao_tc %}<span class="fi" title="A relação dos TCs declarada no arquivo. Ela é de cada canal: este número só aparece porque todos os canais de corrente declaram a mesma.{% if item.relacao_tc == 'vários' %} Aqui eles discordam — passe o mouse em cada sinal para ver a dele.{% endif %}"><span class="rot">TC</span
-      ><span class="val">{{ item.relacao_tc }}</span></span>{% endif %}
-    {% if item.relacao_tp %}<span class="fi" title="A relação dos TPs declarada no arquivo, pela mesma regra do TC."><span class="rot">TP</span
-      ><span class="val">{{ item.relacao_tp }}</span></span>{% endif %}
-    {% endif %}
-    {% if item.modelo %}<span class="fi" title="Deduzido do que o arquivo declara como equipamento gravador — na SEL, a FID. Não é um campo do COMTRADE."><span class="rot">modelo</span
-      ><span class="val">{{ item.modelo }}</span></span>{% endif %}
-    {#- O TIPO DA FALTA, lido pelo OscLab na importacao. Fica aqui, na tira
-        de fatos, porque e' onde o olho ja' passa -- e nao num painel que
-        precisaria ser aberto. Quando o rele' tambem classificou, a sigla
-        dele vem ao lado: os dois sempre juntos, e nenhum apagado.
-
-        `AB` e `AB T` sao o MESMO veredito -- o «T» solto da SEL e' TRIP, nao
-        terra (a terra vem dentro da sigla: `ABG T`). Quem normaliza e' o `mesmo_tipo_de_falta`
-        do servidor: sem isso todo caso normal apareceria como conflito, que
-        e' o jeito mais rapido de ensinar a ignorar o aviso. #}
-    {% if item.falta_tipo or item.classificacao_do_rele %}
-    <span class="fi">
-      <span class="rot">falta</span>
-      <span class="val selo-e-rele" title="{{ item.falta_dica }}">
-        {#- A COR do selo é a das fases da falta (mistura RGB nas bifásicas);
-            a confiança mudou para o pontinho ao lado. Escolha dele,
-            21/10/2026 — maquete «selo da falta», esquema 2. #}
-        {% if item.falta_tipo %}
-        <b class="selo-da-falta {{ item.falta_cor }}">{{ item.falta_sigla }}</b>
-        {#- O raio: o relé disparou. Sem trip, nada — a ausência não afirma
-            que ele restringiu. Pedido dele, 22/10/2026. #}
-        {% if item.falta_trip %}<i class="raio-do-trip">TRIP</i>{% endif %}
-        <i class="ponto-da-confianca {{ item.falta_confianca }}" aria-label="confiança {{ item.falta_confianca }}"></i>
-        {% else %}
-        <b class="selo-da-falta vazio">sem falta</b>
-        {% endif %}
-        {#- Concordando, o relé vira um «✓» e a sigla dele vai para o hover:
-            «relé: AB T» ao lado de «AB» repetia o veredito e alongava a
-            tira. Discordando, fica escrito — aí é aviso. Pedido dele,
-            21/10/2026. #}
-        {% if item.classificacao_do_rele and conflita_a_falta %}
-        <span class="do-rele conflita"
-              title="O relé gravou {{ item.classificacao_do_rele }} no arquivo, e o OscLab leu outro tipo.">relé: {{ item.classificacao_do_rele }}</span>
-        {% elif item.classificacao_do_rele and item.falta_tipo and rele_tem_tipo %}
-        <span class="do-rele concorda"
-              title="O relé gravou {{ item.classificacao_do_rele }} no arquivo, o mesmo tipo. (Na SEL, o T solto é TRIP, não terra.)">✓ relé</span>
-        {% elif item.classificacao_do_rele %}
-        <span class="do-rele"
-              title="{{ 'O que o próprio relé gravou no arquivo.' if rele_tem_tipo else 'O que o relé gravou no campo do evento — o motivo do relatório, não o tipo da falta.' }}">relé: {{ item.classificacao_do_rele }}</span>
-        {% endif %}
-      </span></span>
-    {% endif %}
-    <span class="fi"><span class="rot">formato</span
-      ><span class="val">{{ item.formato }}</span></span>
-    {% if item.disparo %}<span class="fi"><span class="rot">disparo</span
-      ><span class="val">{{ item.disparo }}</span></span>{% endif %}
-    {#- A hora sozinha nao se interpreta: no parque o SEL-421 carimba em UTC e
-        o SIPROTEC em hora local, e o mesmo curto aparece com quatro horas de
-        diferenca. O arquivo diz em que fuso esta; a tela repassa, sem
-        converter -- que e' a convencao do SIGRA. #}
-    {% if item.relogio %}<span class="fi" title="O que o arquivo declara sobre o próprio relógio. O OscLab não converte a hora: mostra o carimbo como o relé gravou."><span class="rot">relógio</span
-      ><span class="val">{{ item.relogio }}</span></span>{% endif %}
-    {#- As tres de baixo sao escritas pelo JavaScript com `textContent`, que
-        apaga os filhos do elemento. Por isso o rotulo delas vem do CSS, por
-        `content: attr(data-rot)` -- um `<span>` dentro sumiria no primeiro
-        desenho. #}
     <span id="taxa-variavel" class="fi-js atencao" data-rot="taxa variável" hidden></span>
     <span id="filtragem" class="fi-js" data-rot="gravação" hidden></span>
     <span id="sem-sinal" class="fi-js" data-rot="sem sinal" hidden></span>

@@ -2987,9 +2987,11 @@ def test_a_TAXA_na_tira_da_onda_tem_virgula_decimal(cliente, tmp_path):
     """Ensaio geral (15/11/2026), GE 850 sem taxa declarada: a tira dizia
     «959.693 Hz · 15.99/ciclo», com o TP ao lado em «7.920 : 66». Na mesma
     tira o ponto era milhar num número e decimal no outro — 959 MIL hertz.
-    O acervo (`acervo.js`) já escrevia em pt-BR; a onda agora também."""
-    import re
+    O acervo (`acervo.js`) já escrevia em pt-BR; a onda agora também.
+
+    Desde 21/11/2026 a taxa mora na TABELA do cabeçalho (`plot/cabecalho.py`),
+    que viaja no pacote da janela; o por ciclo foi para o hover."""
     sha = _sha_de_um_registro(cliente, tmp_path, n=480, taxa=959.693)
-    html = cliente.get(f"/onda/{sha}").get_data(as_text=True)
-    taxa = re.search(r'rot">taxa</span\s*><span class="val">([^<]*)<', html).group(1)
-    assert taxa == "959,693 Hz · 15,99/ciclo", taxa
+    linha = cliente.get(f"/api/onda/{sha}").get_json()["cabecalho"]["linhas"][0]
+    assert linha["taxa"] == "959,693 Hz", linha["taxa"]
+    assert linha["taxa_dica"].startswith("15,99 amostras por ciclo"), linha["taxa_dica"]

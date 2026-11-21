@@ -85,7 +85,7 @@
   //: navegador recarrega o `.js` sozinho: quem troca de versão sem reiniciar
   //: fica com tela nova e servidor velho, e o resultado é uma tela que mostra
   //: coisas que não fazem sentido sem dar erro nenhum. Já custou três rodadas.
-  const CONTRATO = 34;
+  const CONTRATO = 35;
 
   //: A margem de cima abriga a etiqueta numerada dos cursores, que fica FORA da
   //: área de desenho: por dentro ela tapa o pico da onda — e o pico é
@@ -543,94 +543,153 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       }
     }
     caixa.append(barra);
-    if (ieds.length < 2) return;
-
-    for (const ficha of ieds) caixa.append(linhaDoIed(ficha));
+    if (dados.cabecalho) caixa.append(tabelaDoCabecalho(dados.cabecalho));
   }
 
-  function linhaDoIed(ficha) {
-    const linha = criar("div", "linha-do-ied");
-    linha.append(seloDoIed(ficha.letra));
-    const nome = criar("span", "apelido-do-ied", ficha.apelido || ficha.arquivo || ficha.sha);
-    nome.title = `Arquivo: ${ficha.arquivo}`;
-    const lapis = criar("button", "lapis-do-ied", "✎");
-    lapis.type = "button";
-    lapis.title = "Dar um nome a este IED. O arquivo não muda.";
-    lapis.addEventListener("click", () => {
-      const campo = document.createElement("input");
-      campo.className = "campo-do-apelido";
-      campo.value = ficha.apelido || "";
-      campo.placeholder = ficha.arquivo;
-      let pronto = false;
-      const terminar = async (gravar) => {
-        if (pronto) return;
-        pronto = true;
-        if (gravar) {
-          try {
-            await fetch(`/api/acervo/${ficha.sha}/nome`, {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ nome: campo.value.trim() }),
-            });
-          } catch (_e) { /* a tira volta como estava */ }
-        }
-        carregar();
-      };
-      campo.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") terminar(true);
-        if (e.key === "Escape") terminar(false);
-      });
-      campo.addEventListener("blur", () => terminar(true));
-      nome.replaceWith(campo);
-      lapis.hidden = true;
-      campo.focus();
-    });
-    linha.append(nome, lapis);
+  /**
+   * O cabeçalho: uma linha por IED, os fatos alinhados (variante 22 da
+   * maquete `maquete/cabecalho`, 21/11/2026). Todo texto vem pronto do
+   * Python (`plot/cabecalho.py`); aqui só se monta a tabela.
+   */
+  function tabelaDoCabecalho(cab) {
+    const varios = !!cab.varios;
+    const t = criar("table", "tabela-do-cabecalho" + (varios ? " com-varios" : ""));
+    const th = (texto, classe) => criar("th", classe || null, texto);
+    const cabeca = criar("tr");
+    cabeca.append(th(varios ? "terminal" : "", "cab-terminal"), th("relé"), th("formato"),
+                  th("taxa"), th("canais"), th("TC · TP"), th("falta"), th("disparo"));
+    if (varios) cabeca.append(th("alinhamento", "cab-al"));
+    t.appendChild(criar("thead")).append(cabeca);
+    const corpo = t.appendChild(criar("tbody"));
+    for (const l of cab.linhas) corpo.append(linhaDoCabecalho(l, varios));
+    return t;
+  }
 
-    const fato = (rotulo, valor, classe, dica) => {
-      const f = criar("span", "fato-do-ied" + (classe ? ` ${classe}` : ""));
-      f.append(criar("b", null, rotulo), criar("span", null, valor));
-      if (dica) f.title = dica;
-      linha.append(f);
+  function linhaDoCabecalho(l, varios) {
+    const tr = criar("tr", l.referencia ? "referencia" : "");
+    const td = (conteudo, dica, classe) => {
+      const c = criar("td", classe || null);
+      if (conteudo instanceof Node) c.append(conteudo);
+      else c.textContent = conteudo;
+      if (dica) c.title = dica;
+      tr.append(c);
+      return c;
     };
-    if (ficha.rele) fato("relé", ficha.rele);
-    if ((ficha.taxas_hz || []).length) fato("taxa", `${ficha.taxas_hz.join(" / ")} Hz`);
-    if (ficha.letra !== "A") {
-      fato("alinhado por", NOME_DO_ALINHAMENTO[ficha.alinhado_por] || "nada",
-           ficha.alinhado_por !== alinharPor ? "aviso-do-ied" : "",
-           ficha.alinhado_por !== alinharPor
-             ? "Este registro não deu para alinhar do jeito pedido; valeu o seguinte."
-             : "");
-      if (ficha.precisao_ms !== null && ficha.precisao_ms !== undefined) {
-        fato("precisão", `± ${formatar(ficha.precisao_ms, 2)} ms`, "",
-             "Uma amostra do registro mais lento: serve para OLHAR as formas e "
-             + "ver quem disparou antes, não para calcular fasor entre os dois "
-             + "registros (1 ms são 21,6° a 60 Hz).");
+
+    // O TERMINAL: a subestação; o nome do registro no hover e no ✎.
+    const terminal = criar("span", "terminal-do-ied");
+    if (varios) {
+      terminal.append(seloDoIed(l.letra));
+      const se = criar("span", "nome-do-terminal", l.terminal);
+      se.title = l.terminal_e_nome
+        ? `O arquivo não declara a subestação: este é o nome do registro.\nArquivo: ${l.arquivo}`
+        : `${l.nome}\nArquivo: ${l.arquivo}`;
+      const lapis = criar("button", "lapis-do-ied", "✎");
+      lapis.type = "button";
+      lapis.title = `Dar um nome a este IED (hoje: ${l.nome}). O arquivo não muda.`;
+      lapis.addEventListener("click", () => renomearIed(l, se, lapis));
+      terminal.append(se, lapis);
+      if (l.letra !== "A") {
+        const tirar = criar("button", "botao-x tirar-do-ied", "×");
+        tirar.type = "button";
+        tirar.title = "Tirar este registro da aba. Ele continua no acervo.";
+        tirar.addEventListener("click", () =>
+          trocarRegistros(outrosRegistros.filter((x) => x.sha !== l.sha)));
+        terminal.append(tirar);
       }
-      if (ficha.relogio_ms !== null && ficha.relogio_ms !== undefined) {
-        const r = ficha.relogio_ms;
-        fato("relógio × A", ficha.relogio_texto || `${r >= 0 ? "+" : "−"}${formatar(Math.abs(r), 1)} ms`,
-             Math.abs(r) > (ficha.precisao_ms || 1) ? "aviso-do-ied" : "",
-             `${r >= 0 ? "+" : "−"}${formatar(Math.abs(r), 1)} ms. `
-             + "A hora do mesmo evento neste arquivo menos a hora dele no IED A. "
-             + "Aparece qualquer que seja o alinhamento: é a sincronização dos relés.");
-      }
-      // O alerta do critério que valeu (hora: a diferença dos relógios;
-      // disparo: cada relé dispara num instante seu). Avisa, não bloqueia.
-      // À vista só o curto; o porquê inteiro no hover (informação limpa).
-      if (ficha.aviso) {
-        const a = criar("span", "fato-do-ied aviso-do-ied alerta-do-alinhamento",
-                        "⚠ " + (ficha.aviso_curto || ficha.aviso));
-        a.title = ficha.aviso;
-        linha.append(a);
-      }
-      const tirar = criar("button", "botao-x tirar-do-ied", "×");
-      tirar.type = "button";
-      tirar.title = "Tirar este registro da aba. Ele continua no acervo.";
-      tirar.addEventListener("click", () =>
-        trocarRegistros(outrosRegistros.filter((x) => x.sha !== ficha.sha)));
-      linha.append(tirar);
     }
-    return linha;
+    td(terminal, null, "cel-terminal");
+    td(l.rele);
+    td(l.formato, l.formato_dica);
+    td(l.taxa, l.taxa_dica);
+    td(l.canais);
+    // TC e TP são dois fatos: lado a lado.
+    const med = criar("span", null, l.medicao.tc);
+    med.append(criar("span", "segundo-fato", ` · ${l.medicao.tp}`));
+    td(med, l.medicao.dica);
+
+    // A falta, como a tira de antes: selo, TRIP, confiança e o relé.
+    const f = l.falta;
+    const falta = criar("span", "selo-e-rele");
+    const selo = criar("b", `selo-da-falta ${f.cor}`, f.sigla);
+    if (f.dica) selo.title = f.dica;
+    falta.append(selo);
+    if (f.trip) falta.append(criar("i", "raio-do-trip", "TRIP"));
+    if (f.confianca) {
+      const p = criar("i", `ponto-da-confianca ${f.confianca}`);
+      p.setAttribute("aria-label", `confiança ${f.confianca}`);
+      falta.append(p);
+    }
+    if (f.rele) {
+      const r = criar("span", `do-rele ${f.rele.classe}`, f.rele.texto);
+      r.title = f.rele.dica;
+      falta.append(r);
+    }
+    td(falta);
+
+    // O disparo: a DATA sempre (é ela que denuncia o relé sem GPS) e o Δ
+    // para o do A embaixo; ⚠ quando o relógio não serve para comparar.
+    const d = l.disparo;
+    const disp = criar("span", d.suspeito ? "atencao-do-relogio" : null,
+                       (d.suspeito ? "⚠ " : "") + d.texto);
+    if (d.delta) disp.append(criar("span", "delta-do-disparo", d.delta));
+    td(disp, d.dica, "cel-disparo");
+
+    if (varios) {
+      const al = l.alinhamento;
+      const c = criar("span");
+      if (!al) {
+        c.className = "referencia-do-alinhamento";
+        c.textContent = "referência";
+      } else {
+        // O critério que VALEU; se não foi o pedido, em âmbar (o servidor
+        // caiu para o seguinte — sem falta no registro, hora fora da tela).
+        const por = criar("span", al.por_chave !== alinharPor ? "atencao-do-relogio" : null, al.por);
+        por.title = al.por_chave !== alinharPor
+          ? "Este registro não deu para alinhar do jeito pedido; valeu o seguinte. " + al.por_dica
+          : al.por_dica;
+        const rel = criar("span", al.relogio_atencao ? "atencao-do-relogio" : null, ` · ${al.relogio}`);
+        rel.title = al.relogio_dica;
+        c.append(por, rel);
+        if (al.aviso_curto) {
+          const a = criar("span", "alerta-do-alinhamento", `⚠ ${al.aviso_curto}`);
+          a.title = al.aviso;
+          c.append(a);
+        }
+      }
+      td(c, null, "cel-al");
+    }
+    return tr;
+  }
+
+  /** O ✎ do terminal: dá um apelido ao IED (o arquivo não muda). */
+  function renomearIed(l, nomeEl, lapis) {
+    const campo = document.createElement("input");
+    campo.className = "campo-do-apelido";
+    campo.value = l.apelido || "";
+    campo.placeholder = l.arquivo;
+    let pronto = false;
+    const terminar = async (gravar) => {
+      if (pronto) return;
+      pronto = true;
+      if (gravar) {
+        try {
+          await fetch(`/api/acervo/${l.sha}/nome`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nome: campo.value.trim() }),
+          });
+        } catch (_e) { /* a tabela volta como estava */ }
+      }
+      carregar();
+    };
+    campo.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") terminar(true);
+      if (e.key === "Escape") terminar(false);
+    });
+    campo.addEventListener("blur", () => terminar(true));
+    nomeEl.replaceWith(campo);
+    lapis.hidden = true;
+    campo.focus();
   }
 
   /** A lista do acervo, para pôr mais um registro nesta aba. */

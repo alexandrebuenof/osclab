@@ -5901,13 +5901,17 @@ p.sem-logica {
 .registro-topo .selo-com-ponto { margin-left: auto; }
 
 /* Na tira de fatos, o selo e a sigla do relé dividem a linha do valor. */
-.tira .selo-e-rele { display: inline-flex; align-items: center; gap: 8px; }
-.tira .do-rele { font-family: var(--mono); font-size: 10.5px; color: var(--suave); }
+.tira .selo-e-rele,
+.tabela-do-cabecalho .selo-e-rele { display: inline-flex; align-items: center; gap: 8px; }
+.tira .do-rele,
+.tabela-do-cabecalho .do-rele { font-family: var(--mono); font-size: 10.5px; color: var(--suave); }
 
 /* Conflito: os dois ficam na tela, e o do relé é que muda de cor. Apagar um
    dos dois faria parecer que só existe um veredito. */
-.tira .do-rele.conflita { color: var(--ruim); }
-.tira .do-rele.concorda { cursor: help; opacity: 0.8; }
+.tira .do-rele.conflita,
+.tabela-do-cabecalho .do-rele.conflita { color: var(--ruim); }
+.tira .do-rele.concorda,
+.tabela-do-cabecalho .do-rele.concorda { cursor: help; opacity: 0.8; }
 
 /* ===== A CAIXA DE AJUSTES DO PLANO DE IMPEDÂNCIA =========================
  *
@@ -7451,3 +7455,44 @@ canvas.calc-previa[hidden] { display: none; }
   display: flex; align-items: center; justify-content: center; }
 .rf-quadro { width: min(1500px, 94vw); height: 90vh; border: 1px solid var(--borda); display: block;
   background: var(--pagina-lisa); }
+
+/* ===== O CABEÇALHO: UMA LINHA POR IED (21/11/2026) ========================
+ *
+ * Variante 22 da maquete `maquete/cabecalho`. Os fatos de cada oscilografia
+ * da aba ficam um embaixo do outro («taxa embaixo de taxa»): a tabela é do
+ * tamanho da tela e NÃO rola para o lado — o detalhe de cada fato está no
+ * hover, e TC e TP são as duas coisas que ficam lado a lado. O A (referência)
+ * tem a linha levemente destacada; a data do disparo aparece sempre, com ⚠
+ * em âmbar quando o relógio não serve para comparar. */
+.tira:not(:has(.fi-js:not([hidden]))) { display: none; }
+.tabela-do-cabecalho {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--tinta);
+  margin-top: 4px;
+}
+.tabela-do-cabecalho th,
+.tabela-do-cabecalho td { padding: 5px 10px; white-space: nowrap; text-align: left; vertical-align: middle; }
+.tabela-do-cabecalho th {
+  font-weight: 400; font-size: 9.5px; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--suave); border-bottom: 1px solid var(--borda);
+}
+.tabela-do-cabecalho tbody tr + tr td { border-top: 1px solid var(--borda); }
+.tabela-do-cabecalho .cab-al,
+.tabela-do-cabecalho .cel-al { background: var(--pagina-lisa); border-left: 1px solid var(--borda); }
+.tabela-do-cabecalho tr.referencia td { background: var(--destaque-fraco); }
+.tabela-do-cabecalho td[title] { cursor: help; }
+.tabela-do-cabecalho .cel-terminal { cursor: default; }
+.terminal-do-ied { display: inline-flex; align-items: center; gap: 6px; }
+.nome-do-terminal { font-family: var(--sans); font-weight: 600; max-width: 260px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tabela-do-cabecalho .tirar-do-ied { margin-left: 6px; }
+.tabela-do-cabecalho .segundo-fato { color: var(--suave); }
+.delta-do-disparo { display: block; font-size: 11px; color: var(--suave); line-height: 1.25; }
+.atencao-do-relogio { color: var(--atencao); }
+.referencia-do-alinhamento { color: var(--suave); font-style: italic; }
+.tabela-do-cabecalho .alerta-do-alinhamento { display: block; }

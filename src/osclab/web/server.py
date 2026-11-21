@@ -79,7 +79,6 @@ from flask import (
 )
 
 from osclab import paths, progresso, version
-from osclab.analysis import falta as falta_mod
 from osclab.basedados import digitais as digitais_mod
 from osclab.basedados import linhas as linhas_mod
 from osclab.basedados import navegar as navegar_mod
@@ -98,6 +97,7 @@ from osclab.formats import relacoes as relacoes_mod
 from osclab.formats.base import FormatError
 from osclab.library import acervo
 from osclab.plot import alinhamento as alinhamento_mod
+from osclab.plot import cabecalho as cabecalho_mod
 from osclab.plot import calculadora as calculadora_mod
 from osclab.plot import contas as contas_mod
 from osclab.plot import diferencial as diferencial_mod
@@ -231,30 +231,14 @@ def create_app() -> Flask:
         if item is None:
             return render_template("nao-achei.html", versao=version.read()), 404
         dados = item.como_dicionario()
-        # TC e TP por EQUIPAMENTO, só quando há mais de uma relação
-        # (o «vários» da tira). Lê o registro, e por isso só nesse caso; os
-        # vínculos do usuário entram aqui, então não dá para guardar no resumo.
-        relacoes = []
-        if "vários" in (dados.get("relacao_tc"), dados.get("relacao_tp")):
-            try:
-                relacoes = acervo.relacoes_por_equipamento(acervo.ler(sha))
-            except FormatError:
-                relacoes = []
+        # Os fatos do registro (TC/TP, falta, disparo…) saíram do template em
+        # 21/11/2026: vão no pacote da janela, na tabela do cabeçalho
+        # (`_com_cabecalho`, `plot/cabecalho.py`).
         return render_template(
-            "onda.html", versao=version.read(), item=dados, relacoes=relacoes,
+            "onda.html", versao=version.read(), item=dados,
             # Dentro de uma aba (`/abas` abre `?aba=<id>`) a barra de cima já
             # está na janela de fora: repeti-la no quadro poria duas barras.
             em_aba="aba" in request.args,
-            # Quem compara é o servidor, não o Jinja: `AB` × `AB T` precisa de
-            # normalização, e normalizar sigla dentro de template é o tipo de
-            # regra que ninguém acha depois. Ver `analysis/falta.mesmo_tipo`.
-            conflita_a_falta=not falta_mod.rele_concorda(
-                dados.get("falta_tipo", ""), dados.get("falta_inicial", ""),
-                dados.get("classificacao_do_rele", "")),
-            # `TRIP`, `ER` no lugar da sigla: não concorda nem discorda, e o
-            # «✓ relé» afirmaria «o mesmo tipo» de um tipo que não existe.
-            rele_tem_tipo=falta_mod.e_tipo_de_falta(
-                dados.get("classificacao_do_rele", "")),
         )
 
     # -----------------------------------------------------------------------
@@ -339,7 +323,7 @@ def create_app() -> Flask:
             if outros:
                 # Mais de um registro na aba: o A como sempre, os outros na
                 # janela deslocada de cada um. Ver `plot/varios.py`.
-                return jsonify(janela.sem_repetir(varios_mod.montar_janela(
+                montado = varios_mod.montar_janela(
                     registro, outros, alinhar=_alinhar(), montar=janela.montar,
                     manuais=_manuais(sha, outros),
                     apelido_a=acervo.apelido(sha), sha_a=sha,
@@ -349,8 +333,10 @@ def create_app() -> Flask:
                     filtro=request.args.get("filtro") in ("1", "sim", "true"),
                     layout=arranjo, contas=_contas(),
                     atracoes=request.args.get("imas"),
-                    ajustes=_ajustes_do_registro(sha, registro, arranjo)), selo))
-            return jsonify(janela.sem_repetir(janela.montar(
+                    ajustes=_ajustes_do_registro(sha, registro, arranjo))
+                return jsonify(janela.sem_repetir(
+                    _com_cabecalho(sha, registro, outros, montado), selo))
+            return jsonify(janela.sem_repetir(_com_cabecalho(sha, registro, [], janela.montar(
                 registro,
                 de=de,
                 ate=ate,
@@ -365,7 +351,28 @@ def create_app() -> Flask:
                 # deles. Ler o `.hdr` a cada arrasto de janela seria um arquivo a
                 # mais aberto em todo gesto, para nada na maioria das telas.
                 ajustes=_ajustes_do_registro(sha, registro, arranjo),
-            ), selo))
+            )), selo))
+
+    def _com_cabecalho(sha: str, registro, outros: list, pacote: dict) -> dict:
+        """Põe no pacote a tabela do cabeçalho: uma linha por IED, os fatos
+        alinhados (`plot/cabecalho.py`, variante 22 de 21/11/2026). A conta é
+        de lá; aqui só se junta o que ela lê do acervo."""
+        fichas = pacote.get("ieds") or [
+            varios_mod.ficha_sozinha(registro, acervo.apelido(sha), sha)]
+        registros = {sha: registro, **{s: r for r, _, s in outros}}
+        itens, relacoes = {}, {}
+        for f in fichas:
+            item = acervo.obter(f.get("sha") or "")
+            if item is None:
+                continue
+            dados = item.como_dicionario()
+            itens[item.sha] = dados
+            # A relação por EQUIPAMENTO lê o registro: só quando há mais de uma.
+            if "vários" in (dados.get("relacao_tc"), dados.get("relacao_tp")) \
+                    and item.sha in registros:
+                relacoes[item.sha] = acervo.relacoes_por_equipamento(registros[item.sha])
+        pacote["cabecalho"] = cabecalho_mod.montar(fichas, itens, relacoes)
+        return pacote
 
     @app.route("/api/onda/<sha>/energia", methods=["GET", "POST"])
     def energia_do_catalogo(sha: str):
