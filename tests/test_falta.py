@@ -570,3 +570,16 @@ def test_tc_saturado_na_falta_nao_vira_inrush_porque_a_tensao_afunda():
                sample_rates=r.sample_rates, analog=dados, time=r.time)
     assert falta.energizacao(r, CANAIS_I, CANAIS_V) is None
     assert falta.classificar(r, CANAIS_I, CANAIS_V).tipo == "AG"
+
+
+def test_o_inicio_exato_volta_ate_a_primeira_amostra_da_falta():
+    """O alinhamento usa o começo EXATO: o `instante_da_falta` chega
+    atrasado (passa do limiar depois da primeira amostra da falta), e o
+    recuo até sair do ruído da pré-falta acha a amostra (21/11/2026)."""
+    for fases in ("A", "BC", "ABC"):
+        r = _registro(fases)
+        verdadeira = int(math.ceil(T_FALTA * TAXA - 1e-9))
+        exato = falta.inicio_exato(r, CANAIS_I)
+        assert exato == verdadeira, (fases, exato, verdadeira)
+        assert falta.instante_da_falta(r, CANAIS_I) >= exato
+

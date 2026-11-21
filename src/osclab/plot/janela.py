@@ -156,7 +156,8 @@ def montar(registro: Record, *, de: float | None = None, ate: float | None = Non
         else:
             saida.append(_painel_analogico(
                 registro, painel, por_id, escalas, lado, filtro,
-                tempo, j0, i0, i1, janela_de_trechos, colunas, pontos))
+                tempo, j0, i0, i1, janela_de_trechos, colunas, pontos,
+                por_ciclo=por_ciclo))
 
     # O eixo do tempo é reduzido do mesmo jeito que os canais, para os dois
     # ficarem com o mesmo comprimento. Um canal fictício de zeros serve: o que
@@ -416,7 +417,8 @@ def _atracoes(texto: str | None) -> frozenset[str]:
 def _painel_analogico(registro: Record, painel, por_id: dict, escalas: dict,
                       lado: str, filtro: bool, tempo, j0: int, i0: int, i1: int,
                       janela_de_trechos, colunas: int,
-                      pontos: frozenset[str] = ATRACOES_DAS_ONDAS) -> dict:
+                      pontos: frozenset[str] = ATRACOES_DAS_ONDAS,
+                      por_ciclo: int = 0) -> dict:
     """Um painel de ondas: os sinais, as duas escalas e os avisos.
 
     A unidade do painel é a do PRIMEIRO sinal DE UNIDADE CONHECIDA que entrou
@@ -472,6 +474,11 @@ def _painel_analogico(registro: Record, painel, por_id: dict, escalas: dict,
                                   lado, escalas)[i0 - j0:])
         escolhidos.append((identidade, alvo, valores, eixo, reduzida))
 
+    # A mesma regra de `suavizavel` em `onda.js`: pouca amostra por ciclo e
+    # traço não reduzido (`reduzido` do pacote).
+    suave = (0 < por_ciclo <= serie.SUAVIZAR_ATE
+             and not tempo.size > colunas * serie.LIMITE_SEM_REDUZIR)
+
     def faixa(quais):
         if not quais:
             return None
@@ -481,8 +488,16 @@ def _painel_analogico(registro: Record, painel, por_id: dict, escalas: dict,
                            else serie.reduzir(tempo, v[None, :], colunas).valores[0]
                            for _, _, v, _, r in quais])
         finitos = pilha[np.isfinite(pilha)]
-        base, topo = escala.faixa(float(finitos.min()) if finitos.size else -1.0,
-                                  float(finitos.max()) if finitos.size else 1.0)
+        lo = float(finitos.min()) if finitos.size else -1.0
+        hi = float(finitos.max()) if finitos.size else 1.0
+        # Onde a tela desenha pela CURVA, a escala é a da curva: ela passa do
+        # pico das amostras (`serie.extremos_da_curva`).
+        if suave and finitos.size:
+            for linha in pilha:
+                ext = serie.extremos_da_curva(linha)
+                if ext is not None:
+                    lo, hi = min(lo, ext[0]), max(hi, ext[1])
+        base, topo = escala.faixa(lo, hi)
         return pilha, base, topo
 
     pela_esquerda = [x for x in escolhidos if x[3] == "esq"]

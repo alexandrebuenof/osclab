@@ -12,10 +12,16 @@ dele. Cada outro registro ganha um DESLOCAMENTO `d`, em segundos, e um instante
   Sai de `analysis/falta.instante_da_falta`, que é o detector superposto do
   classificador. É o que alinha dois terminais de uma linha, mesmo com os
   relógios dos relés em desacordo.
-* `disparo` — o gatilho de cada um no mesmo instante. Serve quando os relés
-  disparam pela mesma lógica.
+* `disparo` — o gatilho de cada um no mesmo instante. Serve para dois
+  arquivos do MESMO relé no mesmo evento (o `.CEV` e o COMTRADE: ali é o
+  melhor alinhamento), para registro sem falta (manobra, energização) e para
+  relés disparados por um sinal comum. Entre relés que disparam cada um pela
+  sua lógica, só para olhar: é a última opção do botão, e a tira avisa.
 * `hora` — o carimbo de tempo de cada arquivo. Mostra a diferença de relógio
-  entre os relés tal como ela é.
+  entre os relés tal como ela é. Quando pela hora a falta do outro cai FORA
+  do registro do A (relógios meses em desacordo), não há o que mostrar: o
+  botão trava, com a diferença no hover (`hora_cabe`). Quando cabe, a tira
+  avisa a diferença dos relógios (21/11/2026).
 
 Sem falta detectada num dos registros, ele cai para o disparo; sem disparo,
 para a hora — e a tira diz qual valeu.
@@ -69,7 +75,10 @@ def instante_da_falta(registro: Record) -> float | None:
                if c.grandeza == "I" and not c.sem_sinal]
     if not achados:
         return None
-    i = falta_mod.instante_da_falta(registro, achados[0].canais)
+    # O começo EXATO (voltando até sair do ruído), não o ponto em que o
+    # detector passa do limiar: este chega 1 a 3 amostras atrasado, e o
+    # atraso muda de uma falta para outra (21/11/2026).
+    i = falta_mod.inicio_exato(registro, achados[0].canais)
     if i is None or not (0 <= i < registro.time.size):
         return None
     return float(registro.time[i])
@@ -129,12 +138,14 @@ def deslocamento(base: Record, outro: Record, modo: str,
     if modo == MAO and manual is not None and math.isfinite(manual):
         usado, d = MAO, float(manual)
     modo = modo if modo in MODOS else MODOS[0]
+    cabe = hora_cabe(base, outro)
     for tentativa in ([] if usado else MODOS[MODOS.index(modo):] + MODOS[:MODOS.index(modo)]):
         if tentativa == "hora":
-            if base.start_time is None or outro.start_time is None:
+            # Pela hora a falta do outro cai fora do registro do A: não há o
+            # que mostrar, e o botão está travado. Vale o critério seguinte.
+            if base.start_time is None or outro.start_time is None or cabe is False:
                 continue
-            # Os DOIS no UTC, cada um pelo fuso que declarou.
-            d = (_inicio_utc(base) - _inicio_utc(outro)).total_seconds()
+            d = _d_pela_hora(base, outro)
             usado = "hora"
             break
         ref_base = _referencia(base, tentativa)
@@ -160,7 +171,87 @@ def deslocamento(base: Record, outro: Record, modo: str,
     precisao = (None if usado == "hora"
                 else round(max(amostra_ms(base), amostra_ms(outro)), 3))
     return {"d": float(d), "por": usado or "nenhum", "precisao_ms": precisao,
-            "relogio_ms": relogio, "fuso_declarado": fuso_declarado(base, outro)}
+            "relogio_ms": relogio, "fuso_declarado": fuso_declarado(base, outro),
+            "relogio_texto": texto_do_relogio(relogio),
+            "hora_cabe": cabe, "aviso": _aviso(usado, relogio),
+            "aviso_curto": _aviso_curto(usado, relogio)}
+
+
+def _aviso_curto(usado: str | None, relogio_ms: float | None) -> str:
+    """O que fica À VISTA na tira; o `_aviso` inteiro vai no hover
+    (informação limpa: diagnóstico no hover, não em faixa)."""
+    if usado == "hora":
+        dif = texto_do_relogio(relogio_ms)
+        dif = dif.removesuffix(" atrás").removesuffix(" à frente")
+        return f"relógios diferem {dif}" if dif else "relógios: diferença não medida"
+    if usado == "disparo":
+        return "cada relé dispara num instante seu"
+    return ""
+
+
+def _d_pela_hora(base: Record, outro: Record) -> float:
+    """O `d` que põe os dois carimbos no mesmo instante — os DOIS no UTC,
+    cada um pelo fuso que declarou."""
+    return (_inicio_utc(base) - _inicio_utc(outro)).total_seconds()
+
+
+def hora_cabe(base: Record, outro: Record) -> bool | None:
+    """Alinhando PELA HORA, a falta do `outro` cai dentro do registro do A?
+
+    `False` quando cai fora — relógios meses, ou só segundos, em desacordo:
+    a tela do A não mostraria nada do outro, e o botão «hora do arquivo»
+    trava (decidido em 21/11/2026; o filtro trava pela mesma razão: não há
+    o que fazer, não é dúvida). `None` quando não se sabe (sem carimbo, sem
+    falta e sem disparo no outro): aí o botão fica livre.
+    """
+    if base.start_time is None or outro.start_time is None or base.time.size == 0:
+        return None
+    evento = instante_da_falta(outro)
+    if evento is None:
+        evento = instante_do_disparo(outro)
+    if evento is None:
+        return None
+    t = evento - _d_pela_hora(base, outro)
+    return bool(float(base.time[0]) <= t <= float(base.time[-1]))
+
+
+def texto_do_relogio(relogio_ms: float | None) -> str:
+    """A diferença de relógio por extenso, na unidade que se lê: «40,0 ms»,
+    «2,35 s», «12 min 5 s», «227 dias 15 h». Com o sentido: «atrás» quando o
+    relógio do outro marca o mesmo evento mais cedo que o do A."""
+    if relogio_ms is None or not math.isfinite(relogio_ms):
+        return ""
+    ms = abs(relogio_ms)
+    s = ms / 1000.0
+    if ms < 1000.0:
+        corpo = f"{ms:.1f} ms"
+    elif s < 60.0:
+        corpo = f"{s:.2f} s"
+    elif s < 3600.0:
+        corpo = f"{int(s // 60)} min {int(s % 60)} s"
+    elif s < 86400.0:
+        corpo = f"{int(s // 3600)} h {int(s % 3600 // 60)} min"
+    else:
+        dias = int(s // 86400)
+        corpo = f"{dias} dia{'s' if dias != 1 else ''} {int(s % 86400 // 3600)} h"
+    sentido = "atrás" if relogio_ms < 0 else "à frente"
+    return f"{corpo.replace('.', ',')} {sentido}"
+
+
+def _aviso(usado: str | None, relogio_ms: float | None) -> str:
+    """O alerta da tira (e do painel localizador) para o critério que valeu.
+    Avisa, não bloqueia: a conta é feita assim mesmo."""
+    if usado == "hora":
+        dif = texto_do_relogio(relogio_ms)
+        return ((f"Relógio {dif} do A: o alinhamento pela hora carrega essa diferença."
+                 if dif else "Alinhado pela hora: a diferença entre os relógios não se mediu.")
+                + " Para dois terminais, prefira o início da falta.")
+    if usado == "disparo":
+        return ("Cada relé dispara num instante seu (pré-falta e partida de cada "
+                "ajuste): pelo disparo, um terminal pode ficar deslocado do outro, "
+                "e a seq. negativa de dois terminais sente isso. Para localizar, "
+                "prefira o início da falta.")
+    return ""
 
 
 # ---------------------------------------------------------------------------

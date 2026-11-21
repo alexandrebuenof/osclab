@@ -106,6 +106,54 @@ def reduzir(tempo: np.ndarray, valores: np.ndarray, colunas: int) -> Reducao:
                    amostras_na_janela=n)
 
 
+#: Até quantas amostras por ciclo a tela desenha a onda pela CURVA
+#: (Catmull-Rom) e não por retas — `AMOSTRAS_PARA_SUAVIZAR` em `onda.js`
+#: (há teste que compara os dois).
+SUAVIZAR_ATE = 8
+
+#: Pontos por trecho entre duas amostras ao procurar o extremo da curva.
+_PONTOS_DA_CURVA = np.linspace(0.0, 1.0, 17)
+
+
+def extremos_da_curva(valores: np.ndarray) -> tuple[float, float] | None:
+    """O mínimo e o máximo da curva que a tela DESENHA sobre estas amostras.
+
+    A tela liga amostras de registro de pouca amostra por ciclo com a curva
+    de Catmull-Rom (`tracar` em `onda.js`), que reconstrói a senoide — e a
+    senoide passa do pico das amostras: a 4 amostras por ciclo a maior delas
+    pode estar a 0,71 do pico verdadeiro. A escala tirada só das amostras
+    cortava a crista (CEV de 4 am/ciclo ao lado de um de 16, 21/11/2026).
+
+    É a MESMA curva da tela: cada trecho é a Bézier com controles a um sexto
+    da distância ao vizinho, as pontas repetem a amostra da borda, e um buraco
+    (`NaN`) corta a curva em pedaços desenhados sozinhos. `None` sem amostra.
+    """
+    v = np.asarray(valores, dtype=np.float64).ravel()
+    finitos = np.isfinite(v)
+    if not finitos.any():
+        return None
+    # Os pedaços sem buraco: onde começa e onde acaba cada corrida de finitos.
+    borda = np.diff(np.concatenate(([0], finitos.astype(np.int8), [0])))
+    comecos, fins = np.nonzero(borda == 1)[0], np.nonzero(borda == -1)[0]
+    t = _PONTOS_DA_CURVA[None, :]
+    menor, maior = np.inf, -np.inf
+    for a, b in zip(comecos, fins, strict=True):
+        y = v[a:b]
+        menor, maior = min(menor, float(y.min())), max(maior, float(y.max()))
+        if y.size < 3:
+            continue
+        y0 = np.concatenate(([y[0]], y[:-2]))
+        y1, y2 = y[:-1], y[1:]
+        y3 = np.concatenate((y[2:], [y[-1]]))
+        c1 = (y1 + (y2 - y0) / 6.0)[:, None]
+        c2 = (y2 - (y3 - y1) / 6.0)[:, None]
+        u = 1.0 - t
+        curva = (u ** 3 * y1[:, None] + 3 * u ** 2 * t * c1
+                 + 3 * u * t ** 2 * c2 + t ** 3 * y2[:, None])
+        menor, maior = min(menor, float(curva.min())), max(maior, float(curva.max()))
+    return menor, maior
+
+
 # ---------------------------------------------------------------------------
 # A pirâmide: mínimo e máximo por BLOCO, feitos uma vez por registro
 # ---------------------------------------------------------------------------

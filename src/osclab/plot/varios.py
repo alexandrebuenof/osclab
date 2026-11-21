@@ -362,6 +362,13 @@ def _ficha(letra: str, registro: Record, apelido: str, sha: str, desl,
             "alinhado_por": desl["por"],
             "precisao_ms": desl["precisao_ms"],
             "relogio_ms": desl["relogio_ms"],
+            # Por extenso («227 dias 15 h atrás»), o «hora do arquivo» que
+            # trava quando pela hora a falta cai fora da tela, e o alerta do
+            # critério que valeu (hora, disparo) — 21/11/2026.
+            "relogio_texto": desl.get("relogio_texto", ""),
+            "hora_cabe": desl.get("hora_cabe"),
+            "aviso": desl.get("aviso", ""),
+            "aviso_curto": desl.get("aviso_curto", ""),
             # O aplicado no refino, haja ou não «à mão» escolhido: é o que
             # acende a opção no «alinhar por».
             "a_mao_ms": None if manual is None else round(manual * 1000.0, 3),

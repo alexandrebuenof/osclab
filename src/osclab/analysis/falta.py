@@ -285,6 +285,66 @@ def _ms(registro: Record, n: int) -> str:
     return f"{float(registro.time[n]) * 1000:.1f} ms".replace(".", ",")
 
 
+#: Quanto acima do maior resíduo da PRÉ-FALTA o detector precisa estar para
+#: a amostra já ser falta, ao voltar de `instante_da_falta` (`inicio_exato`).
+FOLGA_DO_RUIDO = 1.5
+
+#: E um piso, em fração do detector na amostra achada: num registro limpo o
+#: ruído é zero, e sem piso o recuo pararia em poeira de ponto flutuante.
+PISO_DO_RECUO = 0.01
+
+
+def inicio_exato(registro: Record, canais: dict[str, int]) -> int | None:
+    """A amostra em que a falta COMEÇA — para alinhar dois registros.
+
+    `instante_da_falta` marca onde o detector passa de 15 % do maior salto:
+    serve para achar a falta, e chega atrasado ao começo dela (1 a 3
+    amostras num bruto de 16 a 64 por ciclo, até 18). Daqui se volta, a
+    partir dele, até a última amostra ainda no ruído da pré-falta: a
+    seguinte é a primeira da falta. Medido em faltas sintéticas com o
+    instante verdadeiro (21/11/2026): no bruto, a amostra exata em 94 a 96 %
+    dos casos (±1 em 99 %); no filtrado o filtro do relé faz a falta nascer ao longo de
+    um ciclo, e o ganho é pequeno (±1 amostra em 78 % a 4 por ciclo, 40 % a 8).
+
+    Só o alinhamento usa isto: a classificação continua no
+    `instante_da_falta`, calibrada nele contra o banco.
+    """
+    k = instante_da_falta(registro, canais)
+    if k is None:
+        return None
+    por_ciclo = fasor_mod.amostras_por_ciclo(_taxa(registro), registro.line_frequency)
+    soma = _soma_superposta(registro, canais, por_ciclo)
+    if soma is None or k <= por_ciclo or k >= soma.size:
+        return k
+    pre = soma[por_ciclo:max(k - por_ciclo, por_ciclo + 1)]
+    ruido = float(pre.max()) if pre.size else 0.0
+    teto = max(ruido * FOLGA_DO_RUIDO, float(soma[k]) * PISO_DO_RECUO)
+    # Quieta é a amostra numa CORRIDA de `quietas` amostras no ruído: logo
+    # depois do início a corrente incremental passa perto do zero e uma
+    # amostra sozinha cai abaixo do teto — parar nela atrasava 2 a 4
+    # amostras (par sintético de dois terminais do `test_refino`).
+    corrida = max(2, por_ciclo // 8)
+    no_ruido = (soma[por_ciclo:k] <= teto).astype(np.int64)
+    cheias = np.convolve(no_ruido, np.ones(corrida, dtype=np.int64), "full")[:no_ruido.size]
+    fim = np.nonzero(cheias == corrida)[0]
+    return int(fim[-1] + por_ciclo + 1) if fim.size else por_ciclo
+
+
+def _soma_superposta(registro: Record, canais: dict[str, int],
+                     por_ciclo: int) -> np.ndarray | None:
+    """A soma de `|x[n] − x[n − 1 ciclo]|` das fases: o detector."""
+    if por_ciclo <= 0:
+        return None
+    soma = None
+    for fase in FASES:
+        idx = canais.get(fase)
+        if idx is None:
+            continue
+        d = np.abs(_superposto(registro.analog[idx], por_ciclo))
+        soma = d if soma is None else soma + d
+    return soma
+
+
 def _inicios(registro: Record, canais: dict[str, int]) -> list[int]:
     """Cada amostra em que as correntes deixam de ser o que eram, em ordem.
 

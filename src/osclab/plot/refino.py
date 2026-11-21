@@ -38,7 +38,7 @@ NOME_DA_GRANDEZA = {"V": "tensões", "I": "correntes"}
 #: (`AMOSTRAS_PARA_SUAVIZAR` em `onda.js`; há teste que compara os dois).
 #: Um CEV de 4 por ciclo ligado por retas fica 29 % abaixo da senoide no meio
 #: de duas amostras, e no refino parecia outra onda (ensaio 15/11/2026).
-SUAVIZAR_ATE = 8
+SUAVIZAR_ATE = serie.SUAVIZAR_ATE
 
 
 def _suave(ld: rf.Lado, red: dict) -> bool:

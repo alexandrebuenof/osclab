@@ -1441,3 +1441,41 @@ def test_a_coluna_reduzida_carrega_o_EXTREMO_de_verdade():
         dentro = v[0, coluna * 6:(coluna + 1) * 6]
         assert r.valores[0, 2 * coluna] == pytest.approx(dentro.min())
         assert r.valores[0, 2 * coluna + 1] == pytest.approx(dentro.max())
+
+
+def test_a_curva_de_poucas_amostras_passa_do_pico_delas_e_a_escala_acompanha(tmp_path):
+    """A 4 amostras por ciclo a tela desenha a onda pela curva (Catmull-Rom),
+    que reconstrói a senoide e passa da maior amostra. A escala tirada só das
+    amostras cortava a crista (CEV de 4 am/ciclo, 21/11/2026)."""
+    # A senoide amostrada a 45° do pico: a maior amostra é 0,71 do pico.
+    t = np.arange(16) / 4.0
+    amostras = np.cos(2 * np.pi * t + np.pi / 4)
+    lo, hi = serie.extremos_da_curva(amostras)
+    assert amostras.max() < 0.72
+    assert 0.85 < hi <= 1.0 and -1.0 <= lo < -0.85
+    # Buraco corta a curva: cada pedaço sozinho, e nada de NaN na resposta.
+    com_buraco = amostras.copy()
+    com_buraco[5] = np.nan
+    assert np.isfinite(serie.extremos_da_curva(com_buraco)).all()
+    assert serie.extremos_da_curva(np.full(3, np.nan)) is None
+
+    registro = registry.read(fabrica.escrever_cev(tmp_path, por_ciclo=4, ciclos=8))
+    # Toda onda a 45° do pico, com 1400 de amplitude: as amostras param em
+    # ~990 (a escala delas fecharia em 1000) e a curva vai a ~1300.
+    n = registro.analog.shape[1]
+    onda = 1400.0 * np.cos(2 * np.pi * np.arange(n) / 4.0 + np.pi / 4)
+    registro.analog[:6] = onda
+    pacote = _montar(registro)
+    assert max(p["maximo"] for p in pacote["paineis"]
+               if p.get("tipo") == "analogico") > 1100
+    assert pacote["amostras_da_janela_do_fasor"] == 4 and not pacote["reduzido"]
+    for painel in pacote["paineis"]:
+        if painel.get("tipo") != "analogico":
+            continue
+        for s in painel["sinais"]:
+            valores = np.array([np.nan if v is None else v for v in s["serie"]],
+                               dtype=float)
+            ext = serie.extremos_da_curva(valores)
+            if ext is None:
+                continue
+            assert painel["minimo"] <= ext[0] and ext[1] <= painel["maximo"], s["sinal"]

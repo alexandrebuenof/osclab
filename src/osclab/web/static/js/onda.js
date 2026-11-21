@@ -403,10 +403,13 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
 
   const CHAVE_DA_ABA = `osclab:aba:${sha}:${new URLSearchParams(location.search).get("aba") || ""}`;
   const MAXIMO_DE_OUTROS = 2;
+  // A ordem é a dos botões: o disparo por último (21/11/2026) — entre relés
+  // diferentes cada um dispara num instante seu.
   const NOME_DO_ALINHAMENTO = {
-    falta: "início da falta", disparo: "disparo", hora: "hora do arquivo",
+    falta: "início da falta", hora: "hora do arquivo",
     // o aplicado no refino da seq. negativa (`alinhamento.MAO`, 17/11/2026)
     mao: "à mão",
+    disparo: "disparo",
   };
   /** Algum IED tem alinhamento aplicado no refino? Sem ele, «à mão» some. */
   const temAMao = () => !!(dados && (dados.ieds || []).some(
@@ -487,15 +490,39 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
     barra.append(mais, ancora, botaoNovoGrafico());
 
     if (ieds.length > 1) {
+      // «hora» guardada da aba, mas agora travada (a falta de algum IED cai
+      // fora da tela): o servidor já usou o critério seguinte, e a tela passa
+      // a dizer esse — senão o botão travado aparecia escolhido.
+      const travaHora = ieds.some((f) => f.letra !== "A" && f.hora_cabe === false);
+      if (travaHora && alinharPor === "hora") {
+        const usado = (ieds.find((f) => f.letra !== "A") || {}).alinhado_por;
+        alinharPor = NOME_DO_ALINHAMENTO[usado] && usado !== "hora" ? usado : "falta";
+        guardarAba();
+      }
       barra.append(criar("span", "rotulo-dos-ieds", "alinhar por"));
       for (const [chave, nome] of Object.entries(NOME_DO_ALINHAMENTO)) {
         if (chave === "mao" && !temAMao()) continue;
         const b = criar("button", "chave" + (alinharPor === chave ? " escolhido" : ""), nome);
         b.type = "button";
+        // Pela hora, a falta de algum IED cai FORA do registro do A: não há
+        // o que mostrar, e o botão trava — visível, com o porquê
+        // (`alinhamento.hora_cabe`, 21/11/2026).
+        const foraDaTela = chave === "hora"
+          ? ieds.filter((f) => f.letra !== "A" && f.hora_cabe === false) : [];
+        if (foraDaTela.length) {
+          b.disabled = true;
+          b.title = foraDaTela.map((f) => `Relógio do IED ${f.letra} ${f.relogio_texto || "muito diferente"} do A`)
+            .join("; ") + ": pela hora a falta não aparece na tela. Alinhe pelo início da falta.";
+          barra.append(b);
+          continue;
+        }
         b.title = {
           falta: "O início da perturbação de cada registro no mesmo instante. "
             + "Alinha dois terminais mesmo com os relógios dos relés em desacordo.",
-          disparo: "O gatilho de cada registro no mesmo instante.",
+          disparo: "O gatilho de cada registro no mesmo instante. Bom para dois arquivos "
+            + "do MESMO relé no mesmo evento, para registro sem falta e para relés "
+            + "disparados por um sinal comum. Entre relés diferentes, cada um dispara "
+            + "num instante seu: só para olhar.",
           hora: "O carimbo de tempo de cada arquivo: mostra a diferença de "
             + "relógio entre os relés como ela é.",
           mao: "O deslocamento aplicado no «refinar» da seq. negativa: os "
@@ -581,10 +608,20 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
       }
       if (ficha.relogio_ms !== null && ficha.relogio_ms !== undefined) {
         const r = ficha.relogio_ms;
-        fato("relógio × A", `${r >= 0 ? "+" : "−"}${formatar(Math.abs(r), 1)} ms`,
+        fato("relógio × A", ficha.relogio_texto || `${r >= 0 ? "+" : "−"}${formatar(Math.abs(r), 1)} ms`,
              Math.abs(r) > (ficha.precisao_ms || 1) ? "aviso-do-ied" : "",
-             "A hora do mesmo evento neste arquivo menos a hora dele no IED A. "
+             `${r >= 0 ? "+" : "−"}${formatar(Math.abs(r), 1)} ms. `
+             + "A hora do mesmo evento neste arquivo menos a hora dele no IED A. "
              + "Aparece qualquer que seja o alinhamento: é a sincronização dos relés.");
+      }
+      // O alerta do critério que valeu (hora: a diferença dos relógios;
+      // disparo: cada relé dispara num instante seu). Avisa, não bloqueia.
+      // À vista só o curto; o porquê inteiro no hover (informação limpa).
+      if (ficha.aviso) {
+        const a = criar("span", "fato-do-ied aviso-do-ied alerta-do-alinhamento",
+                        "⚠ " + (ficha.aviso_curto || ficha.aviso));
+        a.title = ficha.aviso;
+        linha.append(a);
       }
       const tirar = criar("button", "botao-x tirar-do-ied", "×");
       tirar.type = "button";
@@ -7040,8 +7077,11 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
    * retas desenham.
    *
    * A curva de Catmull-Rom reconstrói a senoide com 0,9 % de erro a 8 amostras
-   * por ciclo — trinta vezes melhor que a reta —, passa exatamente por todas as
-   * amostras e **não ultrapassa o pico** delas.
+   * por ciclo — trinta vezes melhor que a reta — e passa exatamente por todas
+   * as amostras. Entre elas a curva PASSA do pico das amostras (é a senoide
+   * voltando): a 4 por ciclo a maior amostra pode estar a 0,71 do pico. Por
+   * isso a escala do painel é a da curva, conta do Python
+   * (`serie.extremos_da_curva`, 21/11/2026).
    *
    * ## Por que NÃO em todo registro
    *
@@ -13206,6 +13246,14 @@ const FONTE_TIRA = "600 12px ui-monospace, Consolas, monospace";
         if (m === "seqneg" && (pacoteLoc.n_ieds || 0) >= 2 && outrosRegistros[0]) {
           li.append(botaoRefinar());
           if (pacoteLoc.alinhado_a_mao) li.append(seloAlinhadoAMao(pacoteLoc.alinhado_a_mao));
+          // Pelo disparo (ou pela hora) a seq. negativa calcula assim mesmo,
+          // e avisa (21/11/2026: nada se bloqueia).
+          else if (pacoteLoc.alinhamento && pacoteLoc.alinhamento.aviso) {
+            const s = criar("span", "rf-selo-mao rf-selo-aviso",
+              `⚠ alinhado por «${NOME_DO_ALINHAMENTO[pacoteLoc.alinhamento.por] || pacoteLoc.alinhamento.por}»`);
+            s.title = pacoteLoc.alinhamento.aviso;
+            li.append(s);
+          }
         }
         legenda.append(li);
       }
